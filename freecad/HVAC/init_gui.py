@@ -1,0 +1,96 @@
+# SPDX-License-Identifier: LGPL-2.1-or-later
+# SPDX-FileNotice: Part of the HVAC addon.
+
+################################################################################
+#                                                                              #
+#   Copyright (c) 2026 Francisco Rosa                                          #
+#                                                                              #
+#   This addon is free software; you can redistribute it and/or modify it      #
+#   under the terms of the GNU Lesser General Public License as published      #
+#   by the Free Software Foundation; either version 2.1 of the License, or     #
+#   (at your option) any later version.                                        #
+#                                                                              #
+#   This addon is distributed in the hope that it will be useful,              #
+#   but WITHOUT ANY WARRANTY; without even the implied warranty of             #
+#   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.                       #
+#                                                                              #
+#   See the GNU Lesser General Public License for more details.                #
+#                                                                              #
+#   You should have received a copy of the GNU Lesser General Public           #
+#   License along with this addon. If not, see https://www.gnu.org/licenses    #
+#                                                                              #
+################################################################################
+
+"""Gui initialization module for HVAC Workbench."""
+
+import os
+import FreeCAD
+import FreeCADGui as Gui
+
+from .Ducts import LanguagePath
+
+Gui.addLanguagePath(LanguagePath)
+Gui.updateLocale()
+
+class HVAC(Gui.Workbench):
+    """The HVAC Workbench."""
+
+    translate = FreeCAD.Qt.translate
+
+    MenuText = translate("InitGui", "HVAC")
+    ToolTip = translate("InitGui",
+                        "Workbench for HVAC analysis and configuration.")
+    from .Ducts import IconPath
+    Icon = os.path.join(IconPath, "Logo.svg")
+
+    def Initialize(self):
+        """This function is executed when the workbench is first activated.
+        It is executed once in a FreeCAD session followed by the Activated function.
+        """
+        # import here all the needed files that create your FreeCAD commands
+        import freecad.HVAC.Ducts
+
+        translate = FreeCAD.Qt.translate
+
+        self.list1 = ['CreateDucts',
+                       'ModifyDucts',
+                       'DeleteDucts',
+                       ] # a list of command names created in the line above
+
+        default_title1 = translate("InitGui", "HVAC tools")
+        self.appendToolbar(default_title1, self.list1) # creates the HVAC toolbar
+        self.appendMenu(default_title1, self.list1) # creates the HVAC tools menu
+
+    def Activated(self):
+        """This function is executed whenever the workbench is activated"""
+
+        translate = FreeCAD.Qt.translate
+
+        FreeCAD.Console.PrintMessage(translate(
+                                     "InitGui","HVAC Workbench loaded") + "\n")
+        return
+
+    def Deactivated(self):
+        """This function is executed whenever the workbench is deactivated"""
+        return
+
+    def ContextMenu(self, recipient):
+        """This function is executed whenever the user right-clicks on screen"""
+
+        translate = FreeCAD.Qt.translate
+
+        # "recipient" will be either "view" or "tree"
+        default_title1 = translate("InitGui", "HVAC tools")
+        # add commands to the context menu
+        self.appendContextMenu(default_title1, self.list1)
+
+    def GetClassName(self):
+        # This function is mandatory if this is a full Python workbench
+        # This is not a template,
+        # the returned string should be exactly "Gui::PythonWorkbench"
+        return "Gui::PythonWorkbench"
+
+Gui.addWorkbench(HVAC())
+
+#https://wiki.freecadweb.org/Workbench_creation
+#https://wiki.freecad.org/Translating_an_external_workbench
