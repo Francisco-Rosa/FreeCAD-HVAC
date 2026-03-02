@@ -21,26 +21,19 @@
 #                                                                              #
 ################################################################################
 
-"""This module implements the sun radiation analysis."""
+"""This module implements HVAC duct design."""
 
 import os
 import FreeCAD
 import FreeCADGui as Gui
-from PySide.QtCore import QT_TRANSLATE_NOOP
 import freecad.HVAC.DuctsDialog as DuctsDialog
 
+from PySide.QtCore import QT_TRANSLATE_NOOP
 translate = FreeCAD.Qt.translate
-
-LanguagePath = os.path.dirname(__file__) + '/translations'
-Gui.addLanguagePath(LanguagePath)
-
-_dir = os.path.dirname(__file__)
-IconPath = os.path.join(_dir, 'icons')
 
 #=================================================
 # A. Main classes
 #=================================================
-
 
 class Ducts:
 
@@ -51,10 +44,9 @@ class Ducts:
         self.setProperties(obj)
 
     def setProperties(self,obj):
-
         """Gives the object properties to HVAC ducts."""
-
         pass
+
 
 class DuctsViewProvider:
 
@@ -67,6 +59,7 @@ class DuctsViewProvider:
         __dir__ = os.path.dirname(__file__)
         return __dir__ + '/icons/DuctsIcon.svg'
 
+
 class CreateDucts:
 
     """Create HVAC ducts."""
@@ -78,8 +71,7 @@ class CreateDucts:
         __dir__ = os.path.dirname(__file__)
         return {'Pixmap': __dir__ + '/icons/CreateDuctsIcon.svg',
                 'MenuText': QT_TRANSLATE_NOOP('CreateDucts', 'Create HVAC ducts'),
-                'ToolTip': QT_TRANSLATE_NOOP('CreateDucts',
-                           'Instructions')}
+                'ToolTip': QT_TRANSLATE_NOOP('CreateDucts', 'Instructions')}
 
     def IsActive(self):
         if Gui.ActiveDocument:
@@ -89,6 +81,7 @@ class CreateDucts:
 
     def Activated(self):
         activated_create_ducts(self)
+
 
 class ModifyDucts:
 
@@ -101,8 +94,7 @@ class ModifyDucts:
         __dir__ = os.path.dirname(__file__)
         return {'Pixmap': __dir__ + '/icons/ModifyDuctsIcon.svg',
                 'MenuText': QT_TRANSLATE_NOOP('ModifyDucts', 'Modify HVAC ducts'),
-                'ToolTip': QT_TRANSLATE_NOOP('ModifyDucts',
-                           'Instructions')}
+                'ToolTip': QT_TRANSLATE_NOOP('ModifyDucts',  'Instructions')}
 
     def IsActive(self):
         if Gui.ActiveDocument:
@@ -128,8 +120,7 @@ class DeleteDucts:
         __dir__ = os.path.dirname(__file__)
         return {'Pixmap': __dir__ + '/icons/DeleteDuctsIcon.svg',
                 'MenuText': QT_TRANSLATE_NOOP('DeleteDucts', 'Delete HVAC ducts'),
-                'ToolTip': QT_TRANSLATE_NOOP('DeleteDucts',
-                           'Instructions')}
+                'ToolTip': QT_TRANSLATE_NOOP('DeleteDucts', 'Instructions')}
 
     def IsActive(self):
         if Gui.ActiveDocument:
@@ -145,10 +136,7 @@ class DeleteDucts:
         activated_delete_ducts(self)
 
 def activated_create_ducts(self):
-
     """Create the Ducts"""
-
-
     folder = FreeCAD.ActiveDocument.addObject(
              'App::DocumentObjectGroupPython',
              'Ducts')
@@ -159,15 +147,11 @@ def activated_create_ducts(self):
     FreeCAD.ActiveDocument.recompute()
 
 def activated_modify_ducts(self):
-
-    """Modify the Sun Analysis selected"""
-
+    """Modify the HVAC duct object selected"""
     pass
 
 def activated_delete_ducts(self):
-
-    """Delete the SunAnalysis selected"""
-
+    """Delete the HVAC duct object selected"""
     pass
 
 
@@ -185,4 +169,3 @@ if FreeCAD.GuiUp:
     FreeCAD.Gui.addCommand('CreateDucts', CreateDucts())
     FreeCAD.Gui.addCommand('ModifyDucts', ModifyDucts())
     FreeCAD.Gui.addCommand('DeleteDucts', DeleteDucts())
-

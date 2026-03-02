@@ -21,27 +21,27 @@
 #                                                                              #
 ################################################################################
 
-"""Gui initialization module for HVAC Workbench."""
+__title__ = "Gui initialization module for HVAC Workbench."
+__author__ = "Francisco Rosa, Manu Varkey"
 
-import os
 import FreeCAD
 import FreeCADGui as Gui
+import freecad.HVAC.hvaclib as hvaclib
 
-from .Ducts import LanguagePath
+from PySide.QtCore import QT_TRANSLATE_NOOP
+translate = FreeCAD.Qt.translate
 
-Gui.addLanguagePath(LanguagePath)
+Gui.addLanguagePath(hvaclib.get_language_base_path())
 Gui.updateLocale()
+
 
 class HVAC(Gui.Workbench):
     """The HVAC Workbench."""
 
-    translate = FreeCAD.Qt.translate
-
     MenuText = translate("InitGui", "HVAC")
     ToolTip = translate("InitGui",
                         "Workbench for HVAC analysis and configuration.")
-    from .Ducts import IconPath
-    Icon = os.path.join(IconPath, "Logo.svg")
+    Icon = hvaclib.get_icon_path("Logo.svg")
 
     def Initialize(self):
         """This function is executed when the workbench is first activated.
@@ -50,22 +50,26 @@ class HVAC(Gui.Workbench):
         # import here all the needed files that create your FreeCAD commands
         import freecad.HVAC.Ducts
 
-        translate = FreeCAD.Qt.translate
+        self.toolbar_commands = ['CreateDucts',
+                                'ModifyDucts',
+                                'DeleteDucts',
+                                ]
 
-        self.list1 = ['CreateDucts',
-                       'ModifyDucts',
-                       'DeleteDucts',
-                       ] # a list of command names created in the line above
+        self.submenu_commands = ['CreateDucts',
+                                 'ModifyDucts',
+                                 'DeleteDucts',
+                                 ]
 
-        default_title1 = translate("InitGui", "HVAC tools")
-        self.appendToolbar(default_title1, self.list1) # creates the HVAC toolbar
-        self.appendMenu(default_title1, self.list1) # creates the HVAC tools menu
+        self.contextmenu_commands = ['CreateDucts',
+                                    'ModifyDucts',
+                                    'DeleteDucts',
+                                    ]
+
+        self.appendMenu(QT_TRANSLATE_NOOP("Workbench", "HVAC tools"), self.submenu_commands)
+        self.appendToolbar(QT_TRANSLATE_NOOP("Workbench", "HVAC tools"), self.toolbar_commands)
 
     def Activated(self):
         """This function is executed whenever the workbench is activated"""
-
-        translate = FreeCAD.Qt.translate
-
         FreeCAD.Console.PrintMessage(translate(
                                      "InitGui","HVAC Workbench loaded") + "\n")
         return
@@ -76,13 +80,7 @@ class HVAC(Gui.Workbench):
 
     def ContextMenu(self, recipient):
         """This function is executed whenever the user right-clicks on screen"""
-
-        translate = FreeCAD.Qt.translate
-
-        # "recipient" will be either "view" or "tree"
-        default_title1 = translate("InitGui", "HVAC tools")
-        # add commands to the context menu
-        self.appendContextMenu(default_title1, self.list1)
+        self.appendContextMenu(QT_TRANSLATE_NOOP("Workbench", "HVAC tools"), self.toolbar_commands)
 
     def GetClassName(self):
         # This function is mandatory if this is a full Python workbench

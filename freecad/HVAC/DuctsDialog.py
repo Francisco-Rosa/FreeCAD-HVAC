@@ -27,16 +27,11 @@ import os
 import FreeCAD
 import FreeCADGui as Gui
 from PySide import QtWidgets
-
 import freecad.HVAC.Ducts as Ducts
+import freecad.HVAC.hvaclib as hvaclib
 
 translate = FreeCAD.Qt.translate
 
-LanguagePath = os.path.dirname(__file__) + '/translations'
-Gui.addLanguagePath(LanguagePath)
-
-SA = None
-NEW_GEOM = False
 
 class DuctsConfigurationDialog(QtWidgets.QDialog):
 
@@ -47,14 +42,8 @@ class DuctsConfigurationDialog(QtWidgets.QDialog):
         super().__init__(parent)
 
         # Load the UI
-        ui_file = os.path.join(os.path.dirname(__file__), "Ducts.ui")
+        ui_file = hvaclib.get_file_path("Ducts.ui")
         self.ui = Gui.PySideUic.loadUi(ui_file)
-
-        # Run tests on FC Pynthon console
-        # user_mod_path = os.path.join(FreeCAD.getUserAppDataDir(), "Mod")
-        # SunAnalysisUi = FreeCADGui.PySideUic.loadUi(
-                                  #user_mod_path + '/HVAC/freecad/HVAC/Ducts.ui')
-        # SunAnalysisUi.show()
 
         self.setWindowTitle(translate("DucsDialog", "HVAC ducts configuration"))
         layout = QtWidgets.QVBoxLayout(self)
@@ -62,54 +51,38 @@ class DuctsConfigurationDialog(QtWidgets.QDialog):
         self.resize(self.ui.size())
 
         # Connect signals/slots
-        # pushButton_Apply
         self.ui.pushButton_Apply.clicked.connect(self.on_button_apply_clicked)
-        # buttonBox_Cancel_OK
         self.ui.buttonBox_Cancel_OK.clicked.connect(self.accept)
         self.ui.buttonBox_Cancel_OK.rejected.connect(self.reject)
+
         # translation
-        #pushButton_Apply
-        self.ui.pushButton_Apply.setText(
-                       translate("DuctsDialog",
-                       "Apply"))
+        self.ui.pushButton_Apply.setText(translate("DuctsDialog", "Apply"))
 
     def translate(self, text):
         return text
 
     # Slots -------------
     def show_dialog(self):
-
         """Show dialog"""
-
         result = self.exec_()
         return result == QtWidgets.QDialog.Accepted
 
     # Connection dialog x ducts properties
     def get_properties_data(self):
-
         """Get data from ducts properties and send them to dialog"""
-
         pass
 
     def save_to_propeties(self):
-
         """Save data from dialog to ducts properties"""
-
         pass
 
     def on_button_apply_clicked(self):
-
         """Apply button actions"""
-
         pass
 
 def open_ducts_configuration():
-
     """Open ducts configuration"""
-
-    global NEW_GEOM
     dlg = DuctsConfigurationDialog()
     dlg.get_properties_data()
     if dlg.show_dialog():
         dlg.save_to_propeties()
-
