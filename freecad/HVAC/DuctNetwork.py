@@ -36,7 +36,6 @@ translate = FreeCAD.Qt.translate
 #=================================================
 
 class DuctNetwork:
-
     """Visualize and configure HVAC duct network in FreeCAD's 3D view."""
 
     CONTEXT_KEY = hvaclib.DUCT_NETWORK_CONTEXT_KEY
@@ -90,7 +89,6 @@ class DuctNetwork:
 
 
 class DuctNetworkViewProvider:
-
     """A View Provider for the HVAC duct network object"""
 
     def __init__(self, vobj):
@@ -154,7 +152,6 @@ class DuctNetworkViewProvider:
 
 
 class CommandCreateDuctNetwork:
-
     """Create HVAC Duct Network."""
 
     def QT_TRANSLATE_NOOP(self, text):
@@ -176,6 +173,8 @@ class CommandCreateDuctNetwork:
 
 
 class CommandActivateDuctNetwork:
+    """Activate HVAC Duct Network."""
+
     def __init__(self):
         self.task_panel = None
 
@@ -214,7 +213,6 @@ class CommandActivateDuctNetwork:
 
 
 class CommandModifyDuctNetwork:
-
     """Modify HVAC Duct Network."""
 
     def QT_TRANSLATE_NOOP(self, text):
@@ -240,7 +238,6 @@ class CommandModifyDuctNetwork:
 
 
 class CommandDeleteDuctNetwork:
-
     """Delete a selected HVAC Duct Network."""
 
     def QT_TRANSLATE_NOOP(self, text):
@@ -304,7 +301,7 @@ class TaskPanelActivate:
 
 
 class TaskPanelEditDuctNetwork:
-    """A basic TaskPanel to edit an HVAC netowrk."""
+    """A basic TaskPanel to edit an HVAC network."""
 
     def __init__(self, hvac_network):
         self.hvac_network = hvac_network
@@ -313,10 +310,64 @@ class TaskPanelEditDuctNetwork:
         self.form.setWindowTitle(translate("HVAC_EditDuctNetwork", "Edit Network"))
 
         layout = QtWidgets.QVBoxLayout(self.form)
-        #TODO
+
+        # Label for instructions
+        label = QtWidgets.QLabel(translate("HVAC_EditDuctNetwork", "Base Objects in Network (Sketch/ Draft Line):"))
+        layout.addWidget(label)
+
+        # List view to display selected objects
+        self.list_view = QtWidgets.QListWidget()
+        self.list_view.setSelectionMode(QtWidgets.QAbstractItemView.MultiSelection)  # Enable multiple selection
+        layout.addWidget(self.list_view)
+
+        # Populate existing objects under Base
+        if self.hvac_network.Base:
+            for obj in self.hvac_network.Base.OutList:
+                if obj.TypeId == "Sketcher::SketchObject":
+                    self.list_view.addItem(obj.Label)
+
+        # Button to enable selection of sketch objects
+        self.select_button = QtWidgets.QPushButton(translate("HVAC_EditDuctNetwork", "Add Selected"))
+        self.select_button.clicked.connect(self.select_sketch_objects)
+        layout.addWidget(self.select_button)
+
+        # Button to remove selected sketch objects from the list view
+        self.remove_button = QtWidgets.QPushButton(translate("HVAC_EditDuctNetwork", "Remove Selected"))
+        self.remove_button.clicked.connect(self.remove_selected_sketch_objects)
+        layout.addWidget(self.remove_button)
+
+    def select_sketch_objects(self):
+        """Enable selection of sketch objects and add them to the list view."""
+        selected_objects = Gui.Selection.getSelection()
+        existing_labels = [self.list_view.item(i).text() for i in range(self.list_view.count())]
+        for obj in selected_objects:
+            if obj.TypeId == "Sketcher::SketchObject" and obj.Label not in existing_labels:
+                self.list_view.addItem(obj.Label)
+
+    def remove_selected_sketch_objects(self):
+        """Remove selected sketch objects from the list view."""
+        selected_items = self.list_view.selectedItems()
+        for item in selected_items:
+            self.list_view.takeItem(self.list_view.row(item))
 
     def accept(self):
         """Called when the user clicks OK."""
+        selected_items = [self.list_view.item(i).text() for i in range(self.list_view.count())]
+        doc = self.hvac_network.Document
+
+        # Add selected items to Base folder
+        for item_label in selected_items:
+            for obj in doc.Objects:
+                if obj.Label == item_label and obj not in self.hvac_network.Base.OutList:
+                    self.hvac_network.Base.addObject(obj)
+                    break
+
+        # Remove unselected items from Base folder
+        existing_labels = [self.list_view.item(i).text() for i in range(self.list_view.count())]
+        for obj in self.hvac_network.Base.OutList:
+            if obj.TypeId == "Sketcher::SketchObject" and obj.Label not in existing_labels:
+                self.hvac_network.Base.removeObject(obj)
+
         return True
 
     def reject(self):
