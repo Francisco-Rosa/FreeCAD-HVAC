@@ -132,12 +132,8 @@ class CommandActivateDuctNetwork:
             return False
 
         # And if there is at least one HVAC network in the document to activate
-
-        doc = App.ActiveDocument
-        if hasattr(doc, "RootObjects"):
-            for obj in doc.RootObjects:
-                if hasattr(obj, "Proxy") and isinstance(obj.Proxy, DuctNetwork):
-                    return True
+        if hvaclib.allHVACNetworks():
+            return True
 
         return False
 
@@ -146,7 +142,7 @@ class CommandActivateDuctNetwork:
 
         if len(hvac_networks) == 1:
             # If there's only one, activate it directly without showing a dialog
-            Gui.doCommand(f"Gui.ActiveDocument.setEdit('{hvac_networks[0].Name}')")
+            DuctNetwork.setActive(hvac_networks[0])
         elif len(hvac_networks) > 1:
             # If there are multiple, show a task panel to let the user choose
             self.task_panel = ActivateHVACTaskPanel(hvac_networks)
@@ -215,6 +211,7 @@ class ActivateHVACTaskPanel:
 
     def __init__(self, hvac_networks):
         self.hvac_networks = hvac_networks
+        self.hvac_networks_dict = {}
         self.form = QtWidgets.QWidget()
         self.form.setWindowTitle(translate("HVAC_ActivateDuctNetwork", "Activate HVAC Duct Network"))
 
@@ -225,6 +222,7 @@ class ActivateHVACTaskPanel:
         for net in self.hvac_networks:
             # Store the user-friendly Label for display, and the internal Name for activation
             self.combo.addItem(net.Label, net.Name)
+            self.hvac_networks_dict[net.Name] = net
 
         layout.addWidget(label)
         layout.addWidget(self.combo)
@@ -233,7 +231,7 @@ class ActivateHVACTaskPanel:
         """Called when the user clicks OK."""
         selected_name = self.combo.currentData()
         if selected_name:
-            Gui.doCommand(f"Gui.ActiveDocument.setEdit('{selected_name}')")
+            DuctNetwork.setActive(self.hvac_networks_dict[selected_name])
         return True
 
     def reject(self):
@@ -249,15 +247,15 @@ class ActivateHVACTaskPanel:
 def create_new_duct_network(name="DuctNetwork", set_active=True):
     """Create new duct network"""
     # Create new duct netowork and create default folders
-    folder = FreeCAD.ActiveDocument.addObject('App::DocumentObjectGroupPython', name)
-    DuctNetwork(folder)
-    DuctNetworkViewProvider(folder.ViewObject)
+    net = FreeCAD.ActiveDocument.addObject('App::DocumentObjectGroupPython', name)
+    DuctNetwork(net)
+    DuctNetworkViewProvider(net.ViewObject)
     print("HVAC - New DuctNetwork created")
     # Open duct network settings
     DuctNetworkConfigDialog.open_duct_network_configuration()
     # Set as active network
-    # if set_active:
-    #     DuctNetwork.setActive(folder)  #TODO
+    if set_active:
+        DuctNetwork.setActive(net)
     # Recompute document
     FreeCAD.ActiveDocument.recompute()
 
