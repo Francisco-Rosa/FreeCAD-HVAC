@@ -23,10 +23,10 @@
 #*                                                                         *
 #***************************************************************************
 
-import os
+import os, platform
 import FreeCAD
 import FreeCADGui as Gui
-import platform
+from PySide import QtGui
 translate = FreeCAD.Qt.translate
 preferences = FreeCAD.ParamGet("User parameter:BaseApp/Preferences/Mod/HVAC")
 
@@ -44,7 +44,7 @@ def activeHVACNetwork():
     if doc is None or doc.ActiveView is None:
         return None
     active_network = doc.ActiveView.getActiveObject(DUCT_NETWORK_CONTEXT_KEY)
-
+    
     if active_network:
         return active_network
 
@@ -57,8 +57,19 @@ def allHVACNetworks():
         return None
     if hasattr(doc.Document, "Objects"):
         hvac_networks = [n for n in doc.Document.Objects if hasattr(n, "Proxy") and isinstance(n.Proxy, DuctNetwork)]
-
+    
     return hvac_networks
+    
+def selectedHVACNetworks():
+    from freecad.HVAC.DuctNetwork import DuctNetwork
+    objs = Gui.Selection.getSelection()
+    if objs:
+        filtered = [o for o in objs if hasattr(o, "Proxy") and isinstance(o.Proxy, DuctNetwork)]
+        return filtered
+    return None
+    
+def refreshState():
+    QtGui.QApplication.processEvents()
 
 #------------------------------------------------------------------------------
 # Detect the operating system...

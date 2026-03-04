@@ -55,6 +55,7 @@ class HVAC(Gui.Workbench):
                                 'HVAC_ModifyDuctNetwork',
                                 "Separator",
                                 'HVAC_DeleteDuctNetwork',
+                                "Separator"
                                 ]
 
         self.submenu_commands = ['HVAC_CreateDuctNetwork',
@@ -62,6 +63,7 @@ class HVAC(Gui.Workbench):
                                 'HVAC_ModifyDuctNetwork',
                                 "Separator",
                                 'HVAC_DeleteDuctNetwork',
+                                "Separator"
                                 ]
 
         self.contextmenu_commands = ['HVAC_CreateDuctNetwork',
@@ -69,6 +71,7 @@ class HVAC(Gui.Workbench):
                                 'HVAC_ModifyDuctNetwork',
                                 "Separator",
                                 'HVAC_DeleteDuctNetwork',
+                                "Separator"
                                 ]
 
         self.appendMenu(QT_TRANSLATE_NOOP("Workbench", "HVAC"), self.submenu_commands)
@@ -87,7 +90,7 @@ class HVAC(Gui.Workbench):
 
     def ContextMenu(self, recipient):
         """This function is executed whenever the user right-clicks on screen"""
-        self.appendContextMenu(QT_TRANSLATE_NOOP("Workbench", "HVAC"), self.toolbar_commands)
+        self.appendContextMenu(QT_TRANSLATE_NOOP("Workbench", "HVAC"), self.contextmenu_commands)
 
     def setWatchers(self):
 
@@ -96,11 +99,11 @@ class HVAC(Gui.Workbench):
 
             def __init__(self):
                 self.commands = ["HVAC_CreateDuctNetwork"]
-                self.title = translate("HVAC", "Create HVAC Network")
+                self.title = translate("HVAC", "Start")
 
             def shouldShow(self):
-                hvac_networks = hvaclib.allHVACNetworks()
-                if hvac_networks:
+                selected_hvac_networks = hvaclib.selectedHVACNetworks()
+                if selected_hvac_networks:
                     return False
                 else:
                     return True
@@ -110,11 +113,10 @@ class HVAC(Gui.Workbench):
 
             def __init__(self):
                 self.commands = ["HVAC_ActivateDuctNetwork"]
-                self.title = translate("HVAC", "Activate HVAC Network")
+                self.title = translate("HVAC", "Activate")
 
             def shouldShow(self):
                 doc = FreeCAD.ActiveDocument
-
                 hvac_networks = hvaclib.allHVACNetworks()
                 hvac_network = hvaclib.activeHVACNetwork()
                 return hvac_networks and (hvac_network is None or hvac_network.Document != doc)
@@ -126,18 +128,18 @@ class HVAC(Gui.Workbench):
                 self.hvac_network = None
 
             def shouldShow(self):
+                # Show if there is an active document
                 doc = FreeCAD.ActiveDocument
-
                 self.hvac_network = hvaclib.activeHVACNetwork()
                 return self.hvac_network is not None and self.hvac_network.Document == doc
 
-        class HVACInsertWatcher(HVACBaseWatcher):
-            """Shows 'Insert Sketch' when an HVAC Network is active."""
+        class HVACEditWatcher(HVACBaseWatcher):
+            """Shows 'Edit Network' when an HVAC Network is active."""
 
             def __init__(self):
                 super().__init__()
                 self.commands = [""]
-                self.title = translate("HVAC", "Insert Sketch")
+                self.title = translate("HVAC", "Tools")
 
             def shouldShow(self):
                 return super().shouldShow()
@@ -145,7 +147,7 @@ class HVAC(Gui.Workbench):
         watchers = [
             HVACCreateWatcher(),
             HVACActivateWatcher(),
-            HVACInsertWatcher(),
+            HVACEditWatcher(),
         ]
         Gui.Control.addTaskWatcher(watchers)
 
