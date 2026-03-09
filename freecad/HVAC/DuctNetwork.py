@@ -35,6 +35,67 @@ translate = FreeCAD.Qt.translate
 # A. Main classes
 #=================================================
 
+
+class DuctManagedFolder:
+    """Internal managed folder used by DuctNetwork."""
+
+    def __init__(self, obj, owner=None, role=""):
+        obj.Proxy = self
+        if "OwnerNetwork" not in obj.PropertiesList:
+            obj.addProperty("App::PropertyLink", "OwnerNetwork", "HVAC", "Owning duct network")
+        if "FolderRole" not in obj.PropertiesList:
+            obj.addProperty("App::PropertyString", "FolderRole", "HVAC", "Internal folder role")
+        obj.OwnerNetwork = owner
+        obj.FolderRole = role
+
+    def execute(self, obj):
+        """Required so the object can clear its touched state on recompute."""
+        pass
+
+    @staticmethod
+    def create(doc, name, owner, role):
+        folder = doc.addObject("App::DocumentObjectGroupPython", name)
+        DuctManagedFolder(folder, owner=owner, role=role)
+        DuctManagedFolderViewProvider(folder.ViewObject)
+        return folder
+        
+        
+class DuctManagedFolderViewProvider:
+    def __init__(self, vobj):
+        vobj.Proxy = self
+
+    def attach(self, vobj):
+        self.Object = vobj.Object
+
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        state.pop("Object", None)
+        return state
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+
+    def getIcon(self):
+        return hvaclib.get_icon_path("Folder.svg")  # optional
+
+    def onDelete(self, vobj, subelements):
+        obj = vobj.Object
+        owner = getattr(obj, "OwnerNetwork", None)
+        # Allow deletion only when the owner network itself is being deleted
+        if owner and getattr(owner.Proxy, "_allow_internal_delete", False):
+            return True
+        FreeCAD.Console.PrintWarning(
+            "HVAC - Internal folder '{}' cannot be deleted directly.\n".format(obj.Label)
+        )
+        return False
+
+    def canDropObjects(self):
+        return False
+
+    def canDragObjects(self):
+        return False
+        
+        
 class DuctNetwork:
     """Visualize and configure HVAC duct network in FreeCAD's 3D view."""
 
@@ -44,6 +105,7 @@ class DuctNetwork:
 
     def __init__(self, obj):
         obj.Proxy = self
+        self._allow_internal_delete = False
         self.setProperties(obj)
 
     def setProperties(self, obj):
@@ -51,11 +113,22 @@ class DuctNetwork:
         doc = obj.Document
         # Create the sub-folders
         obj.addProperty("App::PropertyLink", "Base", "HVAC", "Base (internal)")
-        folder_base = doc.addObject("App::DocumentObjectGroupPython", f"{obj.Name}_{self.FOLDER_BASE_NAME}")
+        folder_base = DuctManagedFolder.create(
+            doc,
+            f"{obj.Name}_{self.FOLDER_BASE_NAME}",
+            owner=obj,
+            role=self.FOLDER_BASE_NAME,
+        )
         folder_base.Label = self.FOLDER_BASE_NAME
         obj.Base = folder_base
+        
         obj.addProperty("App::PropertyLink", "Geometry", "HVAC", "Geometry (internal)")
-        folder_geometry = doc.addObject("App::DocumentObjectGroupPython", f"{obj.Name}_{self.FOLDER_GEOMETRY_NAME}")
+        folder_geometry = DuctManagedFolder.create(
+            doc,
+            f"{obj.Name}_{self.FOLDER_GEOMETRY_NAME}",
+            owner=obj,
+            role=self.FOLDER_GEOMETRY_NAME,
+        )
         folder_geometry.Label = self.FOLDER_GEOMETRY_NAME
         obj.Geometry = folder_geometry
 
@@ -74,10 +147,10 @@ class DuctNetwork:
     @staticmethod
     def getActive(doc=None):
         """Get the active DuctNetwork container from the 3D view."""
-        if not App.GuiUp:
+        if not FreeCAD.GuiUp:
             return None
         if doc is None:
-            doc = App.ActiveDocument
+            doc = FreeCAD.ActiveDocument
         if doc is None or Gui.ActiveDocument is None:
             return None
         return Gui.ActiveDocument.ActiveView.getActiveObject(DuctNetwork.CONTEXT_KEY)
@@ -150,6 +223,16 @@ class DuctNetworkViewProvider:
 
     def canDragObjects(self):
         # Prevents users from dragging the managed folders OUT of the group
+        return False
+        
+    def onDelete(self, vobj, subelements):
+        obj = vobj.Object
+        # Allow deletion only when the owner network itself is being deleted
+        if obj and getattr(obj.Proxy, "_allow_internal_delete", False):
+            return True
+        FreeCAD.Console.PrintWarning(
+            "HVAC - Network '{}' cannot be deleted directly.\n".format(obj.Label)
+        )
         return False
 
 
@@ -421,29 +504,26 @@ def activate_duct_network(net, set_edit=False):
     # Set network to edit mode
     if set_edit:
         Gui.ActiveDocument.setEdit(net.Name)
-    # Recompute document
-    FreeCAD.ActiveDocument.recompute()
 
 def modify_duct_network(net):
     """Modify the selected HVAC duct network object"""
     # Set as active network and enable edit mode
     activate_duct_network(net, set_edit=True)
-    FreeCAD.ActiveDocument.recompute()
     print("HVAC - Edit DuctNetwork completed")
 
 def delete_duct_networks(nets):
     """Delete the selected HVAC duct network object"""
     doc = FreeCAD.ActiveDocument
     for net in nets:
-        if net.Document == doc:
-            # Remove sub-folders if they exist
-            if hasattr(net, "Base") and net.Base:
-                doc.removeObject(net.Base.Name)
-            if hasattr(net, "Geometry") and net.Geometry:
-                doc.removeObject(net.Geometry.Name)
-            # Remove the network itself
-            doc.removeObject(net.Name)
-    doc.recompute()
+        if net.Document != doc:
+            continue
+        if hasattr(net, "Proxy") and net.Proxy:
+            net.Proxy._allow_internal_delete = True
+        if hasattr(net, "Base") and net.Base:
+            doc.removeObject(net.Base.Name)
+        if hasattr(net, "Geometry") and net.Geometry:
+            doc.removeObject(net.Geometry.Name)
+        doc.removeObject(net.Name)
     print("HVAC - Deleted selected {} DuctNetwork(s)".format(len(nets)))
 
 
