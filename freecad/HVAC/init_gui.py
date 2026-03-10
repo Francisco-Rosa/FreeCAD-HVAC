@@ -102,8 +102,8 @@ class HVAC(Gui.Workbench):
                 self.title = translate("HVAC", "Start")
 
             def shouldShow(self):
-                selected_hvac_networks = hvaclib.selectedHVACNetworks()
-                if selected_hvac_networks:
+                hvac_networks = hvaclib.allHVACNetworks()
+                if hvac_networks:
                     return False
                 else:
                     return True
