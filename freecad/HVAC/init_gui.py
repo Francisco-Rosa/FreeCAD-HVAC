@@ -55,7 +55,6 @@ class HVAC(Gui.Workbench):
         self.toolbar_commands = ['HVAC_CreateDuctNetwork',
                                 'HVAC_ActivateDuctNetwork',
                                 'HVAC_ModifyDuctNetwork',
-                                'HVAC_DeleteDuctNetwork',
                                 "Separator",
                                 'HVAC_CreateSketch',
                                 'HVAC_CreateLine'
@@ -64,7 +63,6 @@ class HVAC(Gui.Workbench):
         self.submenu_commands = ['HVAC_CreateDuctNetwork',
                                 'HVAC_ActivateDuctNetwork',
                                 'HVAC_ModifyDuctNetwork',
-                                'HVAC_DeleteDuctNetwork',
                                 "Separator",
                                 'HVAC_CreateSketch',
                                 'HVAC_CreateLine'
@@ -73,7 +71,6 @@ class HVAC(Gui.Workbench):
         self.contextmenu_commands = ['HVAC_CreateDuctNetwork',
                                 'HVAC_ActivateDuctNetwork',
                                 'HVAC_ModifyDuctNetwork',
-                                'HVAC_DeleteDuctNetwork',
                                 "Separator",
                                 'HVAC_CreateSketch',
                                 'HVAC_CreateLine'

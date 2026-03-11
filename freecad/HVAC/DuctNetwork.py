@@ -565,10 +565,6 @@ class DuctNetwork:
         return True
 
     @staticmethod
-    def segmentObjectName(net, edge_ref):
-        return edge_ref.tag
-
-    @staticmethod
     def collectSegmentObjects(net):
         segments = {}
         geometry = getattr(net, "Geometry", None)
@@ -662,7 +658,7 @@ class DuctNetwork:
             if segment_obj is None:
                 segment_obj = DuctSegment.create(
                     doc,
-                    self.segmentObjectName(net, edge_ref),
+                    edge_ref.tag,
                     owner=net,
                     key=key,
                     source_obj=source_obj,
@@ -780,14 +776,9 @@ class DuctNetworkViewProvider:
         return False
         
     def onDelete(self, vobj, subelements):
-        obj = vobj.Object
-        # Allow deletion only when the owner network itself is being deleted
-        if obj and getattr(obj.Proxy, "_allow_internal_delete", False):
-            return True
-        FreeCAD.Console.PrintWarning(
-            "HVAC - Network '{}' cannot be deleted directly.\n".format(obj.Label)
-        )
-        return False
+        net = vobj.Object
+        delete_duct_networks([net], remove_internal_only=True)
+        return True
 
 
 #=================================================
@@ -1115,7 +1106,7 @@ def modify_duct_network(net):
     activate_duct_network(net, set_edit=True)
     print("HVAC - Edit DuctNetwork completed")
 
-def delete_duct_networks(nets):
+def delete_duct_networks(nets, remove_internal_only=False):
     """Delete the selected HVAC duct network object"""
     doc = FreeCAD.ActiveDocument
     for net in nets:
@@ -1129,7 +1120,8 @@ def delete_duct_networks(nets):
             doc.removeObject(net.Geometry.Name)
         if hasattr(net, "Base") and net.Base:
             doc.removeObject(net.Base.Name)
-        doc.removeObject(net.Name)
+        if not remove_internal_only:
+            doc.removeObject(net.Name)
     hvaclib.refreshState()
     print("HVAC - Deleted selected {} DuctNetwork(s)".format(len(nets)))
 
