@@ -646,13 +646,16 @@ class DuctNetwork:
             if initial_sync:
                 # Search by index since Tag is regenerated when objects are created
                 segment_obj = None
+                matched_old_key = None
                 for old_key, seg in existing_segments.items():
                     if seg.SourceObjectName == source_obj.Name and seg.SourceIndex == edge_ref.local_index:
                         segment_obj = seg
-                        # Update existing_segments since key has changed
-                        existing_segments.pop(old_key)
-                        existing_segments[key] = segment_obj
+                        matched_old_key = old_key
                         break
+
+                if matched_old_key is not None and matched_old_key != key:
+                    existing_segments.pop(matched_old_key, None)
+                    existing_segments[key] = segment_obj
             else:
                 # Search by Tag
                 segment_obj = existing_segments.get(key)
