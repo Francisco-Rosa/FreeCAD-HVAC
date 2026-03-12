@@ -56,6 +56,8 @@ class HVAC(Gui.Workbench):
                                 'HVAC_ActivateDuctNetwork',
                                 'HVAC_ModifyDuctNetwork',
                                 "Separator",
+                                'HVAC_EditBaseObject',
+                                "Separator",
                                 'HVAC_CreateSketch',
                                 'HVAC_CreateLine'
                                 ]
@@ -64,6 +66,8 @@ class HVAC(Gui.Workbench):
                                 'HVAC_ActivateDuctNetwork',
                                 'HVAC_ModifyDuctNetwork',
                                 "Separator",
+                                'HVAC_EditBaseObject',
+                                "Separator",
                                 'HVAC_CreateSketch',
                                 'HVAC_CreateLine'
                                 ]
@@ -71,6 +75,8 @@ class HVAC(Gui.Workbench):
         self.contextmenu_commands = ['HVAC_CreateDuctNetwork',
                                 'HVAC_ActivateDuctNetwork',
                                 'HVAC_ModifyDuctNetwork',
+                                "Separator",
+                                'HVAC_EditBaseObject',
                                 "Separator",
                                 'HVAC_CreateSketch',
                                 'HVAC_CreateLine'
@@ -152,7 +158,7 @@ class HVAC(Gui.Workbench):
 
             def __init__(self):
                 super().__init__()
-                self.commands = ["HVAC_ModifyDuctNetwork"]
+                self.commands = ["HVAC_ModifyDuctNetwork", "HVAC_EditBaseObject"]
                 self.title = translate("HVAC", "Modify")
 
             def shouldShow(self):

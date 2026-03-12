@@ -23,6 +23,7 @@
 
 """This module implements HVAC duct description classes."""
 
+from this import s
 import FreeCAD
 import FreeCADGui as Gui
 from PySide import QtWidgets, QtCore
@@ -269,20 +270,7 @@ class DuctNetworkChangeObserver:
             self._undo_redo_in_progress = False
        
     # Visibility watcher
-    
-    def _findOwnerNetwork(self, obj):
-        doc = getattr(obj, "Document", None)
-        if doc is None:
-            return None
-        for net in hvaclib.allHVACNetworks(doc):
-            base = getattr(net, "Base", None)
-            if base and obj in base.OutList:
-                return net
-        return None
-    
-    def _isEditableManagedBase(self, obj):
-        return obj is not None and (hvaclib.obj_is_sketch(obj) or hvaclib.obj_is_wire(obj))
-    
+        
     def _finishEditedBaseObject(self):
         """
         Finalize the tracking state when a base geometry object exits edit mode.
@@ -320,13 +308,13 @@ class DuctNetworkChangeObserver:
         obj = getattr(in_edit, "Object", None) if in_edit else None
 
         # Check if the object type is relevant
-        if not self._isEditableManagedBase(obj):
+        if not ( hvaclib.obj_is_sketch(obj) or hvaclib.obj_is_wire(obj) ):
             if self._edited_base_obj is not None:
                 self._finishEditedBaseObject()
             return
 
         # Find the owning network
-        net = self._findOwnerNetwork(obj)
+        net = DuctNetwork.getOwnerNetwork(obj)
         if net is None:
             if self._edited_base_obj is not None:
                 self._finishEditedBaseObject()
@@ -950,14 +938,48 @@ class DuctNetwork:
         return bool(obj) and hasattr(obj, "Proxy") and isinstance(obj.Proxy, DuctNetwork)
         
     @staticmethod
+    def isBaseObject(obj):
+        if obj is None:
+            return False
+        if not (hvaclib.obj_is_sketch(obj) or hvaclib.obj_is_wire(obj)):
+            return False
+            
+        for net in hvaclib.allHVACNetworks(obj.Document):
+            base = getattr(net, "Base", None)
+            if base and obj in base.OutList:
+                return True
+        return False
+        
+    @staticmethod
+    def isGeometryObject(obj):
+        return bool(obj) and hasattr(obj, "Proxy") and isinstance(obj.Proxy, DuctSegment)
+        
+    @staticmethod
     def getOwnerNetwork(obj):
         """Return the owning duct network document object for an internal object."""
-        owner_name = getattr(obj, "OwnerNetworkName", "")
-        doc = getattr(obj, "Document", None)
-        if owner_name and doc:
-            return doc.getObject(owner_name)
+        if DuctNetwork.isGeometryObject(obj):
+            owner_name = getattr(obj, "OwnerNetworkName", "")
+            doc = getattr(obj, "Document", None)
+            if owner_name and doc:
+                return doc.getObject(owner_name)
+            return None
+        elif DuctNetwork.isBaseObject(obj):
+            for net in hvaclib.allHVACNetworks(obj.Document):
+                base = getattr(net, "Base", None)
+                if base and obj in base.OutList:
+                    return net
         return None
-
+        
+    @staticmethod
+    def getOwnerBaseObject(obj):
+        """Return the base object for a given geometry object."""
+        if DuctNetwork.isGeometryObject(obj):
+            owner_name = getattr(obj, "SourceObjectName", "")
+            doc = getattr(obj, "Document", None)
+            if owner_name and doc:
+                return doc.getObject(owner_name)
+        return None
+    
     # Functions for syncing object data with the network parser
     
     def syncSegments(self, net, parser, initial_sync=False):
@@ -1319,6 +1341,39 @@ class CommandModifyDuctNetwork:
         else:
             active_hvac_network = hvaclib.activeHVACNetwork()
             modify_duct_network(active_hvac_network)
+            
+            
+class CommandEditBaseObject:
+    """Edit base object of selected duct."""
+
+    def QT_TRANSLATE_NOOP(self, text):
+        return text
+
+    def GetResources(self):
+        return {'Pixmap': hvaclib.get_icon_path("ModifyDuctsIcon.svg"),
+                'MenuText': QT_TRANSLATE_NOOP('HVAC_EditBaseObject', 'Modify routing'),
+                'ToolTip': QT_TRANSLATE_NOOP('HVAC_EditBaseObject',  'Modify routing of selected duct')}
+
+    def IsActive(self):
+        if Gui.ActiveDocument:
+            active_hvac_network = hvaclib.activeHVACNetwork()
+            selected_geom = hvaclib.selectedGeometryObjects()
+            if active_hvac_network and selected_geom:
+                return True
+        else:
+            return False
+
+    def Activated(self):
+        base_objs = hvaclib.selectedGeometryObjects()
+        if base_objs:
+            base = DuctNetwork.getOwnerBaseObject(base_objs[0])
+            if base:
+                if hvaclib.obj_is_sketch(base):
+                    Gui.ActiveDocument.setEdit(base.Name)
+                elif hvaclib.obj_is_wire(base):
+                    Gui.Selection.clearSelection()
+                    Gui.Selection.addSelection(base)
+                    Gui.ActiveDocument.setEdit(base, 0)
 
 
 class CommandDeleteDuctNetwork:
@@ -1597,6 +1652,7 @@ if FreeCAD.GuiUp:
     ensure_change_observer()
     FreeCAD.Gui.addCommand('HVAC_CreateDuctNetwork', CommandCreateDuctNetwork())
     FreeCAD.Gui.addCommand('HVAC_ModifyDuctNetwork', CommandModifyDuctNetwork())
+    FreeCAD.Gui.addCommand('HVAC_EditBaseObject', CommandEditBaseObject())
     FreeCAD.Gui.addCommand('HVAC_DeleteDuctNetwork', CommandDeleteDuctNetwork())
     FreeCAD.Gui.addCommand('HVAC_ActivateDuctNetwork', CommandActivateDuctNetwork())
     FreeCAD.Gui.addCommand("HVAC_CreateSketch", CommandCreateSketch())

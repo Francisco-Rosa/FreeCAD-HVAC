@@ -93,7 +93,7 @@ def allHVACNetworks(doc: FreeCAD.Document | None = None) -> list | None:
     if hasattr(doc, "Objects"):
         hvac_networks = [
             n for n in doc.Objects 
-            if hasattr(n, "Proxy") and DuctNetwork.isDuctNetwork(n)
+            if DuctNetwork.isDuctNetwork(n)
         ]
     return hvac_networks
 
@@ -101,9 +101,20 @@ def selectedHVACNetworks():
     from freecad.HVAC.DuctNetwork import DuctNetwork
     objs = Gui.Selection.getSelection()
     if objs:
-        filtered = [o for o in objs if hasattr(o, "Proxy") and DuctNetwork.isDuctNetwork(o)]
+        filtered = [o for o in objs if DuctNetwork.isDuctNetwork(o)]
         return filtered
     return None
+
+def selectedGeometryObjects():
+    from freecad.HVAC.DuctNetwork import DuctSegment
+    objs = Gui.Selection.getSelection()
+    if objs:
+        filtered = [o for o in objs if DuctSegment.isDuctSegment(o)]
+        return filtered
+    return None
+    
+def selectedBaseObjects():
+    return 
 
 def refreshState():
     if not FreeCAD.GuiUp:
