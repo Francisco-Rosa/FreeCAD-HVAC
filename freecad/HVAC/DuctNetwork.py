@@ -318,6 +318,34 @@ class DuctSegment:
         self._allow_delete = False
         self.setProperties(obj)
         self.updateSectionEditorModes(obj)
+        
+    def __getstate__(self):
+        return None
+
+    def __setstate__(self, state):
+        self._allow_delete = False
+        
+    def onChanged(self, obj, prop):
+        if prop == "SectionShape":
+            self.updateSectionEditorModes(obj)
+            
+    def execute(self, obj):
+        start_point = getattr(obj, "StartPoint", None)
+        end_point = getattr(obj, "EndPoint", None)
+        width = getattr(obj, "Width", None)
+        height = getattr(obj, "Height", None)
+        diameter = getattr(obj, "Diameter", None)
+        section_shape = getattr(obj, "SectionShape", self.SECTION_SHAPES[0])
+        if start_point is None or end_point is None:
+            return
+        try:
+            if start_point.sub(end_point).Length > 0:
+                if section_shape == self.SECTION_SHAPES[0]:
+                    obj.Shape = hvaclib.create_rectangular_duct_geom(start_point, end_point, width, height)
+                elif section_shape == self.SECTION_SHAPES[1]:
+                    obj.Shape = hvaclib.create_circular_duct_geom(start_point, end_point, diameter)
+        except Exception as e:
+            print("HVAC - Error generating geometry \n" + str(e))
 
     def setProperties(self, obj):
         self._addProperty(obj, "App::PropertyString", "OwnerNetworkName", "HVAC", "Owning duct network")
@@ -363,10 +391,6 @@ class DuctSegment:
                 obj.setEditorMode(prop, 1)
             except Exception:
                 pass
-
-    def onChanged(self, obj, prop):
-        if prop == "SectionShape":
-            self.updateSectionEditorModes(obj)
 
     def updateSectionEditorModes(self, obj):
         shape = getattr(obj, "SectionShape", self.SECTION_SHAPES[0])
@@ -428,30 +452,6 @@ class DuctSegment:
                 changed = True
     
         return changed
-
-    def execute(self, obj):
-        start_point = getattr(obj, "StartPoint", None)
-        end_point = getattr(obj, "EndPoint", None)
-        width = getattr(obj, "Width", None)
-        height = getattr(obj, "Height", None)
-        diameter = getattr(obj, "Diameter", None)
-        section_shape = getattr(obj, "SectionShape", self.SECTION_SHAPES[0])
-        if start_point is None or end_point is None:
-            return
-        try:
-            if start_point.sub(end_point).Length > 0:
-                if section_shape == self.SECTION_SHAPES[0]:
-                    obj.Shape = hvaclib.create_rectangular_duct_geom(start_point, end_point, width, height)
-                elif section_shape == self.SECTION_SHAPES[1]:
-                    obj.Shape = hvaclib.create_circular_duct_geom(start_point, end_point, diameter)
-        except Exception as e:
-            print("HVAC - Error generating geometry \n" + str(e))
-
-    def __getstate__(self):
-        return None
-
-    def __setstate__(self, state):
-        self._allow_delete = False
 
     @classmethod
     def create(cls, doc, name, owner, key, source_obj, source_index):
@@ -545,6 +545,12 @@ class DuctNetwork:
         self._sync_reason = None
         self.setProperties(obj)
         self.requestSync(obj, initial_sync=True, reason="restore")
+        
+    def execute(self, obj):
+        """Manual recompute of the network triggers deferred synchronization."""
+        if self._sync_in_progress:
+            return
+        self.requestSync(obj, reason="execute")
 
     def setProperties(self, obj):
         """Gives the object properties to HVAC ducts."""
@@ -732,6 +738,8 @@ class DuctNetwork:
             return doc.getObject(owner_name)
         return None
 
+    # Functions for syncing object data with the network parser
+    
     def syncSegments(self, net, parser, initial_sync=False):
         """
         Synchronize the derived DuctSegment objects with the base geometry.
@@ -928,12 +936,6 @@ class DuctNetwork:
             set_if_needed("Velocity", params["Velocity"])
     
         return changed
-        
-    def execute(self, obj):
-        """Manual recompute of the network triggers deferred synchronization."""
-        if self._sync_in_progress:
-            return
-        self.requestSync(obj, reason="execute")
 
 
 class DuctNetworkViewProvider:
