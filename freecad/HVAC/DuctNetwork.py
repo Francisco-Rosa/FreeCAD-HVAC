@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
-# SPDX-FileNotice: Part of the Solar addon.
+# SPDX-FileNotice: Part of the HVAC addon.
 
 ################################################################################
 #                                                                              #
@@ -22,7 +22,7 @@
 ################################################################################
 
 """This module implements HVAC duct description classes."""
-
+import json
 import FreeCAD
 import FreeCADGui as Gui
 from PySide import QtWidgets, QtCore
@@ -336,11 +336,20 @@ class DuctSegmentViewProvider:
 
 
 class DuctJunction:
-    """Derived per-node junction object created from network base geometry."""
+    """Derived per-node duct junction created from network base geometry."""
 
     TYPE = "DuctJunction"
 
-    def __init__(self, obj, owner=None, node_id=0, node_key="", node_kind="", center_point=None, degree=0):
+    def __init__(
+        self,
+        obj,
+        owner=None,
+        node_id=0,
+        node_key="",
+        node_kind="",
+        center_point=None,
+        degree=0,
+    ):
         obj.Proxy = self
         self._allow_delete = False
         self.setProperties(obj)
@@ -367,14 +376,58 @@ class DuctJunction:
 
     def execute(self, obj):
         center_point = getattr(obj, "CenterPoint", None)
-        marker_diameter = getattr(obj, "MarkerDiameter", None)
         if center_point is None:
             return
+
+        library_id = getattr(obj, "LibraryId", "")
+        type_id = getattr(obj, "TypeId", "")
+        if not library_id or not type_id:
+            return
+
         try:
-            if float(marker_diameter) > 0:
-                obj.Shape = hvaclib.create_junction_marker_geom(center_point, marker_diameter)
+            reg = hvaclib.get_hvac_library_registry()
+            type_def = reg.resolve_type(library_id, type_id)
+            if type_def is None:
+                raise ValueError(
+                    "Unknown junction type '{}' in library '{}'".format(
+                        type_id, library_id
+                    )
+                )
+
+            props = {}
+            for pdef in getattr(type_def, "properties", []) or []:
+                if hasattr(obj, pdef.name):
+                    props[pdef.name] = getattr(obj, pdef.name)
+                else:
+                    props[pdef.name] = getattr(pdef, "default", None)
+
+            edge_keys = list(getattr(obj, "ConnectedEdgeKeys", []) or [])
+
+            context = {
+                "obj": obj,
+                "center_point": center_point,
+                "properties": props,
+                "edge_keys": edge_keys,
+                "family": getattr(obj, "Family", ""),
+                "type_id": type_id,
+                "library_id": library_id,
+            }
+
+            result = reg.call_generator(library_id, type_def, context)
+            shape = result.get("shape", None)
+            lengths = result.get("connection_lengths", [])
+
+            if shape is not None:
+                obj.Shape = shape
+
+            lengths_json = json.dumps(lengths)
+            if getattr(obj, "ConnectionLengthsJson", "") != lengths_json:
+                obj.ConnectionLengthsJson = lengths_json
+
         except Exception as e:
-            print("HVAC - Error generating junction geometry \n" + str(e))
+            FreeCAD.Console.PrintError(
+                "HVAC - Error generating junction '{}': {}\n".format(obj.Label, e)
+            )
 
     def setProperties(self, obj):
         self._addProperty(obj, "App::PropertyString", "OwnerNetworkName", "HVAC", "Owning duct network")
@@ -383,10 +436,34 @@ class DuctJunction:
         self._addProperty(obj, "App::PropertyString", "NodeKind", "HVAC", "Junction classification")
         self._addProperty(obj, "App::PropertyInteger", "Degree", "HVAC", "Node degree")
         self._addProperty(obj, "App::PropertyVector", "CenterPoint", "HVAC", "Junction center point")
+
+        self._addProperty(obj, "App::PropertyString", "LibraryId", "HVAC", "HVAC library id")
+        self._addProperty(obj, "App::PropertyString", "Family", "HVAC", "Classified fitting family")
+        self._addProperty(obj, "App::PropertyString", "TypeId", "HVAC", "Selected fitting type id")
+        self._addProperty(obj, "App::PropertyBool", "AutoType", "HVAC", "Auto-select type from topology")
+        self._addProperty(obj, "App::PropertyStringList", "ConnectedEdgeKeys", "HVAC", "Connected segment keys")
+        self._addProperty(obj, "App::PropertyString", "ConnectionLengthsJson", "HVAC", "Per-edge connection lengths")
+        self._addProperty(obj, "App::PropertyString", "AnalysisJson", "HVAC", "Serialized topology analysis")
+
+        # Keep this generic marker parameter for the built-in marker library.
         self._addProperty(obj, "App::PropertyLength", "MarkerDiameter", "Dimensions", "Display marker diameter")
 
-        if not obj.MarkerDiameter:
+        if getattr(obj, "AutoType", None) is None:
+            obj.AutoType = True
+
+        if not getattr(obj, "LibraryId", ""):
+            lib = hvaclib.get_active_hvac_library()
+            if lib:
+                obj.LibraryId = lib.id
+
+        if not getattr(obj, "MarkerDiameter", 0):
             obj.MarkerDiameter = 200.0
+
+        if not getattr(obj, "ConnectionLengthsJson", ""):
+            obj.ConnectionLengthsJson = "[]"
+
+        if not getattr(obj, "AnalysisJson", ""):
+            obj.AnalysisJson = "{}"
 
         for prop in (
             "OwnerNetworkName",
@@ -395,13 +472,63 @@ class DuctJunction:
             "NodeKind",
             "Degree",
             "CenterPoint",
+            "Family",
+            "ConnectedEdgeKeys",
+            "ConnectionLengthsJson",
+            "AnalysisJson",
         ):
             try:
                 obj.setEditorMode(prop, 1)
             except Exception:
                 pass
 
-    def updateMetadata(self, obj, owner=None, node_id=0, node_key="", node_kind="", center_point=None, degree=0):
+    def applyTypeSchema(self, obj):
+        reg = hvaclib.get_hvac_library_registry()
+        lib_id = getattr(obj, "LibraryId", "")
+        type_id = getattr(obj, "TypeId", "")
+        if not lib_id or not type_id:
+            return False
+
+        type_def = reg.resolve_type(lib_id, type_id)
+        if type_def is None:
+            return False
+
+        changed = False
+        for pdef in getattr(type_def, "properties", []) or []:
+            if pdef.name not in obj.PropertiesList:
+                obj.addProperty(pdef.prop_type, pdef.name, pdef.group, pdef.description)
+                changed = True
+
+            try:
+                current = getattr(obj, pdef.name)
+            except Exception:
+                current = None
+
+            if current in (None, "") and getattr(pdef, "default", None) is not None:
+                try:
+                    setattr(obj, pdef.name, pdef.default)
+                    changed = True
+                except Exception:
+                    pass
+
+        return changed
+
+    def updateMetadata(
+        self,
+        obj,
+        owner=None,
+        node_id=0,
+        node_key="",
+        node_kind="",
+        center_point=None,
+        degree=0,
+        family="",
+        type_id="",
+        library_id="",
+        connected_edge_keys=None,
+        analysis_json="{}",
+        connection_lengths_json=None,
+    ):
         changed = False
 
         if owner and getattr(obj, "OwnerNetworkName", "") != owner.Name:
@@ -430,6 +557,33 @@ class DuctJunction:
                 obj.CenterPoint = center_vec
                 changed = True
 
+        if library_id and getattr(obj, "LibraryId", "") != str(library_id):
+            obj.LibraryId = str(library_id)
+            changed = True
+
+        if family and getattr(obj, "Family", "") != str(family):
+            obj.Family = str(family)
+            changed = True
+
+        if type_id and getattr(obj, "TypeId", "") != str(type_id):
+            obj.TypeId = str(type_id)
+            changed = True
+
+        if connected_edge_keys is not None:
+            edge_keys = [str(k) for k in connected_edge_keys]
+            if list(getattr(obj, "ConnectedEdgeKeys", []) or []) != edge_keys:
+                obj.ConnectedEdgeKeys = edge_keys
+                changed = True
+
+        if analysis_json is not None and getattr(obj, "AnalysisJson", "") != str(analysis_json):
+            obj.AnalysisJson = str(analysis_json)
+            changed = True
+
+        if connection_lengths_json is not None:
+            if getattr(obj, "ConnectionLengthsJson", "") != str(connection_lengths_json):
+                obj.ConnectionLengthsJson = str(connection_lengths_json)
+                changed = True
+
         return changed
 
     @classmethod
@@ -456,9 +610,9 @@ class DuctJunction:
         return "NODE:{}_{}_{}".format(node_key[0], node_key[1], node_key[2])
 
     @staticmethod
-    def labelFor(node_kind, node_id):
-        kind = str(node_kind).capitalize() if node_kind else "Junction"
-        return "{} [{}]".format(kind, int(node_id))
+    def labelFor(family, node_id):
+        family_label = str(family).capitalize() if family else "Junction"
+        return "{} [{}]".format(family_label, int(node_id))
 
     @staticmethod
     def _addProperty(obj, prop_type, prop_name, group, description):
@@ -698,7 +852,7 @@ class DuctNetwork:
         if getattr(obj, "Document", None) != net.Document:
             return False
         if (DuctSegment.isDuctSegment(obj) or DuctJunction.isDuctJunction(obj)) and getattr(obj, "Proxy", None):
-                    obj.Proxy._allow_delete = True
+            obj.Proxy._allow_delete = True
         if hasattr(net, "Geometry") and net.Geometry and obj in net.Geometry.OutList:
             net.Geometry.removeObject(obj)
         net.Document.removeObject(obj.Name)
@@ -991,26 +1145,62 @@ class DuctNetwork:
         """
         Synchronize derived DuctJunction objects with parser nodes.
 
-        First-pass logic:
-        - create junctions only for parser.junction_nodes()
-        - match by persistent snapped NodeKey
-        - create/update/prune under the Geometry folder
+        Junction family and default type are inferred from topology.
+        Geometry generation is delegated to the active HVAC library.
         """
         doc = net.Document
         geometry = getattr(net, "Geometry", None)
         if doc is None or geometry is None:
             return False
 
+        active_lib = hvaclib.get_active_hvac_library()
+        if active_lib is None:
+            return False
+
         changed = False
         existing_junctions = self.collectJunctionObjects(net)
         live_objs = set()
 
-        for node_id in parser.junction_nodes():
-            point = parser.node_xyz(node_id)
-            degree = parser.node_degree(node_id)
-            node_kind = parser.node_kind(node_id)
-            node_key_tuple = parser.node_key(node_id)
+        for node_id in parser.nodes():
+            analysis = parser.node_analysis(node_id)
+            degree = int(analysis.get("degree", 0))
+            if degree <= 0:
+                continue
+
+            family = hvaclib.classify_junction_family(analysis)
+            default_type_id = hvaclib.default_junction_type_id(family)
+
+            point = analysis["point"]
+            node_key_tuple = analysis["node_key"]
             node_key = DuctJunction.makeKey(node_key_tuple)
+
+            connected_edge_keys = [
+                DuctSegment.makeKey(edge_ref.obj_name, edge_ref.local_index)
+                for edge_ref in analysis["edge_refs"]
+            ]
+
+            analysis_json = json.dumps(
+                {
+                    "degree": degree,
+                    "family": family,
+                    "collinear_pairs": [
+                        [
+                            DuctSegment.makeKey(a.obj_name, a.local_index),
+                            DuctSegment.makeKey(b.obj_name, b.local_index),
+                            float(ang),
+                        ]
+                        for a, b, ang in analysis.get("collinear_pairs", [])
+                    ],
+                    "orthogonal_pairs": [
+                        [
+                            DuctSegment.makeKey(a.obj_name, a.local_index),
+                            DuctSegment.makeKey(b.obj_name, b.local_index),
+                            float(ang),
+                        ]
+                        for a, b, ang in analysis.get("orthogonal_pairs", [])
+                    ],
+                }
+            )
 
             junction_obj = existing_junctions.get(node_key)
 
@@ -1021,7 +1211,7 @@ class DuctNetwork:
                     owner=net,
                     node_id=node_id,
                     node_key=node_key,
-                    node_kind=node_kind,
+                    node_kind=family,
                     center_point=point,
                     degree=degree,
                 )
@@ -1034,18 +1224,30 @@ class DuctNetwork:
 
             live_objs.add(junction_obj)
 
+            effective_type_id = getattr(junction_obj, "TypeId", "")
+            if not effective_type_id or getattr(junction_obj, "AutoType", True):
+                effective_type_id = default_type_id
+
             meta_changed = junction_obj.Proxy.updateMetadata(
                 junction_obj,
                 owner=net,
                 node_id=node_id,
                 node_key=node_key,
-                node_kind=node_kind,
+                node_kind=family,
                 center_point=point,
                 degree=degree,
+                family=family,
+                type_id=effective_type_id,
+                library_id=active_lib.id,
+                connected_edge_keys=connected_edge_keys,
+                analysis_json=analysis_json,
             )
             changed = changed or meta_changed
 
-            new_label = DuctJunction.labelFor(node_kind, node_id)
+            schema_changed = junction_obj.Proxy.applyTypeSchema(junction_obj)
+            changed = changed or schema_changed
+
+            new_label = DuctJunction.labelFor(family, node_id)
             if junction_obj.Label != new_label:
                 junction_obj.Label = new_label
                 changed = True

@@ -1,36 +1,42 @@
-# -*- coding: utf-8 -*-
-#***************************************************************************
-#*                                                                         *
-#*   Copyright (c) 2026 Francisco Rosa                                     *
-#*                                                                         *
-#*   Portions of code based on kbwbe's A2Plus Workbench                    *
-#*                                                                         *
-#*   This program is free software; you can redistribute it and/or modify  *
-#*   it under the terms of the GNU Lesser General Public License (LGPL)    *
-#*   as published by the Free Software Foundation; either version 2 of     *
-#*   the License, or (at your option) any later version.                   *
-#*   for detail see the LICENCE text file.                                 *
-#*                                                                         *
-#*   This program is distributed in the hope that it will be useful,       *
-#*   but WITHOUT ANY WARRANTY; without even the implied warranty of        *
-#*   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the         *
-#*   GNU Library General Public License for more details.                  *
-#*                                                                         *
-#*   You should have received a copy of the GNU Library General Public     *
-#*   License along with this program; if not, write to the Free Software   *
-#*   Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  *
-#*   USA                                                                   *
-#*                                                                         *
-#***************************************************************************
+# SPDX-License-Identifier: LGPL-2.1-or-later
+# SPDX-FileNotice: Part of the HVAC addon.
 
-import os, platform, sys
+################################################################################
+#                                                                              #
+#   Copyright (c) 2026 Francisco Rosa                                          #
+#                                                                              #
+#   This addon is free software; you can redistribute it and/or modify it      #
+#   under the terms of the GNU Lesser General Public License as published      #
+#   by the Free Software Foundation; either version 2.1 of the License, or     #
+#   (at your option) any later version.                                        #
+#                                                                              #
+#   This addon is distributed in the hope that it will be useful,              #
+#   but WITHOUT ANY WARRANTY; without even the implied warranty of             #
+#   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.                       #
+#                                                                              #
+#   See the GNU Lesser General Public License for more details.                #
+#                                                                              #
+#   You should have received a copy of the GNU Lesser General Public           #
+#   License along with this addon. If not, see https://www.gnu.org/licenses    #
+#                                                                              #
+################################################################################
+
+import os
+import platform
+import sys
+import json
+import math
 from dataclasses import dataclass
+
 import FreeCAD
 import FreeCADGui as Gui
 import Part
 from PySide import QtGui, QtCore
 translate = FreeCAD.Qt.translate
 preferences = FreeCAD.ParamGet("User parameter:BaseApp/Preferences/Mod/HVAC")
+
+from .Library import registry as hvac_library_registry
+from .libraries.builtin_basic.loader import load_into as load_builtin_hvac_library
 
 # Enable loading external libraries from the ext_libs directory
 path = os.path.dirname(__file__)
@@ -70,6 +76,21 @@ elif "LINUX" in tmp:
     OPERATING_SYSTEM = "LINUX"
 else:
     OPERATING_SYSTEM = "OTHER"
+
+
+#------------------------------------------------------------------------------
+# Library management
+#------------------------------------------------------------------------------
+
+
+def get_hvac_library_registry():
+    reg = hvac_library_registry()
+    reg.ensure_loaded(builtin_loader=load_builtin_hvac_library)
+    return reg
+
+def get_active_hvac_library():
+    reg = get_hvac_library_registry()
+    return reg.get_active_library()
 
 
 #------------------------------------------------------------------------------
@@ -448,7 +469,125 @@ class DuctNetworkParser:
             if d >= 2:
                 out.append(nid)
         return out
+        
+    def node_key(self, node_id):
+        return self._key(self.node_point[node_id])
 
+    def node_degree(self, node_id):
+        if self.graph is None:
+            raise RuntimeError("Graph not built. Call build_graph() first.")
+        return int(self.graph.degree[node_id])
+
+    def node_edges(self, node_id):
+        refs = []
+        for eref, (u, v) in self.edge_u_v.items():
+            if u == node_id or v == node_id:
+                refs.append(eref)
+        return refs
+
+    def node_vectors(self, node_id):
+        p = FreeCAD.Vector(*self.node_xyz(node_id))
+        out = []
+        for eref in self.node_edges(node_id):
+            sp, ep = self.edge_line(eref)
+            v1 = FreeCAD.Vector(*sp)
+            v2 = FreeCAD.Vector(*ep)
+            other = v2 if (v1.sub(p)).Length <= self.tol else v1
+            d = other.sub(p)
+            if d.Length > self.tol:
+                d.normalize()
+                out.append((eref, d))
+        return out
+
+    def _safe_angle_deg(self, a, b):
+        dot = max(-1.0, min(1.0, float(a.dot(b))))
+        return math.degrees(math.acos(dot))
+
+    def node_collinear_pairs(self, node_id, ang_tol_deg=2.0):
+        vecs = self.node_vectors(node_id)
+        pairs = []
+        for i in range(len(vecs)):
+            for j in range(i + 1, len(vecs)):
+                ai = vecs[i][1]
+                bj = vecs[j][1]
+                ang = self._safe_angle_deg(ai, bj)
+                if abs(ang - 180.0) <= ang_tol_deg:
+                    pairs.append((vecs[i][0], vecs[j][0], ang))
+        return pairs
+
+    def node_analysis(self, node_id, ang_tol_deg=2.0, ortho_tol_deg=10.0):
+        degree = self.node_degree(node_id)
+        edge_refs = self.node_edges(node_id)
+        vecs = self.node_vectors(node_id)
+        collinear_pairs = self.node_collinear_pairs(node_id, ang_tol_deg=ang_tol_deg)
+
+        orthogonal_pairs = []
+        for i in range(len(vecs)):
+            for j in range(i + 1, len(vecs)):
+                ang = self._safe_angle_deg(vecs[i][1], vecs[j][1])
+                if abs(ang - 90.0) <= ortho_tol_deg:
+                    orthogonal_pairs.append((vecs[i][0], vecs[j][0], ang))
+
+        return {
+            "node_id": int(node_id),
+            "node_key": self.node_key(node_id),
+            "point": self.node_xyz(node_id),
+            "degree": degree,
+            "edge_refs": edge_refs,
+            "collinear_pairs": collinear_pairs,
+            "orthogonal_pairs": orthogonal_pairs,
+        }
+
+
+def classify_junction_family(node_analysis):
+    degree = int(node_analysis.get("degree", 0))
+    collinear_pairs = node_analysis.get("collinear_pairs", [])
+    orthogonal_pairs = node_analysis.get("orthogonal_pairs", [])
+
+    if degree <= 0:
+        return "invalid"
+
+    if degree == 1:
+        return "terminal"
+
+    if degree == 2:
+        if collinear_pairs:
+            return "transition"
+        return "elbow"
+
+    if degree == 3:
+        if collinear_pairs:
+            return "tee"
+        return "wye"
+
+    if degree == 4:
+        if len(collinear_pairs) >= 2 and orthogonal_pairs:
+            return "cross"
+        return "wye"
+
+    return "manifold"
+
+
+def default_junction_type_id(family):
+    mapping = {
+        "terminal": "terminal_marker",
+        "transition": "transition_marker",
+        "elbow": "elbow_marker",
+        "tee": "tee_marker",
+        "wye": "wye_marker",
+        "cross": "cross_marker",
+        "manifold": "manifold_marker",
+    }
+    return mapping.get(family, "manifold_marker")
+    
+def all_junction_type_defs(library_id=None, family=None):
+    reg = get_hvac_library_registry()
+    lib = reg.get_library(library_id) if library_id else reg.get_active_library()
+    if lib is None:
+        return []
+    return lib.list_types(category="junction", family=family)
+    
+    
 #------------------------------------------------------------------------------
 # Geometry generation functions
 #------------------------------------------------------------------------------
