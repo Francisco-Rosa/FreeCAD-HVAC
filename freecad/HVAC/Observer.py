@@ -271,6 +271,23 @@ class DuctNetworkChangeObserver:
 
         proxy = getattr(net, "Proxy", None)
         if proxy:
+            # Patch: turn off snapper for wire objects
+            if hvaclib.obj_is_wire(obj):
+                try:
+                    if hasattr(Gui, "Snapper") and Gui.Snapper:
+                        try:
+                            Gui.Snapper.off()
+                        except TypeError:
+                            Gui.Snapper.off(False)
+                        except Exception:
+                            pass
+                        try:
+                            Gui.Snapper.hide()
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+            
             proxy.setBaseObjectEditing(net, obj, False)
             proxy.requestSync(net, reason="edit_finished")
 
