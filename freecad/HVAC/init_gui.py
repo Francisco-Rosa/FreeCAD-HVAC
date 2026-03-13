@@ -26,10 +26,10 @@ __author__ = "Francisco Rosa, Manu Varkey"
 
 import FreeCAD
 import FreeCADGui as Gui
-import freecad.HVAC.hvaclib as hvaclib
-
 from PySide.QtCore import QT_TRANSLATE_NOOP
 translate = FreeCAD.Qt.translate
+
+from . import hvaclib
 
 Gui.addLanguagePath(hvaclib.get_language_base_path())
 Gui.updateLocale()
@@ -48,9 +48,10 @@ class HVAC(Gui.Workbench):
         It is executed once in a FreeCAD session followed by the Activated function.
         """
         # import here all the needed files that create your FreeCAD commands
-        import freecad.HVAC.DuctNetwork
+        from . import Command
         
         self.watchers = []
+        self.observers = []
         
         self.toolbar_commands = ['HVAC_CreateDuctNetwork',
                                 'HVAC_ActivateDuctNetwork',
@@ -89,6 +90,7 @@ class HVAC(Gui.Workbench):
         """This function is executed whenever the workbench is activated"""
         FreeCAD.Console.PrintMessage(translate("InitGui","HVAC - Workbench loaded") + "\n")
         self.refreshWatchers()
+        self.setObservers()
         FreeCAD.Console.PrintMessage(translate("InitGui","HVAC - Workbench - Watchers set") + "\n")
         return
 
@@ -96,9 +98,12 @@ class HVAC(Gui.Workbench):
         """This function is executed whenever the workbench is deactivated"""
         try:
             Gui.Control.clearTaskWatcher()
+            for obs in self.observers:
+                Gui.Selection.rmvObserver(obj)
         except Exception:
             pass
         self.watchers = []
+        self.observers = []
         return
 
     def ContextMenu(self, recipient):
@@ -182,6 +187,15 @@ class HVAC(Gui.Workbench):
             HVACToolsWatcher()
         ]
         Gui.Control.addTaskWatcher(self.watchers)
+        
+    def setObservers(self):
+        # Observer for watching duct network changes
+        from .Observer import DuctNetworkChangeObserver
+        hvac_change_observer = DuctNetworkChangeObserver()
+        
+        self.observers = [hvac_change_observer]
+        for obs in self.observers:
+            FreeCAD.addDocumentObserver(obs)
 
     def GetClassName(self):
         # This function is mandatory if this is a full Python workbench

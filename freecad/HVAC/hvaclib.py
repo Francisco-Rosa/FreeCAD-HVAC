@@ -42,6 +42,7 @@ if vendor_path not in sys.path:
 # Load external libraries
 import networkx as nx
 
+
 #------------------------------------------------------------------------------
 # Variables...
 #------------------------------------------------------------------------------
@@ -70,9 +71,23 @@ elif "LINUX" in tmp:
 else:
     OPERATING_SYSTEM = "OTHER"
 
+
 #------------------------------------------------------------------------------
 # State management
 #------------------------------------------------------------------------------
+
+
+def isDuctNetwork(obj):
+    from .DuctNetwork import DuctNetwork
+    return hasattr(obj, "Proxy") and isinstance(obj.Proxy, DuctNetwork)
+    
+def isDuctSegment(obj):
+    from .DuctNetwork import DuctSegment
+    return hasattr(obj, "Proxy") and isinstance(obj.Proxy, DuctSegment)
+    
+def isDuctManagedFolder(obj):
+    from .DuctNetwork import DuctManagedFolder
+    return hasattr(obj, "Proxy") and isinstance(obj.Proxy, DuctManagedFolder)
 
 def activeHVACNetwork():
     doc = Gui.ActiveDocument
@@ -85,7 +100,7 @@ def activeHVACNetwork():
         return active_network
 
 def allHVACNetworks(doc: FreeCAD.Document | None = None) -> list | None:
-    from freecad.HVAC.DuctNetwork import DuctNetwork
+    from .DuctNetwork import DuctNetwork
     doc = FreeCAD.ActiveDocument if doc is None else doc
     if doc is None:
         return None
@@ -98,7 +113,7 @@ def allHVACNetworks(doc: FreeCAD.Document | None = None) -> list | None:
     return hvac_networks
 
 def selectedHVACNetworks():
-    from freecad.HVAC.DuctNetwork import DuctNetwork
+    from .DuctNetwork import DuctNetwork
     objs = Gui.Selection.getSelection()
     if objs:
         filtered = [o for o in objs if DuctNetwork.isDuctNetwork(o)]
@@ -114,7 +129,16 @@ def selectedGeometryObjects():
     return None
     
 def selectedBaseObjects():
-    return 
+    from .DuctNetwork import DuctNetwork
+    objs = Gui.Selection.getSelection()
+    if objs:
+        filtered = [o for o in objs if DuctNetwork.isBaseObject(o)]
+        return filtered
+    return None
+    
+def getOwnerNetwork(obj):
+    from .DuctNetwork import DuctNetwork
+    return DuctNetwork.getOwnerNetwork(obj)
 
 def refreshState():
     if not FreeCAD.GuiUp:
@@ -141,6 +165,7 @@ def refreshState():
 #------------------------------------------------------------------------------
 # Object query
 #------------------------------------------------------------------------------
+
 
 def obj_is_sketch(obj):
     # Robust check for Sketcher objects
@@ -175,9 +200,11 @@ def get_obj_by_name(name, doc=None):
     obj = doc.getObject(name)
     return obj
 
+
 #------------------------------------------------------------------------------
 # Object data manipulation
 #------------------------------------------------------------------------------
+
 
 def vec_to_xyz(v):
     """Return (x,y,z) tuple from a FreeCAD.Vector-like object."""
@@ -470,9 +497,11 @@ def create_circular_duct_geom(start_point, end_point, diameter):
 
     return cyl_mod
 
+
 #------------------------------------------------------------------------------
 # Return paths...
 #------------------------------------------------------------------------------
+
 
 def get_module_path():
     """Function returns HVAC module path."""
@@ -499,9 +528,11 @@ def get_icon_path(icon_name: str):
     s_path = os.path.join(get_icon_base_path(), icon_name)
     return s_path
 
+
 #------------------------------------------------------------------------------
 # Miscellaneous
 #------------------------------------------------------------------------------
+
 
 def get_version():
     """
