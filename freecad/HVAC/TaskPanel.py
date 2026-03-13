@@ -108,16 +108,30 @@ class TaskPanelEditDuctNetwork:
         """Return True if the object is valid for selection."""
         return hvaclib.obj_is_sketch(obj) or hvaclib.obj_is_wire(obj)
 
-    def get_valid_selection(self):
+    def get_valid_selection(self, include_derived=True):
         """Return a list of valid objects for selection."""
+        from .DuctNetwork import DuctNetwork
         selected_objects = Gui.Selection.getSelection()
-        return [obj for obj in selected_objects if self.valid_obj(obj)]
+        derived_objects = [obj for obj in selected_objects if hvaclib.isDuctSegment(obj)]
+        
+        valid_obs = {obj for obj in selected_objects if self.valid_obj(obj)}
+        
+        if include_derived:
+            valid_obs_derived = set()
+            for obj in derived_objects:
+                base_obj = DuctNetwork.getOwnerBaseObject(obj)
+                base_net = DuctNetwork.getOwnerNetwork(base_obj)
+                if base_obj and base_net and base_net == self.hvac_network:
+                    valid_obs_derived.add(base_obj)
+            return list(valid_obs | valid_obs_derived)
+        else:
+            return list(valid_obs)
 
     ## Core methods
 
     def select_objects(self):
         """Enable selection of objects and add them to the list view."""
-        valid_objects = self.get_valid_selection()
+        valid_objects = self.get_valid_selection(include_derived=False)
         existing_labels = [self.list_view.item(i).text() for i in range(self.list_view.count())]
         for obj in valid_objects:
             if obj.Label not in existing_labels:
@@ -131,7 +145,7 @@ class TaskPanelEditDuctNetwork:
             self.list_view.takeItem(self.list_view.row(item))
         # Remove based on selection in 3D view
         doc = self.hvac_network.Document
-        selected_objects = Gui.Selection.getSelection()
+        selected_objects = self.get_valid_selection(include_derived=True)
         for obj in selected_objects:
             if obj in self.hvac_network.Base.OutList:
                 for i in range(self.list_view.count()):
