@@ -1308,15 +1308,15 @@ class DuctNetwork:
             return None
         return Gui.ActiveDocument.ActiveView.getActiveObject(DuctNetwork.CONTEXT_KEY)
         
-    def _setSegmentVisibilityDeferred(self, segment_obj, visible):
+    def _setGeometryVisibilityDeferred(self, obj, visible):
         if not FreeCAD.GuiUp:
             return
 
         def apply():
             try:
-                if segment_obj is None or getattr(segment_obj, "Document", None) is None:
+                if obj is None or getattr(obj, "Document", None) is None:
                     return
-                vobj = getattr(segment_obj, "ViewObject", None)
+                vobj = getattr(obj, "ViewObject", None)
                 if vobj is None:
                     return
                 vobj.Visibility = bool(visible)
@@ -1338,7 +1338,7 @@ class DuctNetwork:
 
         for obj in list(geometry.OutList):
             if DuctSegment.isDuctSegment(obj) or DuctJunction.isDuctJunction(obj):
-                self._setSegmentVisibilityDeferred(obj, True)
+                self._setGeometryVisibilityDeferred(obj, True)
                 
     def _segmentFromBaseObject(self, seg, base_obj):
         return (
@@ -1354,7 +1354,25 @@ class DuctNetwork:
             return
         for seg in list(geometry.OutList):
             if self._segmentFromBaseObject(seg, base_obj):
-                self._setSegmentVisibilityDeferred(seg, False)
+                self._setGeometryVisibilityDeferred(seg, False)
+                
+    def hideAllJunctionGeometry(self, net):
+        geometry = getattr(net, "Geometry", None)
+        if geometry is None:
+            return
+
+        for obj in list(geometry.OutList):
+            if self._isJunctionObject(obj):
+                self._setGeometryVisibilityDeferred(obj, False)
+
+    def showAllJunctionGeometry(self, net):
+        geometry = getattr(net, "Geometry", None)
+        if geometry is None:
+            return
+
+        for obj in list(geometry.OutList):
+            if self._isJunctionObject(obj):
+                self._setGeometryVisibilityDeferred(obj, True)
     
     def showGeometryForBaseObject(self, net, base_obj):
         geometry = getattr(net, "Geometry", None)
@@ -1362,7 +1380,7 @@ class DuctNetwork:
             return
         for seg in list(geometry.OutList):
             if self._segmentFromBaseObject(seg, base_obj):
-                self._setSegmentVisibilityDeferred(seg, True)
+                self._setGeometryVisibilityDeferred(seg, True)
     
     def setBaseObjectEditing(self, net, base_obj, editing):
         if net is None or base_obj is None:
@@ -1370,9 +1388,11 @@ class DuctNetwork:
         if editing:
             self._hidden_source_names.add(base_obj.Name)
             self.hideGeometryForBaseObject(net, base_obj)
+            self.hideAllJunctionGeometry(net)
         else:
             self._hidden_source_names.discard(base_obj.Name)
             self.showGeometryForBaseObject(net, base_obj)
+            self.showAllJunctionGeometry(net)
 
     @staticmethod
     def isDuctNetwork(obj):
@@ -1402,6 +1422,12 @@ class DuctNetwork:
                 or isinstance(obj.Proxy, DuctJunction)
             )
         )
+        
+    def _isJunctionObject(self, obj):
+        try:
+            return DuctJunction.isDuctJunction(obj)
+        except Exception:
+            return False
         
     @staticmethod
     def getOwnerNetwork(obj):
@@ -1498,9 +1524,9 @@ class DuctNetwork:
                 changed = True
 
                 if source_obj.Name in self._hidden_source_names:
-                    self._setSegmentVisibilityDeferred(segment_obj, False)
+                    self._setGeometryVisibilityDeferred(segment_obj, False)
                 else:
-                    self._setSegmentVisibilityDeferred(segment_obj, True)
+                    self._setGeometryVisibilityDeferred(segment_obj, True)
 
             if segment_obj not in geometry.OutList:
                 geometry.addObject(segment_obj)
@@ -1650,7 +1676,10 @@ class DuctNetwork:
                     junction_obj.LibraryId = default_lib.id
 
                 changed = True
-                self._setSegmentVisibilityDeferred(junction_obj, True)
+                if self._hidden_source_names:
+                    self._setGeometryVisibilityDeferred(junction_obj, False)
+                else:
+                    self._setGeometryVisibilityDeferred(junction_obj, True)
 
             if junction_obj not in geometry.OutList:
                 geometry.addObject(junction_obj)
