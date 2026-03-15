@@ -268,9 +268,6 @@ class DuctSegment:
             if lib:
                 obj.LibraryId = lib.id
 
-        if not getattr(obj, "Profile", ""):
-            obj.Profile = self.profileFromSectionShape(getattr(obj, "SectionShape", self.SECTION_SHAPES[0]))
-
         if not getattr(obj, "AnalysisJson", ""):
             obj.AnalysisJson = "{}"
 
@@ -445,18 +442,6 @@ class DuctSegment:
     @staticmethod
     def labelFor(source_obj, source_index):
         return "{} [{}]".format(source_obj.Label if source_obj else "Segment", int(source_index))
-
-    @staticmethod
-    def profileFromSectionShape(section_shape):
-        if str(section_shape) == "Circular":
-            return "circular"
-        return "rectangular"
-
-    @staticmethod
-    def defaultTypeIdForProfile(profile):
-        if str(profile) == "circular":
-            return "circular_straight"
-        return "rectangular_straight"
 
     @staticmethod
     def _addProperty(obj, prop_type, prop_name, group, description):
@@ -910,7 +895,232 @@ class DuctNetwork:
                 obj.Geometry.OwnerNetworkName = obj.Name
             if getattr(obj.Geometry, "FolderRole", "") != self.FOLDER_GEOMETRY_NAME:
                 obj.Geometry.FolderRole = self.FOLDER_GEOMETRY_NAME
+                
+        # -------------------------------------------------
+        # Library/type defaults for this network
+        # -------------------------------------------------
+        
+        if "DefaultLibraryId" not in obj.PropertiesList:
+            obj.addProperty(
+                "App::PropertyString",
+                "DefaultLibraryId",
+                "HVAC Types",
+                "Default HVAC library for derived geometry"
+            )
 
+        if "DefaultSegmentProfile" not in obj.PropertiesList:
+            obj.addProperty(
+                "App::PropertyString",
+                "DefaultSegmentProfile",
+                "HVAC Types",
+                "Default segment profile from selected library"
+            )
+
+        if "DefaultSegmentAutoType" not in obj.PropertiesList:
+            obj.addProperty(
+                "App::PropertyBool",
+                "DefaultSegmentAutoType",
+                "HVAC Types",
+                "Default auto-type behavior for new duct segments"
+            )
+
+        if not getattr(obj, "DefaultLibraryId", ""):
+            lib = hvaclib.get_active_hvac_library()
+            if lib:
+                obj.DefaultLibraryId = lib.id
+
+        if not getattr(obj, "DefaultSegmentProfile", ""):
+            obj.DefaultSegmentProfile = hvaclib.default_segment_profile_for_library(
+                getattr(obj, "DefaultLibraryId", "")
+            )
+
+        if getattr(obj, "DefaultSegmentAutoType", None) is None:
+            obj.DefaultSegmentAutoType = True
+    
+    @staticmethod
+    def getDefaultLibraryId(net):
+        lib_id = getattr(net, "DefaultLibraryId", "")
+        if lib_id:
+            return lib_id
+
+        lib = hvaclib.get_active_hvac_library()
+        if lib:
+            return lib.id
+        return ""
+
+    @staticmethod
+    def getDefaultLibrary(net):
+        lib_id = DuctNetwork.getDefaultLibraryId(net)
+        if not lib_id:
+            return None
+        reg = hvaclib.get_hvac_library_registry()
+        return reg.get_library(lib_id)
+
+    @staticmethod
+    def getDefaultSegmentProfile(net):
+        profile = getattr(net, "DefaultSegmentProfile", "")
+        if profile:
+            return profile
+
+        lib_id = DuctNetwork.getDefaultLibraryId(net)
+        return hvaclib.default_segment_profile_for_library(lib_id)
+
+    @staticmethod
+    def getDefaultSegmentAutoType(net):
+        return bool(getattr(net, "DefaultSegmentAutoType", True))
+    
+    ## Library defaults management
+    
+    @staticmethod
+    def resolveSegmentTypeDefaults(net, segment_obj=None, profile="rectangular"):
+        """
+        Resolve library/type defaults for a segment.
+
+        Priority:
+        object manual override > object auto/default state > network defaults > global fallback
+        """
+        library_id = DuctNetwork.getDefaultLibraryId(net)
+        auto_type = bool(getattr(net, "DefaultSegmentAutoType", True))
+        default_type_id = getattr(net, "DefaultSegmentTypeId", "") or ""
+
+        if segment_obj is not None:
+            if getattr(segment_obj, "LibraryId", ""):
+                library_id = segment_obj.LibraryId
+            if hasattr(segment_obj, "AutoType"):
+                auto_type = bool(segment_obj.AutoType)
+            if getattr(segment_obj, "TypeId", ""):
+                default_type_id = segment_obj.TypeId
+
+        suggested_type_id = DuctSegment.defaultTypeIdForProfile(profile)
+
+        if auto_type:
+            effective_type_id = suggested_type_id
+        else:
+            effective_type_id = default_type_id or suggested_type_id
+
+        return {
+            "library_id": library_id,
+            "auto_type": auto_type,
+            "type_id": effective_type_id,
+            "suggested_type_id": suggested_type_id,
+        }
+
+    @staticmethod
+    def resolveJunctionTypeDefaults(net, family="", junction_obj=None):
+        """
+        Resolve library/type defaults for a junction.
+
+        Priority:
+        object manual override > object auto/default state > network defaults > global fallback
+        """
+        library_id = DuctNetwork.getDefaultLibraryId(net)
+        auto_type = bool(getattr(net, "DefaultJunctionAutoType", True))
+        default_type_id = getattr(net, "DefaultJunctionTypeId", "") or ""
+
+        if junction_obj is not None:
+            if getattr(junction_obj, "LibraryId", ""):
+                library_id = junction_obj.LibraryId
+            if hasattr(junction_obj, "AutoType"):
+                auto_type = bool(junction_obj.AutoType)
+            if getattr(junction_obj, "TypeId", ""):
+                default_type_id = junction_obj.TypeId
+
+        suggested_type_id = hvaclib.default_junction_type_id(family)
+
+        if auto_type:
+            effective_type_id = suggested_type_id
+        else:
+            effective_type_id = default_type_id or suggested_type_id
+
+        return {
+            "library_id": library_id,
+            "auto_type": auto_type,
+            "type_id": effective_type_id,
+            "suggested_type_id": suggested_type_id,
+        }
+
+    @staticmethod
+    def applyNetworkTypeDefaults(net, library_id="", segment_profile="", default_segment_auto=True):
+        """
+        Apply network-level default type settings.
+        """
+        if net is None:
+            return
+
+        changed = False
+
+        if library_id and getattr(net, "DefaultLibraryId", "") != library_id:
+            net.DefaultLibraryId = library_id
+            changed = True
+
+            # When library changes, reset profile if current profile is not valid
+            valid_profiles = hvaclib.segment_profiles_for_library(library_id)
+            current_profile = getattr(net, "DefaultSegmentProfile", "")
+            if current_profile not in valid_profiles:
+                new_profile = valid_profiles[0] if valid_profiles else ""
+                if getattr(net, "DefaultSegmentProfile", "") != new_profile:
+                    net.DefaultSegmentProfile = new_profile
+                    changed = True
+
+        if segment_profile and getattr(net, "DefaultSegmentProfile", "") != segment_profile:
+            net.DefaultSegmentProfile = segment_profile
+            changed = True
+
+        if bool(getattr(net, "DefaultSegmentAutoType", True)) != bool(default_segment_auto):
+            net.DefaultSegmentAutoType = bool(default_segment_auto)
+            changed = True
+
+        if changed and net.Document:
+            try:
+                net.touch()
+            except Exception:
+                pass
+            net.Document.recompute()
+
+    @staticmethod
+    def resetObjectsToNetworkDefaults(net, objects):
+        """
+        Reset selected segment/junction objects to follow network defaults again.
+        """
+        doc = net.Document
+        if doc is None:
+            return
+
+        changed = False
+        for obj in objects or []:
+            if obj is None:
+                continue
+
+            if hasattr(obj, "AutoType"):
+                desired_auto = True
+                if DuctSegment.isDuctSegment(obj):
+                    desired_auto = bool(getattr(net, "DefaultSegmentAutoType", True))
+                elif DuctJunction.isDuctJunction(obj):
+                    desired_auto = bool(getattr(net, "DefaultJunctionAutoType", True))
+
+                if bool(obj.AutoType) != desired_auto:
+                    obj.AutoType = desired_auto
+                    changed = True
+
+            if hasattr(obj, "LibraryId"):
+                lib_id = DuctNetwork.getDefaultLibraryId(net)
+                if lib_id and obj.LibraryId != lib_id:
+                    obj.LibraryId = lib_id
+                    changed = True
+
+            try:
+                obj.touch()
+            except Exception:
+                pass
+
+        if changed:
+            try:
+                net.Proxy.requestSync(net, reason="reset_objects_to_network_defaults")
+            except Exception:
+                doc.recompute()
+    
+    ## Object Management
+    
     @staticmethod
     def createObject(name):
         net = FreeCAD.ActiveDocument.addObject('App::DocumentObjectGroupPython', name)
@@ -1206,10 +1416,15 @@ class DuctNetwork:
         geometry = getattr(net, "Geometry", None)
         if doc is None or geometry is None:
             return False
-
-        active_lib = hvaclib.get_active_hvac_library()
-        if active_lib is None:
+        
+        # Get library defaults
+        default_lib = self.getDefaultLibrary(net)
+        if default_lib is None:
             return False
+        default_segment_auto = self.getDefaultSegmentAutoType(net)
+        default_segment_profile = self.getDefaultSegmentProfile(net)
+        if not default_segment_profile:
+            default_segment_profile = hvaclib.default_segment_profile_for_library(default_lib.id)
 
         changed = False
 
@@ -1247,6 +1462,14 @@ class DuctNetwork:
                     source_obj=source_obj,
                     source_index=edge_ref.local_index,
                 )
+
+                if hasattr(segment_obj, "LibraryId") and default_lib:
+                    segment_obj.LibraryId = default_lib.id
+                if hasattr(segment_obj, "Profile"):
+                    segment_obj.Profile = default_segment_profile
+                if hasattr(segment_obj, "AutoType"):
+                    segment_obj.AutoType = default_segment_auto
+
                 changed = True
 
                 if source_obj.Name in self._hidden_source_names:
@@ -1263,10 +1486,16 @@ class DuctNetwork:
             start_node, end_node = parser.edge_nodes(edge_ref)
             start_point, end_point = parser.edge_line(edge_ref)
 
-            # Determine profile from legacy SectionShape for now
-            section_shape = getattr(segment_obj, "SectionShape", DuctSegment.SECTION_SHAPES[0])
-            profile = DuctSegment.profileFromSectionShape(section_shape)
-            default_type_id = DuctSegment.defaultTypeIdForProfile(profile)
+            # Set profile
+            profile = default_segment_profile
+            default_type_id = hvaclib.default_segment_type_id_for_profile(
+                default_lib.id,
+                profile,
+            )
+
+            # Initialize AutoType from network default when segment is first created
+            if getattr(segment_obj, "AutoType", None) is None:
+                segment_obj.AutoType = default_segment_auto
 
             effective_type_id = getattr(segment_obj, "TypeId", "")
             if not effective_type_id or getattr(segment_obj, "AutoType", True):
@@ -1293,7 +1522,7 @@ class DuctNetwork:
                 end_point=end_point,
                 family="straight_segment",
                 type_id=effective_type_id,
-                library_id=active_lib.id,
+                library_id=default_lib.id,
                 profile=profile,
                 analysis_json=analysis_json,
             )
@@ -1334,8 +1563,8 @@ class DuctNetwork:
         if doc is None or geometry is None:
             return False
 
-        active_lib = hvaclib.get_active_hvac_library()
-        if active_lib is None:
+        default_lib = self.getDefaultLibrary(net)
+        if default_lib is None:
             return False
 
         changed = False
@@ -1396,6 +1625,10 @@ class DuctNetwork:
                     center_point=point,
                     degree=degree,
                 )
+
+                if hasattr(junction_obj, "LibraryId") and default_lib:
+                    junction_obj.LibraryId = default_lib.id
+
                 changed = True
                 self._setSegmentVisibilityDeferred(junction_obj, True)
 
@@ -1419,7 +1652,7 @@ class DuctNetwork:
                 degree=degree,
                 family=family,
                 type_id=effective_type_id,
-                library_id=active_lib.id,
+                library_id=default_lib.id,
                 connected_edge_keys=connected_edge_keys,
                 analysis_json=analysis_json,
             )
@@ -1494,6 +1727,51 @@ class DuctNetwork:
             "FlowRate": float(getattr(obj, "FlowRate", 0.0)),
             "Velocity": float(getattr(obj, "Velocity", 0.0)),
         }
+    
+    @staticmethod
+    def applyTypeSelection(objects, library_id="", type_id="", auto_type=True):
+        """
+        Apply library/type selection to selected segment/junction objects.
+        """
+        doc = FreeCAD.ActiveDocument
+        if doc is None:
+            return
+
+        changed = False
+
+        for obj in objects or []:
+            if obj is None:
+                continue
+
+            if hasattr(obj, "LibraryId") and library_id:
+                if obj.LibraryId != library_id:
+                    obj.LibraryId = library_id
+                    changed = True
+
+            if hasattr(obj, "AutoType"):
+                if bool(obj.AutoType) != bool(auto_type):
+                    obj.AutoType = bool(auto_type)
+                    changed = True
+
+            if not auto_type and type_id and hasattr(obj, "TypeId"):
+                if obj.TypeId != type_id:
+                    obj.TypeId = type_id
+                    changed = True
+
+            proxy = getattr(obj, "Proxy", None)
+            if proxy and hasattr(proxy, "applyTypeSchema"):
+                try:
+                    changed = proxy.applyTypeSchema(obj) or changed
+                except Exception:
+                    pass
+
+            try:
+                obj.touch()
+            except Exception:
+                pass
+
+        if changed:
+            doc.recompute()
     
     @staticmethod
     def _restoreSegmentUserParams(obj, params):

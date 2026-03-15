@@ -79,6 +79,21 @@ class HVACLibrary:
             out.append(t)
         return out
 
+    def list_profiles(self, category=None, family=None):
+        profiles = set()
+        for t in self.types_by_id.values():
+            if category and t.category != category:
+                continue
+            if family and t.family != family:
+                continue
+            for p in (t.profiles or []):
+                profiles.add(p)
+        return sorted(profiles)
+
+    def default_profile(self, category=None, family=None):
+        profiles = self.list_profiles(category=category, family=family)
+        return profiles[0] if profiles else ""
+
 
 class HVACLibraryRegistry:
     def __init__(self):

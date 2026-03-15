@@ -144,14 +144,20 @@ class CommandEditBaseObject:
     def IsActive(self):
         if Gui.ActiveDocument:
             active_hvac_network = hvaclib.activeHVACNetwork()
-            selected_geom = hvaclib.selectedGeometryObjects()
+            selected_geom = [
+                o for o in (hvaclib.selectedGeometryObjects() or [])
+                if hvaclib.isDuctSegment(o)
+            ]
             if active_hvac_network and selected_geom:
                 return True
         else:
             return False
 
     def Activated(self):
-        base_objs = hvaclib.selectedGeometryObjects()
+        base_objs = [
+            o for o in (hvaclib.selectedGeometryObjects() or [])
+            if hvaclib.isDuctSegment(o)
+        ]
         if base_objs:
             base = DuctNetwork.DuctNetwork.getOwnerBaseObject(base_objs[0])
             if base:
@@ -233,7 +239,85 @@ class CommandCreateLine:
         net = hvaclib.activeHVACNetwork()
         if net:
             DuctNetwork.DuctNetwork.createDraftLineInteractive(net)
+          
             
+class CommandEditType:
+    """Edit library/type selection of selected HVAC geometry."""
+
+    def __init__(self):
+        self.task_panel = None
+
+    def QT_TRANSLATE_NOOP(self, text):
+        return text
+
+    def GetResources(self):
+        return {
+            'Pixmap': hvaclib.get_icon_path("ModifyDuctsIcon.svg"),
+            'MenuText': QT_TRANSLATE_NOOP('HVAC_EditType', 'Edit Type'),
+            'ToolTip': QT_TRANSLATE_NOOP('HVAC_EditType', 'Edit library/type of selected duct segments or junctions'),
+            'CmdType': 'ForEdit',
+        }
+
+    def IsActive(self):
+        if Gui.ActiveDocument is None:
+            return False
+        selected_geom = hvaclib.selectedGeometryObjects()
+        return bool(selected_geom)
+
+    def Activated(self):
+        from .TaskPanel import TaskPanelTypeEditor
+
+        selected_geom = hvaclib.selectedGeometryObjects()
+        if not selected_geom:
+            return
+
+        # Keep selection homogeneous for the first version
+        has_segments = any(hvaclib.isDuctSegment(o) for o in selected_geom)
+        has_junctions = any(hvaclib.isDuctJunction(o) for o in selected_geom)
+        if has_segments and has_junctions:
+            FreeCAD.Console.PrintWarning(
+                "HVAC - Please select only segments or only junctions.\n"
+            )
+            return
+
+        self.task_panel = TaskPanelTypeEditor(
+            selected_geom,
+            apply_callback=DuctNetwork.DuctNetwork.applyTypeSelection,
+        )
+        Gui.Control.showDialog(self.task_panel)
+
+
+class CommandEditNetworkTypeDefaults:
+    """Edit network-level HVAC type defaults."""
+
+    def __init__(self):
+        self.task_panel = None
+
+    def GetResources(self):
+        return {
+            'Pixmap': hvaclib.get_icon_path("ModifyDuctsIcon.svg"),
+            'MenuText': QT_TRANSLATE_NOOP('HVAC_NetworkTypeDefaults', 'Network Type Defaults'),
+            'ToolTip': QT_TRANSLATE_NOOP('HVAC_NetworkTypeDefaults', 'Edit default HVAC library and segment auto-type settings for the active network'),
+            'CmdType': 'ForEdit',
+        }
+
+    def IsActive(self):
+        if Gui.ActiveDocument is None:
+            return False
+        return hvaclib.activeHVACNetwork() is not None
+
+    def Activated(self):
+        from .TaskPanel import TaskPanelNetworkTypeDefaults
+
+        net = hvaclib.activeHVACNetwork()
+        if net is None:
+            return
+
+        self.task_panel = TaskPanelNetworkTypeDefaults(
+            net,
+            apply_callback=DuctNetwork.DuctNetwork.applyNetworkTypeDefaults,
+        )
+        Gui.Control.showDialog(self.task_panel)
 
 #=================================================
 # Register Commands
@@ -247,3 +331,5 @@ if FreeCAD.GuiUp:
     FreeCAD.Gui.addCommand('HVAC_ActivateDuctNetwork', CommandActivateDuctNetwork())
     FreeCAD.Gui.addCommand("HVAC_CreateSketch", CommandCreateSketch())
     FreeCAD.Gui.addCommand("HVAC_CreateLine", CommandCreateLine())
+    FreeCAD.Gui.addCommand('HVAC_EditType', CommandEditType())
+    FreeCAD.Gui.addCommand('HVAC_EditNetworkTypeDefaults', CommandEditNetworkTypeDefaults())

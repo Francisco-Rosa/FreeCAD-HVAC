@@ -91,6 +91,35 @@ def get_hvac_library_registry():
 def get_active_hvac_library():
     reg = get_hvac_library_registry()
     return reg.get_active_library()
+    
+def segment_profiles_for_library(library_id):
+    reg = get_hvac_library_registry()
+    lib = reg.get_library(library_id)
+    if lib is None:
+        return []
+    return lib.list_profiles(category="segment", family="straight_segment")
+
+def default_segment_profile_for_library(library_id):
+    reg = get_hvac_library_registry()
+    lib = reg.get_library(library_id)
+    if lib is None:
+        return ""
+    return lib.default_profile(category="segment", family="straight_segment")
+
+def default_segment_type_id_for_profile(library_id, profile):
+    reg = get_hvac_library_registry()
+    lib = reg.get_library(library_id)
+    if lib is None:
+        return ""
+
+    type_defs = lib.list_types(
+        category="segment",
+        family="straight_segment",
+        profile=profile if profile else None,
+    )
+    if not type_defs:
+        return ""
+    return type_defs[0].id
 
 
 #------------------------------------------------------------------------------
@@ -105,6 +134,10 @@ def isDuctNetwork(obj):
 def isDuctSegment(obj):
     from .DuctNetwork import DuctSegment
     return hasattr(obj, "Proxy") and isinstance(obj.Proxy, DuctSegment)
+    
+def isDuctJunction(obj):
+    from .DuctNetwork import DuctJunction
+    return hasattr(obj, "Proxy") and isinstance(obj.Proxy, DuctJunction)
     
 def isDuctManagedFolder(obj):
     from .DuctNetwork import DuctManagedFolder
@@ -142,12 +175,39 @@ def selectedHVACNetworks():
     return None
 
 def selectedGeometryObjects():
-    from freecad.HVAC.DuctNetwork import DuctSegment
+    from .DuctNetwork import DuctSegment, DuctJunction
     objs = Gui.Selection.getSelection()
     if objs:
-        filtered = [o for o in objs if DuctSegment.isDuctSegment(o)]
+        filtered = [
+            o for o in objs
+            if DuctSegment.isDuctSegment(o) or DuctJunction.isDuctJunction(o)
+        ]
         return filtered
     return None
+    
+def all_type_defs_for_object(obj):
+    reg = get_hvac_library_registry()
+    library_id = getattr(obj, "LibraryId", "")
+    family = getattr(obj, "Family", "")
+    profile = getattr(obj, "Profile", "")
+
+    lib = reg.get_library(library_id) if library_id else reg.get_active_library()
+    if lib is None:
+        return []
+
+    category = None
+    if isDuctSegment(obj):
+        category = "segment"
+    elif isDuctJunction(obj):
+        category = "junction"
+
+    return lib.list_types(category=category, family=family, profile=profile or None)
+
+def type_labels_for_object(obj):
+    out = []
+    for tdef in all_type_defs_for_object(obj):
+        out.append((tdef.label, tdef.id))
+    return out
     
 def selectedBaseObjects():
     from .DuctNetwork import DuctNetwork

@@ -56,8 +56,10 @@ class HVAC(Gui.Workbench):
         self.toolbar_commands = ['HVAC_CreateDuctNetwork',
                                 'HVAC_ActivateDuctNetwork',
                                 'HVAC_ModifyDuctNetwork',
+                                'HVAC_EditNetworkTypeDefaults',
                                 "Separator",
                                 'HVAC_EditBaseObject',
+                                'HVAC_EditType',
                                 "Separator",
                                 'HVAC_CreateSketch',
                                 'HVAC_CreateLine'
@@ -66,8 +68,10 @@ class HVAC(Gui.Workbench):
         self.submenu_commands = ['HVAC_CreateDuctNetwork',
                                 'HVAC_ActivateDuctNetwork',
                                 'HVAC_ModifyDuctNetwork',
+                                'HVAC_EditNetworkTypeDefaults',
                                 "Separator",
                                 'HVAC_EditBaseObject',
+                                'HVAC_EditType',
                                 "Separator",
                                 'HVAC_CreateSketch',
                                 'HVAC_CreateLine'
@@ -76,8 +80,10 @@ class HVAC(Gui.Workbench):
         self.contextmenu_commands = ['HVAC_CreateDuctNetwork',
                                 'HVAC_ActivateDuctNetwork',
                                 'HVAC_ModifyDuctNetwork',
+                                'HVAC_EditNetworkTypeDefaults',
                                 "Separator",
                                 'HVAC_EditBaseObject',
+                                'HVAC_EditType',
                                 "Separator",
                                 'HVAC_CreateSketch',
                                 'HVAC_CreateLine'
@@ -163,7 +169,7 @@ class HVAC(Gui.Workbench):
 
             def __init__(self):
                 super().__init__()
-                self.commands = ["HVAC_ModifyDuctNetwork", "HVAC_EditBaseObject"]
+                self.commands = ["HVAC_ModifyDuctNetwork", 'HVAC_EditNetworkTypeDefaults', "HVAC_EditBaseObject", "HVAC_EditType"]
                 self.title = translate("HVAC", "Modify")
 
             def shouldShow(self):
