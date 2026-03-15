@@ -1172,11 +1172,13 @@ class DuctNetwork:
         def callback(obj, sketch):
             if sketch:
                 DuctNetwork.addBaseObject(obj, sketch)
+                DuctNetwork.showAllJunctionGeometry(obj)
                 
         obs = Observer.NewSketchObserver(obj, callback)
         FreeCAD.addDocumentObserver(obs)
         
         # Launch the built-in sketch creation command
+        DuctNetwork.hideAllJunctionGeometry(obj)
         Gui.runCommand("Sketcher_NewSketch")
 
     @staticmethod
@@ -1198,11 +1200,13 @@ class DuctNetwork:
             for obj in objs:
                 if hvaclib.obj_is_wire(obj):
                     DuctNetwork.addBaseObject(net, obj)
+            DuctNetwork.showAllJunctionGeometry(obj)
                 
         obs = Observer.NewDraftLineObserver(obj, callback)
         FreeCAD.addDocumentObserver(obs)
         
         # Launch the built-in Draft line creation command
+        DuctNetwork.hideAllJunctionGeometry(obj)
         Gui.activateWorkbench("DraftWorkbench")
         Gui.runCommand("Draft_Line")
 
@@ -1308,7 +1312,8 @@ class DuctNetwork:
             return None
         return Gui.ActiveDocument.ActiveView.getActiveObject(DuctNetwork.CONTEXT_KEY)
         
-    def _setGeometryVisibilityDeferred(self, obj, visible):
+    @staticmethod
+    def _setGeometryVisibilityDeferred(obj, visible):
         if not FreeCAD.GuiUp:
             return
 
@@ -1338,7 +1343,7 @@ class DuctNetwork:
 
         for obj in list(geometry.OutList):
             if DuctSegment.isDuctSegment(obj) or DuctJunction.isDuctJunction(obj):
-                self._setGeometryVisibilityDeferred(obj, True)
+                DuctNetwork._setGeometryVisibilityDeferred(obj, True)
                 
     def _segmentFromBaseObject(self, seg, base_obj):
         return (
@@ -1354,25 +1359,27 @@ class DuctNetwork:
             return
         for seg in list(geometry.OutList):
             if self._segmentFromBaseObject(seg, base_obj):
-                self._setGeometryVisibilityDeferred(seg, False)
+                DuctNetwork._setGeometryVisibilityDeferred(seg, False)
                 
-    def hideAllJunctionGeometry(self, net):
+    @staticmethod
+    def hideAllJunctionGeometry(net):
         geometry = getattr(net, "Geometry", None)
         if geometry is None:
             return
 
         for obj in list(geometry.OutList):
-            if self._isJunctionObject(obj):
-                self._setGeometryVisibilityDeferred(obj, False)
+            if DuctNetwork._isJunctionObject(obj):
+                DuctNetwork._setGeometryVisibilityDeferred(obj, False)
 
-    def showAllJunctionGeometry(self, net):
+    @staticmethod
+    def showAllJunctionGeometry(net):
         geometry = getattr(net, "Geometry", None)
         if geometry is None:
             return
 
         for obj in list(geometry.OutList):
-            if self._isJunctionObject(obj):
-                self._setGeometryVisibilityDeferred(obj, True)
+            if DuctNetwork._isJunctionObject(obj):
+                DuctNetwork._setGeometryVisibilityDeferred(obj, True)
     
     def showGeometryForBaseObject(self, net, base_obj):
         geometry = getattr(net, "Geometry", None)
@@ -1380,7 +1387,7 @@ class DuctNetwork:
             return
         for seg in list(geometry.OutList):
             if self._segmentFromBaseObject(seg, base_obj):
-                self._setGeometryVisibilityDeferred(seg, True)
+                DuctNetwork._setGeometryVisibilityDeferred(seg, True)
     
     def setBaseObjectEditing(self, net, base_obj, editing):
         if net is None or base_obj is None:
@@ -1423,7 +1430,8 @@ class DuctNetwork:
             )
         )
         
-    def _isJunctionObject(self, obj):
+    @staticmethod
+    def _isJunctionObject(obj):
         try:
             return DuctJunction.isDuctJunction(obj)
         except Exception:
@@ -1524,9 +1532,9 @@ class DuctNetwork:
                 changed = True
 
                 if source_obj.Name in self._hidden_source_names:
-                    self._setGeometryVisibilityDeferred(segment_obj, False)
+                    DuctNetwork._setGeometryVisibilityDeferred(segment_obj, False)
                 else:
-                    self._setGeometryVisibilityDeferred(segment_obj, True)
+                    DuctNetwork._setGeometryVisibilityDeferred(segment_obj, True)
 
             if segment_obj not in geometry.OutList:
                 geometry.addObject(segment_obj)
@@ -1677,9 +1685,9 @@ class DuctNetwork:
 
                 changed = True
                 if self._hidden_source_names:
-                    self._setGeometryVisibilityDeferred(junction_obj, False)
+                    DuctNetwork._setGeometryVisibilityDeferred(junction_obj, False)
                 else:
-                    self._setGeometryVisibilityDeferred(junction_obj, True)
+                    DuctNetwork._setGeometryVisibilityDeferred(junction_obj, True)
 
             if junction_obj not in geometry.OutList:
                 geometry.addObject(junction_obj)
