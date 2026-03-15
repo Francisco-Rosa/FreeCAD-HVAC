@@ -1,0 +1,23 @@
+{
+  "id": "manifold_marker",
+  "label": "Manifold Marker",
+  "category": "junction",
+  "family": "manifold",
+  "profiles": ["generic"],
+  "constraints": {
+    "degree_min": 5
+  },
+  "properties": [
+    {
+      "name": "MarkerDiameter",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Manifold marker diameter",
+      "default": 320.0
+    }
+  ],
+  "generator": {
+    "module": "junctions",
+    "function": "build_manifold_marker"
+  }
+}

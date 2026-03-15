@@ -1,0 +1,9 @@
+{
+  "id": "builtin_basic",
+  "label": "Built-in Basic",
+  "generators_package": "freecad.HVAC.libraries.builtin_basic.generators",
+  "type_roots": [
+    "types/segments",
+    "types/junctions"
+  ]
+}

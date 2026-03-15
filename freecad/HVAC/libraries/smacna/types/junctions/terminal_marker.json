@@ -1,0 +1,23 @@
+{
+  "id": "terminal_marker",
+  "label": "Terminal Marker",
+  "category": "junction",
+  "family": "terminal",
+  "profiles": ["generic"],
+  "constraints": {
+    "degree": 1
+  },
+  "properties": [
+    {
+      "name": "MarkerDiameter",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Marker diameter",
+      "default": 200.0
+    }
+  ],
+  "generator": {
+    "module": "junctions",
+    "function": "build_terminal_marker"
+  }
+}

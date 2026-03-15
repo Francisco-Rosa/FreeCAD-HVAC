@@ -1,0 +1,9 @@
+{
+  "id": "smacna",
+  "label": "SMACNA",
+  "generators_package": "freecad.HVAC.libraries.smacna.generators",
+  "type_roots": [
+    "types/segments",
+    "types/junctions"
+  ]
+}

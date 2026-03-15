@@ -20,6 +20,9 @@
 #   License along with this addon. If not, see https://www.gnu.org/licenses    #
 #                                                                              #
 ################################################################################
+
+# SPDX-License-Identifier: LGPL-2.1-or-later
+
 import importlib
 import json
 import os
@@ -42,7 +45,7 @@ class HVACPropertyDef:
 class HVACTypeDef:
     id: str
     label: str
-    category: str               # "segment" | "junction"
+    category: str
     family: str
     profiles: list[str] = field(default_factory=list)
     constraints: dict = field(default_factory=dict)
@@ -64,7 +67,7 @@ class HVACLibrary:
     def add_type(self, type_def: HVACTypeDef):
         self.types_by_id[type_def.id] = type_def
 
-    def get_type(self, type_id: str) -> HVACTypeDef | None:
+    def get_type(self, type_id: str):
         return self.types_by_id.get(type_id)
 
     def list_types(self, category=None, family=None, profile=None):
@@ -100,6 +103,7 @@ class HVACLibraryRegistry:
         self._libraries = {}
         self._active_library_id = None
         self._loaded = False
+        self._search_paths = []
 
     def clear(self):
         self._libraries = {}
@@ -111,7 +115,7 @@ class HVACLibraryRegistry:
         if self._active_library_id is None:
             self._active_library_id = library.id
 
-    def get_library(self, library_id: str) -> HVACLibrary | None:
+    def get_library(self, library_id: str):
         return self._libraries.get(library_id)
 
     def list_libraries(self):
@@ -123,19 +127,12 @@ class HVACLibraryRegistry:
             return True
         return False
 
-    def get_active_library(self) -> HVACLibrary | None:
+    def get_active_library(self):
         if self._active_library_id is None:
             return None
         return self._libraries.get(self._active_library_id)
 
-    def ensure_loaded(self, builtin_loader=None):
-        if self._loaded:
-            return
-        if builtin_loader:
-            builtin_loader(self)
-        self._loaded = True
-
-    def resolve_type(self, library_id: str, type_id: str) -> HVACTypeDef | None:
+    def resolve_type(self, library_id: str, type_id: str):
         lib = self.get_library(library_id)
         if lib is None:
             return None
@@ -153,9 +150,121 @@ class HVACLibraryRegistry:
         func = getattr(module, type_def.generator_function)
         return func(context)
 
+    def set_search_paths(self, paths):
+        self._search_paths = [p for p in (paths or []) if p]
+
+    def add_search_path(self, path):
+        if path and path not in self._search_paths:
+            self._search_paths.append(path)
+
+    def ensure_loaded(self):
+        if self._loaded:
+            return
+            
+        self.scan_paths()
+        
+        if not self._libraries:
+            FreeCAD.Console.PrintError(
+                "HVAC: No HVAC libraries found in search paths.\n"
+            )
+        self._loaded = True
+
+    def scan_paths(self):
+        for root in self._search_paths:
+            self.scan_path(root)
+
+    def scan_path(self, root_path):
+        if not root_path or not os.path.isdir(root_path):
+            return
+
+        for entry in sorted(os.listdir(root_path)):
+            lib_dir = os.path.join(root_path, entry)
+            if not os.path.isdir(lib_dir):
+                continue
+            try:
+                lib = self.load_library_from_folder(lib_dir)
+                if lib is not None:
+                    self.register_library(lib)
+            except Exception as e:
+                FreeCAD.Console.PrintWarning(
+                    "HVAC - Failed to load library from '{}': {}\n".format(lib_dir, e)
+                )
+
+    def load_library_from_folder(self, lib_dir):
+        manifest_path = os.path.join(lib_dir, "library.json")
+        if not os.path.isfile(manifest_path):
+            return None
+
+        with open(manifest_path, "r", encoding="utf-8") as f:
+            manifest = json.load(f)
+        
+        lib_id = manifest["id"]
+        label = manifest.get("label", lib_id)
+        generators_package = manifest["generators_package"]
+        type_roots = manifest.get("type_roots", ["types"])
+
+        library = HVACLibrary(
+            id=lib_id,
+            label=label,
+            root_path=lib_dir,
+            generators_package=generators_package,
+        )
+
+        for rel_root in type_roots:
+            abs_root = os.path.join(lib_dir, rel_root)
+            self._load_type_defs_from_tree(abs_root, library)
+
+        return library
+
+    def _load_type_defs_from_tree(self, root_dir, library):
+        if not os.path.isdir(root_dir):
+            return
+
+        for dirpath, _, filenames in os.walk(root_dir):
+            for fn in filenames:
+                if not fn.lower().endswith(".json"):
+                    continue
+                fpath = os.path.join(dirpath, fn)
+                type_def = self._load_type_def_file(fpath)
+                library.add_type(type_def)
+
+    def _load_type_def_file(self, filepath):
+        with open(filepath, "r", encoding="utf-8") as f:
+            raw = json.load(f)
+
+        props = []
+        for p in raw.get("properties", []) or []:
+            props.append(
+                HVACPropertyDef(
+                    name=p["name"],
+                    prop_type=p["prop_type"],
+                    group=p.get("group", "HVAC"),
+                    description=p.get("description", ""),
+                    default=p.get("default", None),
+                    editor_mode=int(p.get("editor_mode", 0)),
+                )
+            )
+
+        gen = raw.get("generator", {}) or {}
+        lengths = raw.get("connection_lengths", {}) or {}
+
+        return HVACTypeDef(
+            id=raw["id"],
+            label=raw.get("label", raw["id"]),
+            category=raw["category"],
+            family=raw["family"],
+            profiles=list(raw.get("profiles", []) or []),
+            constraints=dict(raw.get("constraints", {}) or {}),
+            properties=props,
+            generator_module=gen.get("module", ""),
+            generator_function=gen.get("function", ""),
+            lengths_module=lengths.get("module", ""),
+            lengths_function=lengths.get("function", ""),
+        )
+        
 
 _registry = HVACLibraryRegistry()
 
 
-def registry() -> HVACLibraryRegistry:
+def registry():
     return _registry

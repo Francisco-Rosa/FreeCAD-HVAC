@@ -1,0 +1,23 @@
+{
+  "id": "cross_marker",
+  "label": "Cross Marker",
+  "category": "junction",
+  "family": "cross",
+  "profiles": ["generic"],
+  "constraints": {
+    "degree": 4
+  },
+  "properties": [
+    {
+      "name": "MarkerDiameter",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Cross marker diameter",
+      "default": 280.0
+    }
+  ],
+  "generator": {
+    "module": "junctions",
+    "function": "build_cross_marker"
+  }
+}

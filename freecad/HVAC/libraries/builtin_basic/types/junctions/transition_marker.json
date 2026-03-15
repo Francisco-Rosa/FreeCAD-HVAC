@@ -1,0 +1,23 @@
+{
+  "id": "transition_marker",
+  "label": "Transition Marker",
+  "category": "junction",
+  "family": "transition",
+  "profiles": ["generic"],
+  "constraints": {
+    "degree": 2
+  },
+  "properties": [
+    {
+      "name": "MarkerDiameter",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Transition marker diameter",
+      "default": 240.0
+    }
+  ],
+  "generator": {
+    "module": "junctions",
+    "function": "build_transition_marker"
+  }
+}

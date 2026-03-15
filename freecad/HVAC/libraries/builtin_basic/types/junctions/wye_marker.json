@@ -1,0 +1,23 @@
+{
+  "id": "wye_marker",
+  "label": "Wye Marker",
+  "category": "junction",
+  "family": "wye",
+  "profiles": ["generic"],
+  "constraints": {
+    "degree": 3
+  },
+  "properties": [
+    {
+      "name": "MarkerDiameter",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Wye marker diameter",
+      "default": 260.0
+    }
+  ],
+  "generator": {
+    "module": "junctions",
+    "function": "build_wye_marker"
+  }
+}

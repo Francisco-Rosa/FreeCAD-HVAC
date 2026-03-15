@@ -1,0 +1,20 @@
+{
+  "id": "circular_straight",
+  "label": "Circular Straight",
+  "category": "segment",
+  "family": "straight_segment",
+  "profiles": ["Circular"],
+  "properties": [
+    {
+      "name": "Diameter",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Circular duct diameter",
+      "default": 100.0
+    }
+  ],
+  "generator": {
+    "module": "segments",
+    "function": "build_circular_straight"
+  }
+}

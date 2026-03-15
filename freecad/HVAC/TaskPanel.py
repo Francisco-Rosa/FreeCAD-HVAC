@@ -386,7 +386,7 @@ class TaskPanelNetworkTypeDefaults:
         note = QtWidgets.QLabel(
             translate(
                 "HVAC_NetworkTypeDefaults",
-                "Junction types are not selected here. They continue to follow parser/classifier output unless manually overridden."
+                "Junction types are auto selected based on parser/classifier output unless manually overridden."
             )
         )
         note.setWordWrap(True)
