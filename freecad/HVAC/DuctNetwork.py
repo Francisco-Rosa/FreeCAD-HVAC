@@ -1053,35 +1053,89 @@ class DuctNetwork:
             net.Document.recompute()
 
     @staticmethod
-    def resetObjectsToNetworkDefaults(net, objects):
+    def resetObjectsToNetworkDefaults(objects):
         """
-        Reset selected segment/junction objects to follow network defaults again.
+        Reset selected segment/junction objects to their owner network defaults.
         """
-        doc = net.Document
+        doc = FreeCAD.ActiveDocument
         if doc is None:
             return
 
         changed = False
+
         for obj in objects or []:
             if obj is None:
                 continue
 
-            if hasattr(obj, "AutoType"):
-                desired_auto = True
-                if DuctSegment.isDuctSegment(obj):
-                    desired_auto = bool(getattr(net, "DefaultSegmentAutoType", True))
-                elif DuctJunction.isDuctJunction(obj):
-                    desired_auto = bool(getattr(net, "DefaultJunctionAutoType", True))
+            net = DuctNetwork.getOwnerNetwork(obj)
+            if net is None:
+                continue
 
-                if bool(obj.AutoType) != desired_auto:
-                    obj.AutoType = desired_auto
+            default_lib = DuctNetwork.getDefaultLibrary(net)
+            if default_lib is None:
+                continue
+
+            proxy = getattr(obj, "Proxy", None)
+
+            if DuctSegment.isDuctSegment(obj):
+                default_profile = DuctNetwork.getDefaultSegmentProfile(net)
+                if not default_profile:
+                    default_profile = hvaclib.default_segment_profile_for_library(default_lib.id)
+
+                default_type_id = hvaclib.default_segment_type_id_for_profile(
+                    default_lib.id,
+                    default_profile,
+                )
+
+                if hasattr(obj, "LibraryId") and obj.LibraryId != default_lib.id:
+                    obj.LibraryId = default_lib.id
                     changed = True
 
-            if hasattr(obj, "LibraryId"):
-                lib_id = DuctNetwork.getDefaultLibraryId(net)
-                if lib_id and obj.LibraryId != lib_id:
-                    obj.LibraryId = lib_id
+                if hasattr(obj, "Profile") and obj.Profile != default_profile:
+                    obj.Profile = default_profile
                     changed = True
+
+                if hasattr(obj, "AutoType") and obj.AutoType is not True:
+                    obj.AutoType = True
+                    changed = True
+
+                if hasattr(obj, "TypeId") and obj.TypeId != default_type_id:
+                    obj.TypeId = default_type_id
+                    changed = True
+
+                analysis_json = json.dumps(
+                    {
+                        "profile": default_profile,
+                        "default_type_id": default_type_id,
+                        "start_node": int(getattr(obj, "StartNode", 0)),
+                        "end_node": int(getattr(obj, "EndNode", 0)),
+                    }
+                )
+                if hasattr(obj, "AnalysisJson") and obj.AnalysisJson != analysis_json:
+                    obj.AnalysisJson = analysis_json
+                    changed = True
+
+            elif DuctJunction.isDuctJunction(obj):
+                family = getattr(obj, "Family", "")
+                default_type_id = hvaclib.default_junction_type_id(family)
+
+                if hasattr(obj, "LibraryId") and obj.LibraryId != default_lib.id:
+                    obj.LibraryId = default_lib.id
+                    changed = True
+
+                if hasattr(obj, "AutoType") and obj.AutoType is not True:
+                    obj.AutoType = True
+                    changed = True
+
+                if hasattr(obj, "TypeId") and obj.TypeId != default_type_id:
+                    obj.TypeId = default_type_id
+                    changed = True
+
+            if proxy and hasattr(proxy, "applyTypeSchema"):
+                try:
+                    changed = proxy.applyTypeSchema(obj) or changed
+                except Exception:
+                    pass
 
             try:
                 obj.touch()
@@ -1089,10 +1143,7 @@ class DuctNetwork:
                 pass
 
         if changed:
-            try:
-                net.Proxy.requestSync(net, reason="reset_objects_to_network_defaults")
-            except Exception:
-                doc.recompute()
+            doc.recompute()
     
     ## Object Management
     

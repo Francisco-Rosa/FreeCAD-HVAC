@@ -60,6 +60,7 @@ class HVAC(Gui.Workbench):
                                 "Separator",
                                 'HVAC_EditBaseObject',
                                 'HVAC_EditType',
+                                'HVAC_ResetTypesToDefaults',
                                 "Separator",
                                 'HVAC_CreateSketch',
                                 'HVAC_CreateLine'
@@ -72,6 +73,7 @@ class HVAC(Gui.Workbench):
                                 "Separator",
                                 'HVAC_EditBaseObject',
                                 'HVAC_EditType',
+                                'HVAC_ResetTypesToDefaults',
                                 "Separator",
                                 'HVAC_CreateSketch',
                                 'HVAC_CreateLine'
@@ -84,6 +86,7 @@ class HVAC(Gui.Workbench):
                                 "Separator",
                                 'HVAC_EditBaseObject',
                                 'HVAC_EditType',
+                                'HVAC_ResetTypesToDefaults',
                                 "Separator",
                                 'HVAC_CreateSketch',
                                 'HVAC_CreateLine'
@@ -169,7 +172,11 @@ class HVAC(Gui.Workbench):
 
             def __init__(self):
                 super().__init__()
-                self.commands = ["HVAC_ModifyDuctNetwork", 'HVAC_EditNetworkTypeDefaults', "HVAC_EditBaseObject", "HVAC_EditType"]
+                self.commands = ["HVAC_ModifyDuctNetwork", 
+                                "HVAC_EditNetworkTypeDefaults", 
+                                "HVAC_EditBaseObject", 
+                                "HVAC_EditType",
+                                "HVAC_ResetTypesToDefaults",]
                 self.title = translate("HVAC", "Modify")
 
             def shouldShow(self):

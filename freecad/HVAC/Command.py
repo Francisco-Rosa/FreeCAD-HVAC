@@ -319,6 +319,39 @@ class CommandEditNetworkTypeDefaults:
         )
         Gui.Control.showDialog(self.task_panel)
 
+
+class CommandResetTypesToNetworkDefaults:
+    """Reset selected HVAC geometry objects to their network defaults."""
+
+    def GetResources(self):
+        return {
+            'Pixmap': hvaclib.get_icon_path("ModifyDuctsIcon.svg"),
+            'MenuText': QT_TRANSLATE_NOOP('HVAC_ResetTypesToDefaults', 'Reset Types to Network Defaults'),
+            'ToolTip': QT_TRANSLATE_NOOP(
+                'HVAC_ResetTypesToDefaults',
+                'Reset selected duct segments or junctions to their owner network defaults'
+            ),
+            'CmdType': 'ForEdit',
+        }
+
+    def IsActive(self):
+        if Gui.ActiveDocument is None:
+            return False
+        selected_geom = hvaclib.selectedGeometryObjects()
+        return bool(selected_geom)
+
+    def Activated(self):
+        selected_geom = hvaclib.selectedGeometryObjects()
+        if not selected_geom:
+            return
+
+        DuctNetwork.DuctNetwork.resetObjectsToNetworkDefaults(selected_geom)
+        
+        FreeCAD.Console.PrintMessage(
+            "HVAC - Reset {} object(s) to network defaults.\n".format(len(selected_geom))
+        )
+        
+        
 #=================================================
 # Register Commands
 #=================================================
@@ -333,3 +366,4 @@ if FreeCAD.GuiUp:
     FreeCAD.Gui.addCommand("HVAC_CreateLine", CommandCreateLine())
     FreeCAD.Gui.addCommand('HVAC_EditType', CommandEditType())
     FreeCAD.Gui.addCommand('HVAC_EditNetworkTypeDefaults', CommandEditNetworkTypeDefaults())
+    FreeCAD.Gui.addCommand('HVAC_ResetTypesToDefaults', CommandResetTypesToNetworkDefaults())
