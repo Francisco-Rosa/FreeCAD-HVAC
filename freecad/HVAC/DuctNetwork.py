@@ -281,27 +281,28 @@ class DuctSegment:
         type_id = getattr(obj, "TypeId", "")
         if not lib_id or not type_id:
             return False
-
+    
         type_def = reg.resolve_type(lib_id, type_id)
         if type_def is None:
             return False
-
+    
         changed = False
-
+    
         active_prop_names = set()
         for pdef in getattr(type_def, "properties", []) or []:
+            active_prop_names.add(pdef.name)
             prop_added = False
-        
+    
             if pdef.name not in obj.PropertiesList:
                 obj.addProperty(pdef.prop_type, pdef.name, pdef.group, pdef.description)
                 changed = True
                 prop_added = True
-        
+    
             try:
                 current = getattr(obj, pdef.name)
             except Exception:
                 current = None
-        
+    
             if getattr(pdef, "default", None) is not None:
                 should_apply_default = prop_added or current in (None, "")
                 if should_apply_default:
@@ -310,20 +311,19 @@ class DuctSegment:
                         changed = True
                     except Exception:
                         pass
-
+    
             try:
                 obj.setEditorMode(pdef.name, 0)
             except Exception:
                 pass
-
-        # Hide known generic dimension fields that are not active for the current type
+    
         for prop in ("Diameter", "Width", "Height"):
             if prop in obj.PropertiesList:
                 try:
                     obj.setEditorMode(prop, 0 if prop in active_prop_names else 1)
                 except Exception:
                     pass
-
+    
         return changed
 
     def updateMetadata(
@@ -635,25 +635,25 @@ class DuctJunction:
         type_id = getattr(obj, "TypeId", "")
         if not lib_id or not type_id:
             return False
-
+    
         type_def = reg.resolve_type(lib_id, type_id)
         if type_def is None:
             return False
-
+    
         changed = False
         for pdef in getattr(type_def, "properties", []) or []:
             prop_added = False
-        
+    
             if pdef.name not in obj.PropertiesList:
                 obj.addProperty(pdef.prop_type, pdef.name, pdef.group, pdef.description)
                 changed = True
                 prop_added = True
-        
+    
             try:
                 current = getattr(obj, pdef.name)
             except Exception:
                 current = None
-        
+    
             if getattr(pdef, "default", None) is not None:
                 should_apply_default = prop_added or current in (None, "")
                 if should_apply_default:
@@ -662,7 +662,12 @@ class DuctJunction:
                         changed = True
                     except Exception:
                         pass
-
+    
+            try:
+                obj.setEditorMode(pdef.name, 0)
+            except Exception:
+                pass
+    
         return changed
 
     def updateMetadata(
@@ -1422,35 +1427,32 @@ class DuctNetwork:
     def syncSegments(self, net, parser, initial_sync=False):
         """
         Synchronize derived DuctSegment objects with the base geometry.
-
-        Segment profile and type are resolved from:
-        object override > network defaults > library defaults
+    
+        Segment LibraryId / Profile / TypeId are object-owned values.
+        Network defaults are only used when creating a new segment or repairing
+        missing/invalid values.
         """
         doc = net.Document
         geometry = getattr(net, "Geometry", None)
         if doc is None or geometry is None:
             return False
-
+    
         default_lib = self.getDefaultLibrary(net)
         if default_lib is None:
             return False
-
-        default_segment_profile = self.getDefaultSegmentProfile(net)
-        if not default_segment_profile:
-            default_segment_profile = hvaclib.default_segment_profile_for_library(default_lib.id)
-
+    
         changed = False
         existing_segments = self.collectSegmentObjects(net)
         trim_map = self.collectSegmentTrimMap(net)
         live_objs = set()
-
+    
         for edge_ref in parser.edges():
             key = edge_ref.tag
-
+    
             source_obj = doc.getObject(edge_ref.obj_name)
             if source_obj is None:
                 continue
-
+    
             if initial_sync:
                 segment_obj = None
                 matched_old_key = None
@@ -1459,88 +1461,88 @@ class DuctNetwork:
                         segment_obj = seg
                         matched_old_key = old_key
                         break
-
+    
                 if matched_old_key is not None and matched_old_key != key:
                     existing_segments.pop(matched_old_key, None)
                     existing_segments[key] = segment_obj
             else:
                 segment_obj = existing_segments.get(key)
-
-                if segment_obj is None:
-                    segment_obj = DuctSegment.create(
-                        doc,
-                        "{}_Seg_{}_{}".format(net.Name, source_obj.Name, edge_ref.local_index),
-                        owner=net,
-                        key=key,
-                        source_obj=source_obj,
-                        source_index=edge_ref.local_index,
-                    )
     
-                    defaults = self.defaultSegmentSelection(net)
+            if segment_obj is None:
+                segment_obj = DuctSegment.create(
+                    doc,
+                    "{}_Seg_{}_{}".format(net.Name, source_obj.Name, edge_ref.local_index),
+                    owner=net,
+                    key=key,
+                    source_obj=source_obj,
+                    source_index=edge_ref.local_index,
+                )
     
-                    if hasattr(segment_obj, "LibraryId"):
-                        segment_obj.LibraryId = defaults["library_id"]
-                    if hasattr(segment_obj, "Profile"):
-                        segment_obj.Profile = defaults["profile"]
-                    if hasattr(segment_obj, "TypeId"):
-                        segment_obj.TypeId = defaults["type_id"]
+                defaults = self.defaultSegmentSelection(net)
     
-                    changed = True
+                if hasattr(segment_obj, "LibraryId"):
+                    segment_obj.LibraryId = defaults["library_id"]
+                if hasattr(segment_obj, "Profile"):
+                    segment_obj.Profile = defaults["profile"]
+                if hasattr(segment_obj, "TypeId"):
+                    segment_obj.TypeId = defaults["type_id"]
     
-                    if source_obj.Name in self._hidden_source_names:
-                        DuctNetwork._setGeometryVisibilityDeferred(segment_obj, False)
-                    else:
-                        DuctNetwork._setGeometryVisibilityDeferred(segment_obj, True)
-
+                changed = True
+    
+                if source_obj.Name in self._hidden_source_names:
+                    DuctNetwork._setGeometryVisibilityDeferred(segment_obj, False)
+                else:
+                    DuctNetwork._setGeometryVisibilityDeferred(segment_obj, True)
+    
             if segment_obj not in geometry.OutList:
                 geometry.addObject(segment_obj)
                 changed = True
-
+    
             live_objs.add(segment_obj)
-
+    
             start_node, end_node = parser.edge_nodes(edge_ref)
             start_point, end_point = parser.edge_line(edge_ref)
-            
+    
             trim_entry = trim_map.get(key, {})
             trim_start, trim_end = self.resolveSegmentEndTrims(trim_entry)
-
+    
             eff_sp, eff_ep, trim_start, trim_end, eff_len = self.computeTrimmedSegmentPoints(
                 start_point,
                 end_point,
                 trim_start,
                 trim_end,
             )
-
+    
             if abs(float(getattr(segment_obj, "TrimStart", 0.0)) - float(trim_start)) > 1e-9:
                 segment_obj.TrimStart = trim_start
                 changed = True
-
+    
             if abs(float(getattr(segment_obj, "TrimEnd", 0.0)) - float(trim_end)) > 1e-9:
                 segment_obj.TrimEnd = trim_end
                 changed = True
-
+    
             if getattr(segment_obj, "EffectiveStartPoint", None) != eff_sp:
                 segment_obj.EffectiveStartPoint = eff_sp
                 changed = True
-
+    
             if getattr(segment_obj, "EffectiveEndPoint", None) != eff_ep:
                 segment_obj.EffectiveEndPoint = eff_ep
                 changed = True
-
+    
             if abs(float(getattr(segment_obj, "EffectiveLength", 0.0)) - float(eff_len)) > 1e-9:
                 segment_obj.EffectiveLength = eff_len
                 changed = True
-
+    
             library_id = getattr(segment_obj, "LibraryId", "") or self.getDefaultLibraryId(net)
             profile = getattr(segment_obj, "Profile", "")
             valid_profiles = hvaclib.segment_profiles_for_library(library_id)
             if profile not in valid_profiles:
                 profile = hvaclib.default_segment_profile_for_library(library_id)
-
+    
             type_id = getattr(segment_obj, "TypeId", "")
             if not type_id:
                 type_id = hvaclib.default_segment_type_id_for_profile(library_id, profile)
-
+    
             meta_changed = segment_obj.Proxy.updateMetadata(
                 segment_obj,
                 owner=net,
@@ -1564,20 +1566,20 @@ class DuctNetwork:
                 ),
             )
             changed = changed or meta_changed
-
+    
             schema_changed = segment_obj.Proxy.applyTypeSchema(segment_obj)
             changed = changed or schema_changed
-
+    
             cached_params = self._runtime_param_cache.pop(key, None)
             if cached_params:
                 restored = self._restoreSegmentUserParams(segment_obj, cached_params)
                 changed = changed or restored
-
+    
             new_label = DuctSegment.labelFor(source_obj, edge_ref.local_index)
             if segment_obj.Label != new_label:
                 segment_obj.Label = new_label
                 changed = True
-
+    
         for segment_obj in list(existing_segments.values()):
             if segment_obj not in live_objs:
                 seg_key = getattr(segment_obj, "SegmentKey", "")
@@ -1585,47 +1587,45 @@ class DuctNetwork:
                     self._runtime_param_cache[seg_key] = self._segmentUserParams(segment_obj)
                 self.removeGeometryObject(net, segment_obj)
                 changed = True
-
+    
         return changed
         
     def syncJunctions(self, net, parser):
         """
         Synchronize derived DuctJunction objects with parser nodes.
-
-        No automatic type reassignment:
-        - new junctions are initialized from network defaults
-        - existing junctions keep their own LibraryId / TypeId
-        - sync only updates topology-derived metadata
+    
+        Existing junction LibraryId / TypeId are preserved.
+        New junctions are initialized from network defaults.
         """
         doc = net.Document
         geometry = getattr(net, "Geometry", None)
         if doc is None or geometry is None:
             return False
-
+    
         default_lib = self.getDefaultLibrary(net)
         if default_lib is None:
             return False
-
+    
         changed = False
         existing_junctions = self.collectJunctionObjects(net)
         live_objs = set()
-
+    
         for node_id in parser.nodes():
             analysis = parser.node_analysis(node_id)
             degree = int(analysis.get("degree", 0))
             if degree <= 0:
                 continue
-
+    
             family = hvaclib.classify_junction_family(analysis)
             point = analysis["point"]
             node_key_tuple = analysis["node_key"]
             node_key = DuctJunction.makeKey(node_key_tuple)
-
+    
             connected_edge_keys = [
                 DuctSegment.makeKey(edge_ref.obj_name, edge_ref.local_index)
                 for edge_ref in analysis["edge_refs"]
             ]
-            
+    
             connected_ports = []
             for edge_ref in analysis["edge_refs"]:
                 edge_key = DuctSegment.makeKey(edge_ref.obj_name, edge_ref.local_index)
@@ -1638,33 +1638,33 @@ class DuctNetwork:
                         "segment_end": seg_end,
                     }
                 )
-
-                analysis_json = json.dumps(
-                    {
-                        "degree": degree,
-                        "family": family,
-                        "connected_ports": connected_ports,
-                        "collinear_pairs": [
-                            [
-                                DuctSegment.makeKey(a.obj_name, a.local_index),
-                                DuctSegment.makeKey(b.obj_name, b.local_index),
-                                float(ang),
-                            ]
-                            for a, b, ang in analysis.get("collinear_pairs", [])
-                        ],
-                        "orthogonal_pairs": [
-                            [
-                                DuctSegment.makeKey(a.obj_name, a.local_index),
-                                DuctSegment.makeKey(b.obj_name, b.local_index),
-                                float(ang),
-                            ]
-                            for a, b, ang in analysis.get("orthogonal_pairs", [])
-                        ],
-                    }
-                )
-
+    
+            analysis_json = json.dumps(
+                {
+                    "degree": degree,
+                    "family": family,
+                    "connected_ports": connected_ports,
+                    "collinear_pairs": [
+                        [
+                            DuctSegment.makeKey(a.obj_name, a.local_index),
+                            DuctSegment.makeKey(b.obj_name, b.local_index),
+                            float(ang),
+                        ]
+                        for a, b, ang in analysis.get("collinear_pairs", [])
+                    ],
+                    "orthogonal_pairs": [
+                        [
+                            DuctSegment.makeKey(a.obj_name, a.local_index),
+                            DuctSegment.makeKey(b.obj_name, b.local_index),
+                            float(ang),
+                        ]
+                        for a, b, ang in analysis.get("orthogonal_pairs", [])
+                    ],
+                }
+            )
+    
             junction_obj = existing_junctions.get(node_key)
-
+    
             if junction_obj is None:
                 junction_obj = DuctJunction.create(
                     doc,
@@ -1676,33 +1676,33 @@ class DuctNetwork:
                     center_point=point,
                     degree=degree,
                 )
-
+    
                 default_lib_id = default_lib.id
                 default_type_id = hvaclib.default_junction_type_id(family)
-
+    
                 if hasattr(junction_obj, "LibraryId"):
                     junction_obj.LibraryId = default_lib_id
                 if hasattr(junction_obj, "TypeId"):
                     junction_obj.TypeId = default_type_id
-
+    
                 changed = True
-
+    
                 if self._hidden_source_names:
                     self._setGeometryVisibilityDeferred(junction_obj, False)
                 else:
                     self._setGeometryVisibilityDeferred(junction_obj, True)
-
+    
             if junction_obj not in geometry.OutList:
                 geometry.addObject(junction_obj)
                 changed = True
-
+    
             live_objs.add(junction_obj)
-
+    
             library_id = getattr(junction_obj, "LibraryId", "") or default_lib.id
             type_id = getattr(junction_obj, "TypeId", "")
             if not type_id:
                 type_id = hvaclib.default_junction_type_id(family)
-
+    
             meta_changed = junction_obj.Proxy.updateMetadata(
                 junction_obj,
                 owner=net,
@@ -1718,20 +1718,20 @@ class DuctNetwork:
                 analysis_json=analysis_json,
             )
             changed = changed or meta_changed
-
+    
             schema_changed = junction_obj.Proxy.applyTypeSchema(junction_obj)
             changed = changed or schema_changed
-
+    
             new_label = DuctJunction.labelFor(family, node_id)
             if junction_obj.Label != new_label:
                 junction_obj.Label = new_label
                 changed = True
-
+    
         for junction_obj in list(existing_junctions.values()):
             if junction_obj not in live_objs:
                 self.removeGeometryObject(net, junction_obj)
                 changed = True
-
+    
         return changed
                             
     def requestSync(self, obj, initial_sync=None):
@@ -1746,7 +1746,7 @@ class DuctNetwork:
     
     def _runDeferredSync(self, obj):
         self._sync_scheduled = False
-
+    
         if obj is None or obj.Document is None:
             return
         if self._sync_in_progress:
@@ -1760,19 +1760,27 @@ class DuctNetwork:
         self._sync_in_progress = True
         try:
             parser = hvaclib.DuctNetworkParser(list(base_folder.OutList))
-            changed_segments = self.syncSegments(obj, parser, initial_sync=self._initial_sync)
+    
+            # Stage 1: junctions first so their execute() writes ConnectionLengthsJson
             changed_junctions = self.syncJunctions(obj, parser)
-            changed = changed_segments or changed_junctions
-            self._initial_sync = False
-            if changed:
+            if changed_junctions:
                 obj.Document.recompute()
+    
+            # Stage 2: segments consume the junction trim data
+            changed_segments = self.syncSegments(obj, parser, initial_sync=self._initial_sync)
+    
+            self._initial_sync = False
+    
+            if changed_segments:
+                obj.Document.recompute()
+    
         except Exception as err:
             FreeCAD.Console.PrintError(
-                "HVAC - Failed to update segments for '{}': {}\n".format(obj.Label, err)
+                "HVAC - Failed to update network '{}': {}\n".format(obj.Label, err)
             )
         finally:
             self._sync_in_progress = False
-    
+        
     @staticmethod
     def _segmentUserParams(obj):
         return {
@@ -1891,7 +1899,7 @@ class DuctNetwork:
     def collectSegmentTrimMap(net):
         """
         Collect trim contributions from all junctions.
-
+    
         Returns:
             {
                 "edge_key": {
@@ -1902,44 +1910,44 @@ class DuctNetwork:
             }
         """
         trim_map = {}
-
+    
         geometry = getattr(net, "Geometry", None)
         if geometry is None:
             return trim_map
-
+    
         for obj in list(geometry.OutList):
             if not hvaclib.isDuctJunction(obj):
                 continue
-
+    
             raw = getattr(obj, "ConnectionLengthsJson", "") or "[]"
             try:
                 items = json.loads(raw)
             except Exception:
                 continue
-
+    
             if not isinstance(items, list):
                 continue
-
+    
             for item in items:
                 if not isinstance(item, dict):
                     continue
-
+    
                 edge_key = str(item.get("edge_key", "") or "")
                 seg_end = str(item.get("segment_end", "") or "")
                 if not edge_key or seg_end not in ("start", "end"):
                     continue
-
+    
                 try:
                     length = float(item.get("length", 0.0) or 0.0)
                 except Exception:
                     length = 0.0
-
+    
                 if length < 0:
                     length = 0.0
-
+    
                 trim_map.setdefault(edge_key, {"start": 0.0, "end": 0.0})
                 trim_map[edge_key][seg_end] = max(trim_map[edge_key][seg_end], length)
-
+    
         return trim_map
     
     @staticmethod
@@ -1949,7 +1957,7 @@ class DuctNetwork:
         """
         if not trim_entry:
             return 0.0, 0.0
-
+    
         ts = max(0.0, float(trim_entry.get("start", 0.0) or 0.0))
         te = max(0.0, float(trim_entry.get("end", 0.0) or 0.0))
         return ts, te
@@ -1958,30 +1966,29 @@ class DuctNetwork:
     def computeTrimmedSegmentPoints(start_point, end_point, trim_start, trim_end):
         sp = FreeCAD.Vector(*start_point) if not hasattr(start_point, "x") else FreeCAD.Vector(start_point)
         ep = FreeCAD.Vector(*end_point) if not hasattr(end_point, "x") else FreeCAD.Vector(end_point)
-
+    
         vec = ep.sub(sp)
         raw_length = vec.Length
-
+    
         if raw_length <= 1e-9:
             return sp, ep, 0.0, 0.0, 0.0
-
+    
         direction = FreeCAD.Vector(vec)
         direction.normalize()
-
+    
         ts = max(0.0, float(trim_start or 0.0))
         te = max(0.0, float(trim_end or 0.0))
-
-        # Clamp so effective length never becomes negative
+    
         max_total = max(0.0, raw_length - 1e-9)
         if ts + te > max_total:
             scale = max_total / (ts + te) if (ts + te) > 0 else 0.0
             ts *= scale
             te *= scale
-
+    
         eff_sp = sp.add(direction.multiply(ts))
         eff_ep = ep.sub(direction.multiply(te))
         eff_len = eff_ep.sub(eff_sp).Length
-
+    
         return eff_sp, eff_ep, ts, te, eff_len
         
 
