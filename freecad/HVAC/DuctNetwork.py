@@ -137,8 +137,8 @@ class DuctSegment:
         self._allow_delete = False
 
     def execute(self, obj):
-        start_point = getattr(obj, "StartPoint", None)
-        end_point = getattr(obj, "EndPoint", None)
+        start_point = getattr(obj, "EffectiveStartPoint", None) or getattr(obj, "StartPoint", None)
+        end_point = getattr(obj, "EffectiveEndPoint", None) or getattr(obj, "EndPoint", None)
         if start_point is None or end_point is None:
             return
 
@@ -201,6 +201,12 @@ class DuctSegment:
         self._addProperty(obj, "App::PropertyVector", "StartPoint", "HVAC", "Segment start point")
         self._addProperty(obj, "App::PropertyVector", "EndPoint", "HVAC", "Segment end point")
         self._addProperty(obj, "App::PropertyLength", "CenterlineLength", "HVAC", "Computed centerline length")
+        
+        self._addProperty(obj, "App::PropertyLength", "TrimStart", "HVAC", "Trim length at start node")
+        self._addProperty(obj, "App::PropertyLength", "TrimEnd", "HVAC", "Trim length at end node")
+        self._addProperty(obj, "App::PropertyVector", "EffectiveStartPoint", "HVAC", "Trimmed segment start point")
+        self._addProperty(obj, "App::PropertyVector", "EffectiveEndPoint", "HVAC", "Trimmed segment end point")
+        self._addProperty(obj, "App::PropertyLength", "EffectiveLength", "HVAC", "Trimmed centerline length")
 
         self._addProperty(obj, "App::PropertyString", "LibraryId", "HVAC", "HVAC library id")
         self._addProperty(obj, "App::PropertyString", "Family", "HVAC", "Segment family")
@@ -218,6 +224,23 @@ class DuctSegment:
         self._addProperty(obj, "App::PropertyFloat", "FlowRate", "Parameters", "Design flow rate")
         self._addProperty(obj, "App::PropertyFloat", "Velocity", "Parameters", "Design air velocity")
 
+        for prop in (
+            "TrimStart",
+            "TrimEnd",
+            "EffectiveStartPoint",
+            "EffectiveEndPoint",
+            "EffectiveLength",
+        ):
+            try:
+                obj.setEditorMode(prop, 1)
+            except Exception:
+                pass
+                
+        if not obj.TrimStart:
+            obj.TrimStart = 0.0
+        if not obj.TrimEnd:
+            obj.TrimEnd = 0.0
+        
         if not obj.Diameter:
             obj.Diameter = 100.0
         if not obj.Width:
@@ -1217,7 +1240,7 @@ class DuctNetwork:
             if key:
                 junctions[key] = child
         return junctions
-
+    
     @staticmethod
     def setActive(obj):
         """Set this DuctNetwork as the active container in the 3D view."""
@@ -1409,6 +1432,7 @@ class DuctNetwork:
 
         changed = False
         existing_segments = self.collectSegmentObjects(net)
+        trim_map = self.collectSegmentTrimMap(net)
         live_objs = set()
 
         for edge_ref in parser.edges():
@@ -1467,6 +1491,40 @@ class DuctNetwork:
 
             start_node, end_node = parser.edge_nodes(edge_ref)
             start_point, end_point = parser.edge_line(edge_ref)
+            
+            trim_values = trim_map.get(key, [])
+            trim_start, trim_end = self.resolveSegmentEndTrims(
+                parser,
+                edge_ref,
+                trim_values,
+            )
+
+            eff_sp, eff_ep, trim_start, trim_end, eff_len = self.computeTrimmedSegmentPoints(
+                start_point,
+                end_point,
+                trim_start,
+                trim_end,
+            )
+
+            if abs(float(getattr(segment_obj, "TrimStart", 0.0)) - float(trim_start)) > 1e-9:
+                segment_obj.TrimStart = trim_start
+                changed = True
+
+            if abs(float(getattr(segment_obj, "TrimEnd", 0.0)) - float(trim_end)) > 1e-9:
+                segment_obj.TrimEnd = trim_end
+                changed = True
+
+            if getattr(segment_obj, "EffectiveStartPoint", None) != eff_sp:
+                segment_obj.EffectiveStartPoint = eff_sp
+                changed = True
+
+            if getattr(segment_obj, "EffectiveEndPoint", None) != eff_ep:
+                segment_obj.EffectiveEndPoint = eff_ep
+                changed = True
+
+            if abs(float(getattr(segment_obj, "EffectiveLength", 0.0)) - float(eff_len)) > 1e-9:
+                segment_obj.EffectiveLength = eff_len
+                changed = True
 
             library_id = getattr(segment_obj, "LibraryId", "") or self.getDefaultLibraryId(net)
             profile = getattr(segment_obj, "Profile", "")
@@ -1807,6 +1865,109 @@ class DuctNetwork:
             set_if_needed("Velocity", params["Velocity"])
     
         return changed
+    
+    ## Trim map generation from junctions
+    
+    @staticmethod
+    def collectSegmentTrimMap(net):
+        """
+        Collect trim contributions from all junctions.
+
+        Returns:
+            {
+                "edge_key": [length1, length2, ...],
+                ...
+            }
+        """
+        trim_map = {}
+        geometry = getattr(net, "Geometry", None)
+        if geometry is None:
+            return trim_map
+
+        for obj in list(geometry.OutList):
+            if not DuctJunction.isDuctJunction(obj):
+                continue
+
+            raw = getattr(obj, "ConnectionLengthsJson", "") or "[]"
+            try:
+                items = json.loads(raw)
+            except Exception:
+                continue
+
+            if not isinstance(items, list):
+                continue
+
+            for item in items:
+                if not isinstance(item, dict):
+                    continue
+                edge_key = str(item.get("edge_key", "") or "")
+                if not edge_key:
+                    continue
+                try:
+                    length = float(item.get("length", 0.0) or 0.0)
+                except Exception:
+                    length = 0.0
+                if length < 0:
+                    length = 0.0
+
+                trim_map.setdefault(edge_key, []).append(length)
+
+        return trim_map
+    
+    #TODO
+    @staticmethod
+    def resolveSegmentEndTrims(parser, edge_ref, trim_values):
+        """
+        Resolve trim contributions for a segment into start and end trims.
+
+        For now:
+        - 0 values -> (0, 0)
+        - 1 value  -> assign to one end, leave other 0
+        - 2+ values -> take the two largest and assign one to each end
+
+        This is a temporary simple rule until explicit port-end mapping is added.
+        """
+        vals = sorted(
+            [max(0.0, float(v)) for v in (trim_values or [])],
+            reverse=True,
+        )
+
+        if not vals:
+            return 0.0, 0.0
+        if len(vals) == 1:
+            return vals[0], 0.0
+
+        return vals[0], vals[1]
+        
+    @staticmethod
+    def computeTrimmedSegmentPoints(start_point, end_point, trim_start, trim_end):
+        sp = FreeCAD.Vector(*start_point) if not hasattr(start_point, "x") else FreeCAD.Vector(start_point)
+        ep = FreeCAD.Vector(*end_point) if not hasattr(end_point, "x") else FreeCAD.Vector(end_point)
+
+        vec = ep.sub(sp)
+        raw_length = vec.Length
+
+        if raw_length <= 1e-9:
+            return sp, ep, 0.0, 0.0, 0.0
+
+        direction = FreeCAD.Vector(vec)
+        direction.normalize()
+
+        ts = max(0.0, float(trim_start or 0.0))
+        te = max(0.0, float(trim_end or 0.0))
+
+        # Clamp so effective length never becomes negative
+        max_total = max(0.0, raw_length - 1e-9)
+        if ts + te > max_total:
+            scale = max_total / (ts + te) if (ts + te) > 0 else 0.0
+            ts *= scale
+            te *= scale
+
+        eff_sp = sp.add(direction.multiply(ts))
+        eff_ep = ep.sub(direction.multiply(te))
+        eff_len = eff_ep.sub(eff_sp).Length
+
+        return eff_sp, eff_ep, ts, te, eff_len
 
 
 class DuctNetworkViewProvider:
