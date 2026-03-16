@@ -945,7 +945,7 @@ class DuctNetwork:
     ## Library defaults management
     
     @staticmethod
-    def resolveSegmentTypeDefaults(net, segment_obj=None, profile="rectangular"):
+    def resolveSegmentTypeDefaults(net, segment_obj=None, profile=""):
         """
         Resolve library/type defaults for a segment.
 
@@ -954,17 +954,29 @@ class DuctNetwork:
         """
         library_id = DuctNetwork.getDefaultLibraryId(net)
         auto_type = bool(getattr(net, "DefaultSegmentAutoType", True))
-        default_type_id = getattr(net, "DefaultSegmentTypeId", "") or ""
 
-        if segment_obj is not None:
-            if getattr(segment_obj, "LibraryId", ""):
-                library_id = segment_obj.LibraryId
-            if hasattr(segment_obj, "AutoType"):
-                auto_type = bool(segment_obj.AutoType)
-            if getattr(segment_obj, "TypeId", ""):
-                default_type_id = segment_obj.TypeId
+        if segment_obj is not None and getattr(segment_obj, "LibraryId", ""):
+            library_id = segment_obj.LibraryId
 
-        suggested_type_id = DuctSegment.defaultTypeIdForProfile(profile)
+        if segment_obj is not None and hasattr(segment_obj, "AutoType"):
+            auto_type = bool(segment_obj.AutoType)
+
+        effective_profile = profile or ""
+        if not effective_profile and segment_obj is not None:
+            effective_profile = getattr(segment_obj, "Profile", "") or ""
+
+        valid_profiles = hvaclib.segment_profiles_for_library(library_id)
+        if effective_profile not in valid_profiles:
+            effective_profile = hvaclib.default_segment_profile_for_library(library_id)
+
+        default_type_id = ""
+        if segment_obj is not None and getattr(segment_obj, "TypeId", ""):
+            default_type_id = segment_obj.TypeId
+
+        suggested_type_id = hvaclib.default_segment_type_id_for_profile(
+            library_id,
+            effective_profile,
+        )
 
         if auto_type:
             effective_type_id = suggested_type_id
@@ -974,6 +986,7 @@ class DuctNetwork:
         return {
             "library_id": library_id,
             "auto_type": auto_type,
+            "profile": effective_profile,
             "type_id": effective_type_id,
             "suggested_type_id": suggested_type_id,
         }
@@ -1469,8 +1482,8 @@ class DuctNetwork:
         """
         Synchronize derived DuctSegment objects with the base geometry.
 
-        Segment profile and default type come from network defaults and library
-        definitions. SectionShape is no longer used.
+        Segment profile and type are resolved from:
+        object override > network defaults > library defaults
         """
         doc = net.Document
         geometry = getattr(net, "Geometry", None)
@@ -1545,20 +1558,16 @@ class DuctNetwork:
             start_node, end_node = parser.edge_nodes(edge_ref)
             start_point, end_point = parser.edge_line(edge_ref)
 
-            profile = default_segment_profile
-            default_type_id = hvaclib.default_segment_type_id_for_profile(
-                default_lib.id,
-                profile,
+            resolved = self.resolveSegmentTypeDefaults(
+                net,
+                segment_obj=segment_obj,
+                profile=getattr(segment_obj, "Profile", "") if segment_obj else default_segment_profile,
             )
-
-            effective_type_id = getattr(segment_obj, "TypeId", "")
-            if not effective_type_id or getattr(segment_obj, "AutoType", True):
-                effective_type_id = default_type_id
 
             analysis_json = json.dumps(
                 {
-                    "profile": profile,
-                    "default_type_id": default_type_id,
+                    "profile": resolved["profile"],
+                    "default_type_id": resolved["suggested_type_id"],
                     "start_node": int(start_node),
                     "end_node": int(end_node),
                 }
@@ -1575,9 +1584,9 @@ class DuctNetwork:
                 start_point=start_point,
                 end_point=end_point,
                 family="straight_segment",
-                type_id=effective_type_id,
-                library_id=default_lib.id,
-                profile=profile,
+                type_id=resolved["type_id"],
+                library_id=resolved["library_id"],
+                profile=resolved["profile"],
                 analysis_json=analysis_json,
             )
             changed = changed or meta_changed
@@ -1811,12 +1820,20 @@ class DuctNetwork:
                     obj.AutoType = bool(auto_type)
                     changed = True
 
+            if hvaclib.isDuctSegment(obj):
+                valid_profiles = hvaclib.segment_profiles_for_library(obj.LibraryId)
+                current_profile = getattr(obj, "Profile", "")
+                if current_profile not in valid_profiles:
+                    new_profile = hvaclib.default_segment_profile_for_library(obj.LibraryId)
+                    if new_profile and obj.Profile != new_profile:
+                        obj.Profile = new_profile
+                        changed = True
+
             if not auto_type and type_id and hasattr(obj, "TypeId"):
                 if obj.TypeId != type_id:
                     obj.TypeId = type_id
                     changed = True
 
-                # Keep Profile aligned with the selected segment type
                 if hvaclib.isDuctSegment(obj):
                     tdef = reg.resolve_type(obj.LibraryId, type_id)
                     if tdef and getattr(tdef, "profiles", None):
