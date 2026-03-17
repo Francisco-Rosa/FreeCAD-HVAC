@@ -1,23 +1,23 @@
 {
-  "id": "circular_elbow_90",
-  "label": "Circular Elbow 90",
+  "id": "circular_transition",
+  "label": "Circular Transition",
   "category": "junction",
-  "family": "elbow",
-  "profiles": ["Circular"],
+  "family": "transition",
+  "profiles": ["circular"],
   "constraints": {
     "degree": 2
   },
   "properties": [
     {
-      "name": "CenterlineRadius",
+      "name": "TransitionLength",
       "prop_type": "App::PropertyLength",
       "group": "Dimensions",
-      "description": "Elbow centerline radius",
+      "description": "Transition body length",
       "default": 300.0
     }
   ],
   "generator": {
     "module": "junctions",
-    "function": "build_circular_elbow_90"
+    "function": "build_circular_transition"
   }
 }

@@ -591,7 +591,7 @@ class DuctJunction:
                 obj.ConnectionLengthsJson = lengths_json
 
         except Exception as e:
-            FreeCAD.Console.PrintError(traceback.format_exc())
+            # FreeCAD.Console.PrintError(traceback.format_exc())
             FreeCAD.Console.PrintError(
                 "HVAC - Error generating junction '{}': {}\n".format(obj.Label, e)
             )
