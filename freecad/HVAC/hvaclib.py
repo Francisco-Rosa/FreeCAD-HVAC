@@ -398,9 +398,9 @@ def build_junction_ports(parser, node_id, edge_refs, segment_map=None):
         if seg_obj is None:
             profile = ""
             section_params = {}
-            FreeCAD.Console.PrintWarning(
-                "HVAC - No derived segment found for edge key '{}'\n".format(edge_key)
-            )
+            # FreeCAD.Console.PrintWarning(
+            #     "HVAC - No derived segment found for edge key '{}'\n".format(edge_key)
+            # )
         else:
             profile = str(getattr(seg_obj, "Profile", "") or "")
             section_params = get_segment_section_params(seg_obj)

@@ -1,0 +1,30 @@
+{
+  "id": "circular_tee",
+  "label": "Circular Tee",
+  "category": "junction",
+  "family": "tee",
+  "profiles": ["circular"],
+  "constraints": {
+    "degree": 3
+  },
+  "properties": [
+    {
+      "name": "RunTrimLength",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Trim length for the main run ports",
+      "default": 100.0
+    },
+    {
+      "name": "BranchTrimLength",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Trim length for the branch port",
+      "default": 100.0
+    }
+  ],
+  "generator": {
+    "module": "junctions",
+    "function": "build_circular_tee"
+  }
+}

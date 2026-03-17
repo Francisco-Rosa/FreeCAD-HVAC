@@ -1,0 +1,30 @@
+{
+  "id": "circular_wye",
+  "label": "Circular Wye",
+  "category": "junction",
+  "family": "wye",
+  "profiles": ["circular"],
+  "constraints": {
+    "degree": 3
+  },
+  "properties": [
+    {
+      "name": "RunTrimLength",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Trim length for run ports",
+      "default": 120.0
+    },
+    {
+      "name": "BranchTrimLength",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Trim length for branch port",
+      "default": 120.0
+    }
+  ],
+  "generator": {
+    "module": "junctions",
+    "function": "build_circular_wye"
+  }
+}

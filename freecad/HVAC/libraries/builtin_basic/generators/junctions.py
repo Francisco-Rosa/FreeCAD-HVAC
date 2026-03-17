@@ -85,15 +85,6 @@ def _make_circular_face(center, axis, diameter):
     return Part.Face(wire)
 
 
-def _safe_transition_length(length, d1, d2):
-    L = float(length or 0.0)
-    if L > 1e-6:
-        return L
-
-    # simple fallback rule
-    return max(float(d1), float(d2), 1.0) * 1.5
-
-
 # --------------------------------------------------------------------------
 # Generic trim reporting
 # --------------------------------------------------------------------------
@@ -310,6 +301,19 @@ def build_circular_elbow_90(context):
     }
 
 
+# --------------------------------------------------------------------------
+# Circular transition generator
+# --------------------------------------------------------------------------
+
+
+def _safe_transition_length(length, d1, d2):
+    L = float(length or 0.0)
+    if L > 1e-6:
+        return L
+
+    # simple fallback rule
+    return max(float(d1), float(d2), 1.0) * 1.5
+
 def build_circular_transition(context):
     """
     Port-aware circular transition between two circular ports.
@@ -374,5 +378,235 @@ def build_circular_transition(context):
 
     return {
         "shape": loft,
+        "connection_lengths": trims,
+    }
+
+
+# --------------------------------------------------------------------------
+# Circular tee and wye generator
+# --------------------------------------------------------------------------
+
+def _port_end_point(center, port, trim_length):
+    u = _port_direction(port)
+    return center + u * float(trim_length)
+
+
+def _find_run_pair(ports, angle_tol_deg=10.0):
+    """
+    Return indices (i, j, k) where i,j are the collinear run pair
+    and k is the branch port.
+    """
+    if len(ports) != 3:
+        raise ValueError("Tee requires exactly 3 ports")
+
+    best = None
+    best_err = None
+
+    for i in range(3):
+        for j in range(i + 1, 3):
+            u1 = _port_direction(ports[i])
+            u2 = _port_direction(ports[j])
+            theta = math.degrees(_angle_between(u1, u2))
+            err = abs(theta - 180.0)
+            if best_err is None or err < best_err:
+                k = [x for x in range(3) if x not in (i, j)][0]
+                best = (i, j, k)
+                best_err = err
+
+    if best is None or best_err > angle_tol_deg:
+        raise ValueError("Circular tee requires one near-collinear port pair")
+
+    return best
+
+
+def _make_cylinder_between_points(p1, p2, diameter):
+    axis = p2.sub(p1)
+    length = axis.Length
+    if length <= 1e-9:
+        raise ValueError("Cylinder endpoints are coincident")
+    return Part.makeCylinder(float(diameter) / 2.0, length, p1, axis)
+
+
+def _safe_trim(default_value, fallback_value):
+    val = float(default_value or 0.0)
+    if val > 1e-6:
+        return val
+    return float(fallback_value)
+
+
+def build_circular_tee(context):
+    """
+    First real circular tee.
+
+    Rules:
+    - exactly 3 ports
+    - all circular
+    - one near-collinear pair forms the run
+    - branch is the remaining port
+
+    Geometry:
+    - main run cylinder between run trim points
+    - branch cylinder from branch trim point toward junction center
+    - fused result
+    """
+    center = _center_from_context(context)
+    ports = list(context.get("connected_ports", []) or [])
+    props = dict(context.get("properties", {}) or {})
+
+    if len(ports) != 3:
+        raise ValueError("Circular tee requires exactly 3 ports")
+
+    for p in ports:
+        if _port_profile(p) != "Circular":
+            raise ValueError("Circular tee requires circular ports")
+
+    run_a_idx, run_b_idx, branch_idx = _find_run_pair(ports)
+
+    run_a = ports[run_a_idx]
+    run_b = ports[run_b_idx]
+    branch = ports[branch_idx]
+
+    d_run_a = _port_diameter(run_a)
+    d_run_b = _port_diameter(run_b)
+    d_branch = _port_diameter(branch)
+
+    if d_run_a <= 0 or d_run_b <= 0 or d_branch <= 0:
+        raise ValueError("Circular tee requires valid port diameters")
+
+    # First version: require equal run diameters
+    if abs(d_run_a - d_run_b) > 1e-6:
+        raise ValueError("Circular tee currently requires equal run diameters")
+
+    run_diameter = d_run_a
+    branch_diameter = d_branch
+
+    run_trim = _safe_trim(props.get("RunTrimLength", 0.0), 0.5 * run_diameter)
+    branch_trim = _safe_trim(props.get("BranchTrimLength", 0.0), 0.5 * branch_diameter)
+
+    p_run_a = _port_end_point(center, run_a, run_trim)
+    p_run_b = _port_end_point(center, run_b, run_trim)
+    p_branch = _port_end_point(center, branch, branch_trim)
+
+    run_body = _make_cylinder_between_points(p_run_a, p_run_b, run_diameter)
+    branch_body = _make_cylinder_between_points(p_branch, center, branch_diameter)
+
+    shape = run_body.fuse(branch_body)
+    try:
+        shape = shape.removeSplitter()
+    except Exception:
+        pass
+
+    trims = [
+        {
+            "edge_key": str(run_a["edge_key"]),
+            "segment_end": str(run_a["segment_end"]),
+            "length": float(run_trim),
+        },
+        {
+            "edge_key": str(run_b["edge_key"]),
+            "segment_end": str(run_b["segment_end"]),
+            "length": float(run_trim),
+        },
+        {
+            "edge_key": str(branch["edge_key"]),
+            "segment_end": str(branch["segment_end"]),
+            "length": float(branch_trim),
+        },
+    ]
+
+    return {
+        "shape": shape,
+        "connection_lengths": trims,
+    }
+
+
+def build_circular_wye(context):
+    """
+    Circular wye fitting (3 ports).
+
+    - 3 circular ports
+    - closest-to-collinear pair defines the run axis
+    - third port is the branch at an angle
+
+    Geometry:
+    - run cylinder between two trimmed run points
+    - branch cylinder entering at an angle toward center
+    - fused body
+    """
+    center = _center_from_context(context)
+    ports = list(context.get("connected_ports", []) or [])
+    props = dict(context.get("properties", {}) or {})
+
+    if len(ports) != 3:
+        raise ValueError("Circular wye requires exactly 3 ports")
+
+    for p in ports:
+        if _port_profile(p) != "Circular":
+            raise ValueError("Circular wye requires circular ports")
+
+    # relaxed pairing (wye is not strictly collinear)
+    run_a_idx, run_b_idx, branch_idx = _find_run_pair(ports, angle_tol_deg=60.0)
+
+    run_a = ports[run_a_idx]
+    run_b = ports[run_b_idx]
+    branch = ports[branch_idx]
+
+    d_run_a = _port_diameter(run_a)
+    d_run_b = _port_diameter(run_b)
+    d_branch = _port_diameter(branch)
+
+    if d_run_a <= 0 or d_run_b <= 0 or d_branch <= 0:
+        raise ValueError("Circular wye requires valid diameters")
+
+    # first version: enforce equal run diameter
+    if abs(d_run_a - d_run_b) > 1e-6:
+        raise ValueError("Circular wye currently requires equal run diameters")
+
+    run_diameter = d_run_a
+    branch_diameter = d_branch
+
+    run_trim = _safe_trim(props.get("RunTrimLength", 0.0), 0.5 * run_diameter)
+    branch_trim = _safe_trim(props.get("BranchTrimLength", 0.0), 0.5 * branch_diameter)
+
+    p_run_a = _port_end_point(center, run_a, run_trim)
+    p_run_b = _port_end_point(center, run_b, run_trim)
+    p_branch = _port_end_point(center, branch, branch_trim)
+
+    # --- Geometry ---
+
+    # Main run
+    run_body = _make_cylinder_between_points(p_run_a, p_run_b, run_diameter)
+
+    # Branch enters at angle toward center
+    branch_body = _make_cylinder_between_points(p_branch, center, branch_diameter)
+
+    # Fuse
+    shape = run_body.fuse(branch_body)
+
+    try:
+        shape = shape.removeSplitter()
+    except Exception:
+        pass
+
+    trims = [
+        {
+            "edge_key": str(run_a["edge_key"]),
+            "segment_end": str(run_a["segment_end"]),
+            "length": float(run_trim),
+        },
+        {
+            "edge_key": str(run_b["edge_key"]),
+            "segment_end": str(run_b["segment_end"]),
+            "length": float(run_trim),
+        },
+        {
+            "edge_key": str(branch["edge_key"]),
+            "segment_end": str(branch["segment_end"]),
+            "length": float(branch_trim),
+        },
+    ]
+
+    return {
+        "shape": shape,
         "connection_lengths": trims,
     }
