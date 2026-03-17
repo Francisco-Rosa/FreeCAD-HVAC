@@ -1167,7 +1167,7 @@ class DuctNetwork:
             for obj in objs:
                 if hvaclib.obj_is_wire(obj):
                     DuctNetwork.addBaseObject(net, obj)
-            DuctNetwork.showAllJunctionGeometry(obj)
+            DuctNetwork.showAllJunctionGeometry(net)
                 
         obs = Observer.NewDraftLineObserver(obj, callback)
         FreeCAD.addDocumentObserver(obs)
@@ -1818,14 +1818,19 @@ class DuctNetwork:
         doc = FreeCAD.ActiveDocument
         if doc is None:
             return
-
+        
+        nets_to_sync = set()
         reg = hvaclib.get_hvac_library_registry()
         changed = False
 
         for obj in objects or []:
             if obj is None:
                 continue
-
+            
+            net = DuctNetwork.getOwnerNetwork(obj)
+            if net is not None:
+                nets_to_sync.add(net)
+                    
             if hasattr(obj, "LibraryId") and library_id:
                 if obj.LibraryId != library_id:
                     obj.LibraryId = library_id
@@ -1867,6 +1872,10 @@ class DuctNetwork:
 
         if changed:
             doc.recompute()
+            for net in nets_to_sync:
+                proxy = getattr(net, "Proxy", None)
+                if proxy:
+                    proxy.requestSync(net)
             
     @staticmethod
     def _restoreSegmentUserParams(obj, params):
