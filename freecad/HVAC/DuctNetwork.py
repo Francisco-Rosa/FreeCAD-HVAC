@@ -215,6 +215,9 @@ class DuctSegment:
         self._addProperty(obj, "App::PropertyString", "TypeId", "HVAC", "Selected segment type id")
         self._addProperty(obj, "App::PropertyString", "Profile", "HVAC", "Segment profile")
         self._addProperty(obj, "App::PropertyString", "AnalysisJson", "HVAC", "Serialized segment analysis")
+        
+        self._addProperty(obj, "App::PropertyString", "Attachment", "Placement", "Section attachment relative to route")
+        self._addProperty(obj, "App::PropertyVector", "Offset", "Placement", "Global user offset")
 
         # Keep these as generic dimensional parameters. The active type schema
         # decides whether they are used.
@@ -257,6 +260,15 @@ class DuctSegment:
 
         if not getattr(obj, "AnalysisJson", ""):
             obj.AnalysisJson = "{}"
+            
+        if not getattr(obj, "Attachment", ""):
+            obj.Attachment = "Center"
+        
+        try:
+            if obj.Offset != FreeCAD.Vector(0, 0, 0):
+                pass
+        except Exception:
+            obj.Offset = FreeCAD.Vector(0, 0, 0)
 
         for prop in (
             "OwnerNetworkName",
@@ -1511,7 +1523,18 @@ class DuctNetwork:
             live_objs.add(segment_obj)
     
             start_node, end_node = parser.edge_nodes(edge_ref)
-            start_point, end_point = parser.edge_line(edge_ref)
+            raw_start_point, raw_end_point = parser.edge_line(edge_ref)
+            
+            raw_sp_vec = FreeCAD.Vector(*raw_start_point)
+            raw_ep_vec = FreeCAD.Vector(*raw_end_point)
+            
+            seg_dir = raw_ep_vec.sub(raw_sp_vec)
+            if seg_dir.Length <= 1e-9:
+                continue
+            seg_dir.normalize()
+            
+            start_point = self.resolveSegmentEndpoint(raw_sp_vec, seg_dir, segment_obj)
+            end_point = self.resolveSegmentEndpoint(raw_ep_vec, seg_dir, segment_obj)
     
             trim_entry = trim_map.get(key, {})
             trim_start, trim_end = self.resolveSegmentEndTrims(trim_entry)
@@ -1561,8 +1584,8 @@ class DuctNetwork:
                 source_index=edge_ref.local_index,
                 start_node=start_node,
                 end_node=end_node,
-                start_point=start_point,
-                end_point=end_point,
+                start_point=hvaclib.vec_to_xyz(start_point),
+                end_point=hvaclib.vec_to_xyz(end_point),
                 family="straight_segment",
                 type_id=type_id,
                 library_id=library_id,
@@ -1648,9 +1671,12 @@ class DuctNetwork:
                 {
                     "edge_key": p.edge_key,
                     "segment_end": p.segment_end,
+                    "position": p.position,
                     "direction": p.direction,
                     "profile": p.profile,
                     "section_params": p.section_params,
+                    "attachment": p.attachment,
+                    "user_offset": p.user_offset,
                 }
                 for p in port_objs
             ]
@@ -1806,6 +1832,8 @@ class DuctNetwork:
             "LibraryId": str(getattr(obj, "LibraryId", "")),
             "Profile": str(getattr(obj, "Profile", "")),
             "TypeId": str(getattr(obj, "TypeId", "")),
+            "Attachment": str(getattr(obj, "Attachment", "Center")),
+            "Offset": getattr(obj, "Offset", FreeCAD.Vector(0, 0, 0)),
             "Diameter": float(getattr(obj, "Diameter", 0.0)),
             "Width": float(getattr(obj, "Width", 0.0)),
             "Height": float(getattr(obj, "Height", 0.0)),
@@ -1904,6 +1932,10 @@ class DuctNetwork:
             set_if_needed("Profile", params["Profile"])
         if "TypeId" in params:
             set_if_needed("TypeId", params["TypeId"])
+        if "Attachment" in params:
+            set_if_needed("Attachment", params["Attachment"])
+        if "Offset" in params:
+            set_if_needed("Offset", params["Offset"])
         if "Diameter" in params:
             set_if_needed("Diameter", params["Diameter"])
         if "Width" in params:
@@ -1977,6 +2009,10 @@ class DuctNetwork:
                 trim_map[edge_key][seg_end] = max(trim_map[edge_key][seg_end], length)
     
         return trim_map
+        
+    @staticmethod
+    def resolveSegmentEndpoint(base_point, direction, seg_obj):
+        return hvaclib.resolve_endpoint(base_point, direction, seg_obj)
     
     @staticmethod
     def resolveSegmentEndTrims(trim_entry):

@@ -332,6 +332,32 @@ def vec_to_xyz(v):
     """Return (x,y,z) tuple from a FreeCAD.Vector-like object."""
     return (float(v.x), float(v.y), float(v.z))
 
+ATTACH_MAP = {
+    "TopLeft": (-1, 1), "TopCenter": (0, 1), "TopRight": (1, 1),
+    "CenterLeft": (-1, 0), "Center": (0, 0), "CenterRight": (1, 0),
+    "BottomLeft": (-1, -1), "BottomCenter": (0, -1), "BottomRight": (1, -1),
+}
+
+@dataclass
+class JunctionPort:
+    """
+    Generic junction port descriptor.
+
+    edge_key      : stable segment key, e.g. "Sketch001:0"
+    segment_end   : "start" or "end" relative to the connected segment
+    direction     : unit vector pointing away from the junction along the segment
+    profile       : segment profile string, e.g. "Circular", "Rectangular"
+    section_params: generic profile-dependent section data
+    """
+    edge_key: str
+    segment_end: str
+    position: tuple
+    direction: tuple
+    profile: str
+    section_params: dict
+    attachment: str
+    user_offset: tuple
+
 def get_segment_section_params(seg):
     """
     Return generic section parameters for a segment.
@@ -359,6 +385,48 @@ def get_segment_section_params(seg):
             except Exception:
                 pass
     return out
+    
+def get_section_extents(section_params):
+    # rectangular
+    if "Width" in section_params and "Height" in section_params:
+        return float(section_params["Width"]), float(section_params["Height"])
+    # circular (use diameter as box)
+    if "Diameter" in section_params:
+        d = float(section_params["Diameter"])
+        return d, d
+    # fallback
+    return 0.0, 0.0
+    
+def build_local_frame(direction):
+    t = direction / direction.Length
+
+    up = FreeCAD.Vector(0, 0, 1)
+    if abs(t.dot(up)) > 0.99:
+        up = FreeCAD.Vector(1, 0, 0)
+
+    local_x = up.cross(t)
+    local_x.normalize()
+
+    local_y = t.cross(local_x)
+    local_y.normalize()
+
+    return local_x, local_y
+
+def compute_port_position(base_point, direction, section_params, attachment, user_offset_vec):
+    ax, ay = ATTACH_MAP.get(str(attachment or "Center"), (0, 0))
+    W, H = get_section_extents(section_params)
+    local_x, local_y = build_local_frame(direction)
+    attach_offset = (-ax * W * 0.5) * local_x + (-ay * H * 0.5) * local_y
+    return base_point + attach_offset + user_offset_vec
+    
+def resolve_endpoint(node_point, direction, seg_obj):
+    return compute_port_position(
+        node_point,
+        direction,
+        get_segment_section_params(seg_obj),
+        getattr(seg_obj, "Attachment", "Center"),
+        getattr(seg_obj, "Offset", FreeCAD.Vector(0,0,0))
+    )
 
 def build_junction_ports(parser, node_id, edge_refs, segment_map=None):
     """
@@ -394,45 +462,40 @@ def build_junction_ports(parser, node_id, edge_refs, segment_map=None):
         direction.normalize()
 
         seg_obj = segment_map.get(edge_key)
-
-        if seg_obj is None:
-            profile = ""
-            section_params = {}
-            # FreeCAD.Console.PrintWarning(
-            #     "HVAC - No derived segment found for edge key '{}'\n".format(edge_key)
-            # )
-        else:
-            profile = str(getattr(seg_obj, "Profile", "") or "")
+        
+        if seg_obj:
             section_params = get_segment_section_params(seg_obj)
-
-        ports.append(
-            JunctionPort(
-                edge_key=edge_key,
-                segment_end=segment_end,
-                direction=vec_to_xyz(direction),
-                profile=profile,
-                section_params=section_params,
-            )
+            profile = getattr(seg_obj, "Profile", "")
+            attachment = getattr(seg_obj, "Attachment", "Center")
+            user_offset = getattr(seg_obj, "Offset", FreeCAD.Vector(0,0,0))
+        else:
+            section_params = {}
+            profile = ""
+            attachment = "Center"
+            user_offset = FreeCAD.Vector(0,0,0)
+        
+        base_point = FreeCAD.Vector(node_point)  # parser node position
+        
+        final_pos = compute_port_position(
+            base_point,
+            direction,
+            section_params,
+            attachment,
+            user_offset
         )
+        
+        ports.append(JunctionPort(
+            edge_key = edge_key,
+            segment_end = segment_end,
+            position = vec_to_xyz(final_pos),
+            direction = vec_to_xyz(direction),
+            profile = profile,
+            section_params = section_params,
+            attachment = attachment,
+            user_offset = vec_to_xyz(user_offset)
+        ))
 
     return ports
-
-@dataclass
-class JunctionPort:
-    """
-    Generic junction port descriptor.
-
-    edge_key      : stable segment key, e.g. "Sketch001:0"
-    segment_end   : "start" or "end" relative to the connected segment
-    direction     : unit vector pointing away from the junction along the segment
-    profile       : segment profile string, e.g. "Circular", "Rectangular"
-    section_params: generic profile-dependent section data
-    """
-    edge_key: str
-    segment_end: str
-    direction: tuple
-    profile: str
-    section_params: dict
 
 @dataclass(frozen=True)
 class EdgeRef:

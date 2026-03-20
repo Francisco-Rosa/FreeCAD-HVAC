@@ -127,8 +127,12 @@ def _make_sphere(center, diameter):
 
 
 def _build_marker(context, default_diameter, trim_factor):
-    center = _center_from_context(context)
+    ports = list(context.get("connected_ports", []) or [])
     dia = float(context["properties"].get("MarkerDiameter", default_diameter) or default_diameter)
+    
+    p_center_1 = _vec(ports[0]["position"])
+    p_center_2 = _vec(ports[1]["position"])
+    center = (p_center_1 + p_center_2) * 0.5
 
     shape = _make_sphere(center, dia)
     trim_len = float(dia) * float(trim_factor)
@@ -144,8 +148,9 @@ def _build_marker(context, default_diameter, trim_factor):
 # --------------------------------------------------------------------------
 
 def build_terminal_marker(context):
-    center = _center_from_context(context)
-
+    ports = list(context.get("connected_ports", []) or [])
+    center = _vec(ports[0]["position"])
+    
     # Use the same diameter logic as the original _build_marker
     default_diameter = 200.0
     dia = float(context["properties"].get("MarkerDiameter", default_diameter) or default_diameter)
@@ -309,9 +314,12 @@ def build_circular_elbow_90(context):
     - both ports circular
     - equal diameters
     """
-    center = _center_from_context(context)
     ports = list(context.get("connected_ports", []) or [])
     props = dict(context.get("properties", {}) or {})
+    
+    p_center_1 = _vec(ports[0]["position"])
+    p_center_2 = _vec(ports[1]["position"])
+    center = (p_center_1 + p_center_2) * 0.5
 
     if len(ports) != 2:
         raise ValueError("Circular elbow requires exactly 2 ports")
@@ -379,9 +387,12 @@ def build_circular_transition(context):
     - both circular
     - nearly opposite directions
     """
-    center = _center_from_context(context)
     ports = list(context.get("connected_ports", []) or [])
     props = dict(context.get("properties", {}) or {})
+    
+    p_center_1 = _vec(ports[0]["position"])
+    p_center_2 = _vec(ports[1]["position"])
+    center = (p_center_1 + p_center_2) * 0.5
 
     if len(ports) != 2:
         raise ValueError("Circular transition requires exactly 2 ports")
