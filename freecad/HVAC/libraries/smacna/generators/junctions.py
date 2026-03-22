@@ -25,11 +25,14 @@ import FreeCAD
 import Part
 
 
-def _center_from_context(context):
-    cp = context["center_point"]
-    if hasattr(cp, "x"):
-        return FreeCAD.Vector(cp)
-    return FreeCAD.Vector(*cp)
+def _vec(v):
+    if hasattr(v, "x"):
+        return FreeCAD.Vector(v)
+    return FreeCAD.Vector(*v)
+
+
+def _port_position(port):
+    return _vec(port["position"])
 
 
 def _make_sphere(center, diameter):
@@ -66,8 +69,12 @@ def _build_records(context, length_value):
 
 
 def _build_marker(context, default_diameter, trim_factor):
-    center = _center_from_context(context)
-    dia = context["properties"].get("MarkerDiameter", default_diameter)
+    ports = list(context.get("connected_ports", []) or [])
+    if not ports:
+        raise ValueError("Marker requires at least one port")
+    props = dict(context.get("properties", {}) or {})
+    dia = float(props.get("MarkerDiameter", default_diameter) or default_diameter)
+    center = _port_position(ports[0])
 
     shape = _make_sphere(center, dia)
     trim_len = float(dia) * float(trim_factor)

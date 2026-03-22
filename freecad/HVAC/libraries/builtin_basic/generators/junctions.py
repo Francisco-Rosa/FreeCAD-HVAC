@@ -308,22 +308,14 @@ def _make_sphere(center, diameter):
     return out
 
 
-def _marker_center(context, ports):
-    cp = context.get("center_point", None)
-    if cp is not None:
-        return _vec(cp)
-
-    if not ports:
-        raise ValueError("Marker requires at least one port")
-    return _average_point([p["position"] for p in ports])
-
-
 def _build_marker(context, default_diameter, trim_factor):
     ports = list(context.get("connected_ports", []) or [])
+    if not ports:
+        raise ValueError("Marker requires at least one port")
     props = dict(context.get("properties", {}) or {})
     dia = float(props.get("MarkerDiameter", default_diameter) or default_diameter)
+    center = _port_position(ports[0])
 
-    center = _marker_center(context, ports)
     shape = _make_sphere(center, dia)
     trim_len = float(dia) * float(trim_factor)
 
@@ -336,7 +328,7 @@ def _build_marker(context, default_diameter, trim_factor):
 def build_terminal_marker(context):
     ports = list(context.get("connected_ports", []) or [])
     props = dict(context.get("properties", {}) or {})
-    center = _marker_center(context, ports)
+    center = _port_position(ports[0])
 
     dia = float(props.get("MarkerDiameter", 200.0) or 200.0)
     if dia <= 0:
