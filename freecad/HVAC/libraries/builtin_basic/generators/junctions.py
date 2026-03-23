@@ -155,66 +155,7 @@ def build_manifold_marker(context):
 # Generic geometric helpers
 # --------------------------------------------------------------------------    
 
-def _closest_points_on_lines(p0, d0, p1, d1, tol=1e-9):
-    """
-    Return closest points c0 on L0 and c1 on L1 for:
-
-        L0(t) = p0 + t d0
-        L1(s) = p1 + s d1
-
-    d0 and d1 should be normalized.
-    """
-    w0 = p0 - p1
-    a = d0.dot(d0)
-    b = d0.dot(d1)
-    c = d1.dot(d1)
-    d = d0.dot(w0)
-    e = d1.dot(w0)
-
-    denom = a * c - b * b
-    if abs(denom) <= tol:
-        # Nearly parallel lines
-        return None, None
-
-    t = (b * e - c * d) / denom
-    s = (a * e - b * d) / denom
-
-    c0 = p0 + d0 * t
-    c1 = p1 + d1 * s
-    return c0, c1
-
-
-def _virtual_elbow_corner_from_ports(p0, u0, p1, u1, tol=1e-6):
-    """
-    Compute the virtual corner from the two offset segment centerlines.
-
-    u0, u1 point away from the junction, so lines toward the junction use -u0, -u1.
-    """
-    d0 = FreeCAD.Vector(u0)
-    d1 = FreeCAD.Vector(u1)
-    d0.normalize()
-    d1.normalize()
-
-    # Lines traced back toward the junction
-    c0, c1 = _closest_points_on_lines(
-        FreeCAD.Vector(p0), -d0,
-        FreeCAD.Vector(p1), -d1
-    )
-    if c0 is None or c1 is None:
-        raise ValueError("Failed to compute virtual elbow corner")
-
-    # For clean coplanar cases c0 ~= c1; midpoint is robust
-    corner = (c0 + c1) * 0.5
-
-    # Optional sanity check
-    if (c0 - c1).Length > tol:
-        FreeCAD.Console.PrintWarning(
-            "HVAC: elbow centerlines do not intersect exactly; using midpoint of closest points\n"
-        )
-
-    return corner
-    
-    
+   
 def _arc_center_from_points_radius_dirs(p0, p1, u0, u1, radius):
     """
     Compute the center of a circular arc joining p0 -> p1 with given radius,
@@ -339,12 +280,13 @@ def build_elbow(context):
 
     # Symmetric elbow trim distance measured from the virtual corner
     trim = radius / math.tan(theta / 2.0)
-    corner = _virtual_elbow_corner_from_ports(p0, u0, p1, u1)
+    corner = api.virtual_corner_for_lines(p0, -u0, p1, -u1)
     
     # Tangency points on the two offset segment centerlines
     s0 = corner + (u0 * trim)
     s1 = corner + (u1 * trim)
     
+    # Calculate trim distances from the tangency points to the original ports
     trim0 = max(0.0, (s0 - p0).dot(u0))
     trim1 = max(0.0, (s1 - p1).dot(u1))
     

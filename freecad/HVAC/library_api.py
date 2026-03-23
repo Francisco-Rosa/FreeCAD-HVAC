@@ -82,6 +82,75 @@ class HVACLibraryAPI:
         for p in pts:
             s = s + HVACLibraryAPI.vec(p)
         return s * (1.0 / float(len(pts)))
+        
+    @staticmethod
+    def closest_points_on_lines(p0, d0, p1, d1):
+        """
+        Return closest points c0 on L0 and c1 on L1 for:
+    
+            L0(t) = p0 + t d0
+            L1(s) = p1 + s d1
+    
+        Returns (None, None) for nearly parallel lines.
+        """
+        p0 = FreeCAD.Vector(p0)
+        p1 = FreeCAD.Vector(p1)
+        d0 = FreeCAD.Vector(d0)
+        d1 = FreeCAD.Vector(d1)
+    
+        if d0.Length <= HVACLibraryAPI.EPS or d1.Length <= HVACLibraryAPI.EPS:
+            raise ValueError("Line direction too small")
+    
+        d0.normalize()
+        d1.normalize()
+    
+        w0 = p0 - p1
+        a = d0.dot(d0)
+        b = d0.dot(d1)
+        c = d1.dot(d1)
+        d = d0.dot(w0)
+        e = d1.dot(w0)
+    
+        denom = a * c - b * b
+        if abs(denom) <= HVACLibraryAPI.EPS:
+            return None, None
+    
+        t = (b * e - c * d) / denom
+        s = (a * e - b * d) / denom
+    
+        c0 = p0 + d0 * t
+        c1 = p1 + d1 * s
+        return c0, c1
+        
+    @staticmethod
+    def virtual_corner_for_lines(p0, u0, p1, u1):
+        """
+        Compute the virtual corner from the two offset segment centerlines.
+        Lines starting from p0 with direction u0 and from p1 with direction u1.
+        """
+        d0 = FreeCAD.Vector(u0)
+        d1 = FreeCAD.Vector(u1)
+        d0.normalize()
+        d1.normalize()
+    
+        # Lines traced back toward the junction
+        c0, c1 = HVACLibraryAPI.closest_points_on_lines(
+            FreeCAD.Vector(p0), d0,
+            FreeCAD.Vector(p1), d1
+        )
+        if c0 is None or c1 is None:
+            raise ValueError("Failed to compute virtual corner")
+    
+        # For clean coplanar cases c0 ~= c1; midpoint is robust
+        corner = (c0 + c1) * 0.5
+    
+        # Sanity check
+        if (c0 - c1).Length > HVACLibraryAPI.EPS:
+            FreeCAD.Console.PrintWarning(
+                "HVAC: elbow centerlines do not intersect exactly; using midpoint of closest points\n"
+            )
+    
+        return corner
 
     # ------------------------------------------------------------------
     # Context / port helpers
