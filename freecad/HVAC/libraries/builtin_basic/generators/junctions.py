@@ -155,98 +155,6 @@ def build_manifold_marker(context):
 # Generic geometric helpers
 # --------------------------------------------------------------------------    
 
-   
-def _arc_center_from_points_radius_dirs(p0, p1, u0, u1, radius):
-    """
-    Compute the center of a circular arc joining p0 -> p1 with given radius,
-    using tangent directions u0 at p0 and u1 at p1.
-
-    Parameters
-    ----------
-    p0, p1 : FreeCAD.Vector
-        Arc end points.
-    u0, u1 : FreeCAD.Vector
-        Tangent directions at p0 and p1.
-    radius : float
-        Arc radius.
-
-    Returns
-    -------
-    FreeCAD.Vector
-        Arc center.
-
-    Notes
-    -----
-    - The bend plane is derived from u0 x u1.
-    - The chosen center is the one whose radius vectors are most
-      perpendicular to the supplied tangents.
-    """
-
-    p0 = FreeCAD.Vector(p0)
-    p1 = FreeCAD.Vector(p1)
-    if radius <= 0:
-        raise ValueError("Radius must be positive")
-    # Normalize tangent directions
-    u0 = FreeCAD.Vector(u0)
-    u1 = FreeCAD.Vector(u1)
-    if u0.Length <= 1e-12 or u1.Length <= 1e-12:
-        raise ValueError("Tangent direction too small")
-    u0.normalize()
-    u1.normalize()
-
-    # Chord between endpoints
-    chord = p1 - p0
-    d = chord.Length
-    if d <= 1e-12:
-        raise ValueError("Arc endpoints are coincident")
-
-    # A circle of radius r can span the chord only if d <= 2r
-    if d > 2.0 * float(radius) + 1e-9:
-        raise ValueError("Radius too small for given endpoints")
-
-    # Midpoint of the chord
-    mid = (p0 + p1) * 0.5
-
-    # Bend plane normal from the two tangents
-    plane_n = u0.cross(u1)
-    if plane_n.Length <= 1e-12:
-        raise ValueError("Elbow requires non-collinear tangent directions")
-    plane_n.normalize()
-
-    # Unit chord direction
-    chord_dir = FreeCAD.Vector(chord)
-    chord_dir.normalize()
-
-    # Direction from chord midpoint toward candidate centers,
-    # constrained to remain in the bend plane
-    perp = plane_n.cross(chord_dir)
-    if perp.Length <= 1e-12:
-        perp = chord_dir.cross(plane_n)
-    if perp.Length <= 1e-12:
-        raise ValueError("Failed to compute elbow center direction")
-    perp.normalize()
-
-    # Distance from chord midpoint to the circle center
-    h_sq = float(radius) ** 2 - (d * 0.5) ** 2
-    if h_sq < -1e-9:
-        raise ValueError("Invalid geometry for arc center")
-    h = math.sqrt(max(h_sq, 0.0))
-
-    # Two possible centers
-    c1 = mid + perp * h
-    c2 = mid - perp * h
-
-    def score(c):
-        """
-        Smaller score is better.
-        For a valid circle tangent to the arc, the radius vector at each end
-        should be perpendicular to the tangent there.
-        """
-        v0 = p0 - c
-        v1 = p1 - c
-        return abs(v0.dot(u0)) + abs(v1.dot(u1))
-
-    return c1 if score(c1) <= score(c2) else c2
 
 
 # --------------------------------------------------------------------------
@@ -291,7 +199,7 @@ def build_elbow(context):
     trim1 = max(0.0, (s1 - p1).dot(u1))
     
     # Find arc center and point on arc using bisector
-    arc_center = _arc_center_from_points_radius_dirs(s0, s1, u0, u1, radius)
+    arc_center = api.arc_center_from_points_tangents_radius(s0, s1, u0, u1, radius)
     bisector = u0 + u1
     if bisector.Length <= 1e-12:
         raise ValueError("Elbow bisector is undefined")
