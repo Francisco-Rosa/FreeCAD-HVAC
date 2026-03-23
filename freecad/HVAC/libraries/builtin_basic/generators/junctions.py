@@ -282,8 +282,8 @@ def build_elbow(context):
     path_wire = Part.Wire([arc_edge])
     
     # Generate a sweep between ports
-    sweep_port_0 = api.copy_port(ports[0], position=s0, direction=u0)
-    sweep_port_1 = api.copy_port(ports[1], position=s1, direction=u1)
+    sweep_port_0 = api.copy_port(ports[0], position=s0)
+    sweep_port_1 = api.copy_port(ports[1], position=s1)
     wire_1 = api.make_section_wire_from_port(sweep_port_0)
     wire_2 = api.make_section_wire_from_port(sweep_port_1)
     shape = api.make_pipe_shell(path_wire, [wire_1, wire_2])
@@ -335,8 +335,8 @@ def build_transition(context):
     p1 = api.port_position(ports[0]) + (u1 * (trim1))
     p2 = api.port_position(ports[1]) + (u2 * (trim2))
 
-    port1 = api.copy_port(ports[0], p1)
-    port2 = api.copy_port(ports[1], p2)
+    port1 = api.copy_port(ports[0], position=p1)
+    port2 = api.copy_port(ports[1], position=p2)
     wire1 = api.make_section_wire_from_port(port1)
     wire2 = api.make_section_wire_from_port(port2)
     
@@ -392,7 +392,7 @@ def _find_run_pair(api, ports, angle_tol_deg=10.0):
 def _make_leg_to_center(api, port, center, trim_length, inner_inset=None):
     u = api.port_direction(port)
     outer_pos = api.port_position(port) + (u * (float(trim_length)))
-    outer_port = api.copy_port(port, position=outer_pos, direction=u)
+    outer_port = api.copy_port(port, position=outer_pos)
 
     if inner_inset is None:
         inner_inset = max(0.05 * _section_size_hint(api, port), 1.0)

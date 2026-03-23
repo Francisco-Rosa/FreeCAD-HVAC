@@ -432,7 +432,7 @@ def make_profile_frame(direction, preferred_x=None, origin=None):
             if px.Length > 1e-12:
                 px.normalize()
                 x_dir = px
-
+    
     if x_dir is None:
         ref = FreeCAD.Vector(0, 0, 1)
         if abs(z_dir.dot(ref)) > 0.99:

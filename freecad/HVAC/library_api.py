@@ -192,7 +192,7 @@ class HVACLibraryAPI:
         p2 = c + x - y
         p3 = c + x + y
         p4 = c - x + y
-
+        
         return Part.Wire([
             Part.makeLine(p1, p2),
             Part.makeLine(p2, p3),
@@ -217,7 +217,7 @@ class HVACLibraryAPI:
         _, x_axis, y_axis, _ = HVACLibraryAPI.make_profile_frame(
             direction, profile_x_axis, center
         )
-
+        
         if profile == "Circular":
             diameter = float(params.get("Diameter", 0.0) or 0.0)
             if diameter <= 0.0:
@@ -283,8 +283,8 @@ class HVACLibraryAPI:
             direction=direction,
             profile_x_axis=profile_x_axis,
         )
-        _, _, _, z_axis = HVACLibraryAPI.make_profile_frame(direction, profile_x_axis, p1)
-        shape = face.extrude(z_axis * length)
+        # _, _, _, z_axis = HVACLibraryAPI.make_profile_frame(direction, profile_x_axis, p1)
+        shape = face.extrude(HVACLibraryAPI.unit(direction) * length)
 
         try:
             return shape.removeSplitter()
