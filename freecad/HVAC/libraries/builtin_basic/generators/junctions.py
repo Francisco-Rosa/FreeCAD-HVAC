@@ -347,7 +347,6 @@ def _make_leg_to_center(api, port, center, trim_length, inner_inset=None):
 def build_tee(context):
     api = context.get("hvac_api", None)
     
-    center = api.center_from_context(context)
     ports = list(context.get("connected_ports", []) or [])
     props = dict(context.get("properties", {}) or {})
 
@@ -360,7 +359,9 @@ def build_tee(context):
     run_b = ports[run_b_idx]
     branch = ports[branch_idx]
 
-    run_hint = max(_section_size_hint(api, run_a), _section_size_hint(api, run_b))
+    run_a_hint = _section_size_hint(api, run_a)
+    run_b_hint = _section_size_hint(api, run_b)
+    run_hint = max(run_a_hint, run_b_hint)
     branch_hint = _section_size_hint(api, branch)
 
     run_trim = _safe_trim(props.get("RunTrimLength", 0.0), 0.5 * run_hint)
@@ -368,19 +369,53 @@ def build_tee(context):
     inner_inset = float(props.get("CenterInset", 0.0) or 0.0)
     if inner_inset <= 1e-6:
         inner_inset = max(0.05 * max(run_hint, branch_hint), 1.0)
+        
+    # Find intersection/ closest point b/w main and branch
+    c1a, c2a = api.closest_points_on_lines(api.port_position(run_a), api.port_direction(run_a), 
+                                        api.port_position(branch), api.port_direction(branch))
+    c1b, c2b = api.closest_points_on_lines(api.port_position(run_b), api.port_direction(run_b), 
+                                        api.port_position(branch), api.port_direction(branch))
+    center_main = (c1a + c1b) / 2
+    center_branch = (c2a + c2b) / 2
+    
+    # Main branch
+    pos_a = c1a + api.port_direction(run_a) * (run_trim + branch_hint/2)
+    pos_b = c1b + api.port_direction(run_b) * (run_trim + branch_hint/2)
+    run_trim_a = (pos_a - api.port_position(run_a)).Length
+    run_trim_b = (pos_b - api.port_position(run_b)).Length
+    port_a = api.copy_port(run_a, position=pos_a)
+    port_b = api.copy_port(run_b, position=pos_b)
+    if run_a_hint >= run_b_hint:
+        # mid_pos = api.port_position(port_a) - api.port_direction(port_a) * (run_trim + branch_hint)
+        mid_pos = c1a - api.port_direction(port_a) * branch_hint
+        port_mid = api.copy_port(port_a, position=mid_pos)
+    else:
+        # mid_pos = api.port_position(port_b) - api.port_direction(port_b) * (run_trim + branch_hint)
+        mid_pos = c1b - api.port_direction(port_b) * branch_hint
+        port_mid = api.copy_port(port_b, position=mid_pos)
+    section_a = api.make_section_wire_from_port(port_a)
+    section_b = api.make_section_wire_from_port(port_b)
+    section_mid = api.make_section_wire_from_port(port_mid)
+    leg_main = api.make_loft([section_a, section_mid, section_b])
+    
+    # Branch leg
+    pos_branch = center_branch + api.port_direction(branch) * branch_trim
+    pos_mid_branch = center_branch - api.port_direction(branch) * 0
+    port_branch = api.copy_port(branch, position=pos_branch)
+    port_mid_branch = api.copy_port(branch, position=pos_mid_branch)
+    section_branch = api.make_section_wire_from_port(port_branch)
+    section_mid_branch = api.make_section_wire_from_port(port_mid_branch)
+    branch_leg = api.make_loft([section_branch, section_mid_branch])
 
-    run_leg_a = _make_leg_to_center(api, run_a, center, run_trim, inner_inset=inner_inset)
-    run_leg_b = _make_leg_to_center(api, run_b, center, run_trim, inner_inset=inner_inset)
-    branch_leg = _make_leg_to_center(api, branch, center, branch_trim, inner_inset=inner_inset)
-
-    shape = api.fuse_shapes([run_leg_a, run_leg_b, branch_leg])
-
+    # Fuse shapes
+    shape = api.fuse_shapes([leg_main, branch_leg])
+    
     return {
         "shape": shape,
         "connection_lengths": api.build_trim_rec_from_port_lengths(
             [
-                (run_a, run_trim),
-                (run_b, run_trim),
+                (run_a, run_trim_a),
+                (run_b, run_trim_b),
                 (branch, branch_trim),
             ]
         ),
