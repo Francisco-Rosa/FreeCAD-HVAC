@@ -462,10 +462,10 @@ def make_profile_frame(direction, preferred_x=None, origin=None):
 
     return placement, x_dir, y_dir, z_dir
 
-def compute_port_position(base_point, direction, section_params, attachment, user_offset_vec):
+def compute_port_position(base_point, direction, section_params, attachment, user_offset_vec, profile_x_axis):
     ax, ay = ATTACH_MAP.get(str(attachment or "Center"), (0, 0))
     W, H = get_section_extents(section_params)
-    _, local_x, local_y, local_z = make_profile_frame(direction)
+    _, local_x, local_y, local_z = make_profile_frame(direction, preferred_x=profile_x_axis)
     attach_offset = (-ax * W * 0.5) * local_x + (-ay * H * 0.5) * local_y
     return base_point + attach_offset + user_offset_vec
     
@@ -475,7 +475,8 @@ def resolve_endpoint(node_point, direction, seg_obj):
         direction,
         get_segment_section_params(seg_obj),
         getattr(seg_obj, "Attachment", "Center"),
-        getattr(seg_obj, "Offset", FreeCAD.Vector(0,0,0))
+        getattr(seg_obj, "Offset", FreeCAD.Vector(0,0,0)),
+        get_segment_profile_x_axis(seg_obj)
     )
 
 def build_junction_ports(parser, node_id, edge_refs, segment_map=None):
@@ -534,7 +535,8 @@ def build_junction_ports(parser, node_id, edge_refs, segment_map=None):
             direction_seg_ref,  # Use segment reference for computation of port position
             section_params,
             attachment,
-            user_offset
+            user_offset,
+            profile_x
         )
         
         ports.append(JunctionPort(
