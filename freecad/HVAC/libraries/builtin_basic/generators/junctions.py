@@ -384,12 +384,12 @@ def build_tee(context):
     angle = api.angle_between(api.port_direction(run_a), api.port_direction(branch))
     angle_sine = math.sin(angle)
     angle_cosine = math.cos(angle)
-    if angle_sine > 0.1:
+    if angle_sine > 0.1 and angle_cosine > 0.1:
         scale_run = angle_cosine / angle_sine
         min_branch_trim = abs(max(run_a_hint, run_b_hint) / 2 / angle_sine) + abs(branch_hint / 2 * angle_sine / angle_cosine)
     else:
         scale_run = 0.0
-        min_branch_trim = 0.0
+        min_branch_trim = max(run_a_hint, run_b_hint) / 2
     # adjust trim to account for branch duct size
     if run_a_hint >= run_b_hint:
         pos_a = c1a + api.port_direction(run_a) * (run_trim_a_sug + branch_hint/2 + run_a_hint/2 * scale_run)
@@ -415,7 +415,7 @@ def build_tee(context):
     
     # Branch leg
     pos_branch = center_branch + api.port_direction(branch) * branch_trim
-    pos_mid_branch = center_branch - api.port_direction(branch) * 0
+    pos_mid_branch = center_branch
     port_branch = api.copy_port(branch, position=pos_branch)
     port_mid_branch = api.copy_port(branch, position=pos_mid_branch)
     section_branch = api.make_section_wire_from_port(port_branch)
