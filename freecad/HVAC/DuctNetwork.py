@@ -345,6 +345,35 @@ class DuctSegment:
                     pass
     
         return changed
+        
+    @staticmethod
+    def computeTrimmedSegmentPoints(start_point, end_point, trim_start, trim_end):
+        sp = FreeCAD.Vector(*start_point) if not hasattr(start_point, "x") else FreeCAD.Vector(start_point)
+        ep = FreeCAD.Vector(*end_point) if not hasattr(end_point, "x") else FreeCAD.Vector(end_point)
+    
+        vec = ep - sp
+        raw_length = vec.Length
+    
+        if raw_length <= 1e-9:
+            return sp, ep, 0.0, 0.0, 0.0
+    
+        direction = FreeCAD.Vector(vec)
+        direction.normalize()
+    
+        ts = max(0.0, float(trim_start or 0.0))
+        te = max(0.0, float(trim_end or 0.0))
+    
+        max_total = max(0.0, raw_length - 1e-9)
+        if ts + te > max_total:
+            scale = max_total / (ts + te) if (ts + te) > 0 else 0.0
+            ts *= scale
+            te *= scale
+    
+        eff_sp = sp + direction * ts
+        eff_ep = ep - direction * te
+        eff_len = (eff_ep - eff_sp).Length
+    
+        return eff_sp, eff_ep, ts, te, eff_len
 
     def updateMetadata(
         self,
@@ -357,6 +386,8 @@ class DuctSegment:
         end_node=0,
         start_point=None,
         end_point=None,
+        trim_start=None,
+        trim_end=None,
         family="",
         type_id="",
         library_id="",
@@ -409,6 +440,29 @@ class DuctSegment:
             length = end_vec.sub(start_vec).Length
             if abs(float(obj.CenterlineLength) - float(length)) > 1e-9:
                 obj.CenterlineLength = length
+                changed = True
+        
+        if start_point is not None and end_point is not None and trim_start is not None and trim_end is not None:
+            eff_sp, eff_ep, trim_start, trim_end, eff_len = self.computeTrimmedSegmentPoints(
+                start_point,
+                end_point,
+                trim_start,
+                trim_end,
+            )
+            if trim_start is not None and abs(float(getattr(obj, "TrimStart", 0.0)) - float(trim_start)) > 1e-9:
+                obj.TrimStart = trim_start
+                changed = True
+            if trim_end is not None and abs(float(getattr(obj, "TrimEnd", 0.0)) - float(trim_end)) > 1e-9:
+                obj.TrimEnd = trim_end
+                changed = True
+            if eff_sp is not None and getattr(obj, "EffectiveStartPoint", None) != eff_sp:
+                obj.EffectiveStartPoint = eff_sp
+                changed = True
+            if eff_ep is not None and getattr(obj, "EffectiveEndPoint", None) != eff_ep:
+                obj.EffectiveEndPoint = eff_ep
+                changed = True
+            if abs(float(getattr(obj, "EffectiveLength", 0.0)) - float(eff_len)) > 1e-9:
+                obj.EffectiveLength = eff_len
                 changed = True
 
         if library_id and getattr(obj, "LibraryId", "") != str(library_id):
@@ -1481,6 +1535,8 @@ class DuctNetwork:
             if source_obj is None:
                 continue
     
+            # If initial sync, the tags are regenerated hence find element based on SourceObjectName and SourceIndex
+            # Also update the existing segment's key in the dictionary with the modified key (Object.Tag)
             if initial_sync:
                 segment_obj = None
                 matched_old_key = None
@@ -1493,9 +1549,11 @@ class DuctNetwork:
                 if matched_old_key is not None and matched_old_key != key:
                     existing_segments.pop(matched_old_key, None)
                     existing_segments[key] = segment_obj
+            # Else find element based on key
             else:
                 segment_obj = existing_segments.get(key)
     
+            # If segment does not exist, create a new one
             if segment_obj is None:
                 segment_obj = DuctSegment.create(
                     doc,
@@ -1505,83 +1563,57 @@ class DuctNetwork:
                     source_obj=source_obj,
                     source_index=edge_ref.local_index,
                 )
-    
+                # Get and set default segment properties from default library
                 defaults = self.defaultSegmentSelection(net)
-    
                 if hasattr(segment_obj, "LibraryId"):
                     segment_obj.LibraryId = defaults["library_id"]
                 if hasattr(segment_obj, "Profile"):
                     segment_obj.Profile = defaults["profile"]
                 if hasattr(segment_obj, "TypeId"):
                     segment_obj.TypeId = defaults["type_id"]
-    
+                
                 changed = True
     
+                # If source base object is marked to be hidden, hide the created segment geometry
                 if source_obj.Name in self._hidden_source_names:
                     DuctNetwork._setGeometryVisibilityDeferred(segment_obj, False)
                 else:
                     DuctNetwork._setGeometryVisibilityDeferred(segment_obj, True)
     
+            # Add the segment object to the geometry folder if not already present
             if segment_obj not in geometry.OutList:
                 geometry.addObject(segment_obj)
                 changed = True
-    
+            
             live_objs.add(segment_obj)
-    
+            
+            # Compute start and end points based on start/end nodes
             start_node, end_node = parser.edge_nodes(edge_ref)
             raw_start_point, raw_end_point = parser.edge_line(edge_ref)
-            
             raw_sp_vec = FreeCAD.Vector(*raw_start_point)
             raw_ep_vec = FreeCAD.Vector(*raw_end_point)
-            
             seg_dir = raw_ep_vec.sub(raw_sp_vec)
             if seg_dir.Length <= 1e-9:
                 continue
             seg_dir.normalize()
-            
             start_point = self.resolveSegmentEndpoint(raw_sp_vec, seg_dir, segment_obj)
             end_point = self.resolveSegmentEndpoint(raw_ep_vec, seg_dir, segment_obj)
-    
+            
+            # Get trim start/end from the trim map, if available
             trim_entry = trim_map.get(key, {})
             trim_start, trim_end = self.resolveSegmentEndTrims(trim_entry)
-    
-            eff_sp, eff_ep, trim_start, trim_end, eff_len = self.computeTrimmedSegmentPoints(
-                start_point,
-                end_point,
-                trim_start,
-                trim_end,
-            )
-    
-            if abs(float(getattr(segment_obj, "TrimStart", 0.0)) - float(trim_start)) > 1e-9:
-                segment_obj.TrimStart = trim_start
-                changed = True
-    
-            if abs(float(getattr(segment_obj, "TrimEnd", 0.0)) - float(trim_end)) > 1e-9:
-                segment_obj.TrimEnd = trim_end
-                changed = True
-    
-            if getattr(segment_obj, "EffectiveStartPoint", None) != eff_sp:
-                segment_obj.EffectiveStartPoint = eff_sp
-                changed = True
-    
-            if getattr(segment_obj, "EffectiveEndPoint", None) != eff_ep:
-                segment_obj.EffectiveEndPoint = eff_ep
-                changed = True
-    
-            if abs(float(getattr(segment_obj, "EffectiveLength", 0.0)) - float(eff_len)) > 1e-9:
-                segment_obj.EffectiveLength = eff_len
-                changed = True
-    
+            
+            # Get library ID, profile and type_id for segment, defaulting to active library if not set
             library_id = getattr(segment_obj, "LibraryId", "") or self.getDefaultLibraryId(net)
             profile = getattr(segment_obj, "Profile", "")
             valid_profiles = hvaclib.segment_profiles_for_library(library_id)
             if profile not in valid_profiles:
                 profile = hvaclib.default_segment_profile_for_library(library_id)
-    
             type_id = getattr(segment_obj, "TypeId", "")
             if not type_id:
                 type_id = hvaclib.default_segment_type_id_for_profile(library_id, profile)
-    
+            
+            # Update metadata based on updated data
             meta_changed = segment_obj.Proxy.updateMetadata(
                 segment_obj,
                 owner=net,
@@ -1592,6 +1624,8 @@ class DuctNetwork:
                 end_node=end_node,
                 start_point=hvaclib.vec_to_xyz(start_point),
                 end_point=hvaclib.vec_to_xyz(end_point),
+                trim_start=trim_start,
+                trim_end=trim_end,
                 family="straight_segment",
                 type_id=type_id,
                 library_id=library_id,
@@ -1606,22 +1640,27 @@ class DuctNetwork:
             )
             changed = changed or meta_changed
     
+            # Update property schema based on type ID and library ID
             schema_changed = segment_obj.Proxy.applyTypeSchema(segment_obj)
             changed = changed or schema_changed
     
+            # If parameters were cached, restore them
             cached_params = self._runtime_param_cache.pop(key, None)
             if cached_params:
                 restored = self._restoreSegmentUserParams(segment_obj, cached_params)
                 changed = changed or restored
     
+            # Update label for segment object based on source object and edge index
             new_label = DuctSegment.labelFor(source_obj, edge_ref.local_index)
             if segment_obj.Label != new_label:
                 segment_obj.Label = new_label
                 changed = True
     
+        # Remove old segments
         for segment_obj in list(existing_segments.values()):
             if segment_obj not in live_objs:
                 seg_key = getattr(segment_obj, "SegmentKey", "")
+                # Cache segment parameters for later restoration during undo
                 if seg_key:
                     self._runtime_param_cache[seg_key] = self._segmentUserParams(segment_obj)
                 self.removeGeometryObject(net, segment_obj)
@@ -2053,35 +2092,6 @@ class DuctNetwork:
         ts = max(0.0, float(trim_entry.get("start", 0.0) or 0.0))
         te = max(0.0, float(trim_entry.get("end", 0.0) or 0.0))
         return ts, te
-        
-    @staticmethod
-    def computeTrimmedSegmentPoints(start_point, end_point, trim_start, trim_end):
-        sp = FreeCAD.Vector(*start_point) if not hasattr(start_point, "x") else FreeCAD.Vector(start_point)
-        ep = FreeCAD.Vector(*end_point) if not hasattr(end_point, "x") else FreeCAD.Vector(end_point)
-    
-        vec = ep - sp
-        raw_length = vec.Length
-    
-        if raw_length <= 1e-9:
-            return sp, ep, 0.0, 0.0, 0.0
-    
-        direction = FreeCAD.Vector(vec)
-        direction.normalize()
-    
-        ts = max(0.0, float(trim_start or 0.0))
-        te = max(0.0, float(trim_end or 0.0))
-    
-        max_total = max(0.0, raw_length - 1e-9)
-        if ts + te > max_total:
-            scale = max_total / (ts + te) if (ts + te) > 0 else 0.0
-            ts *= scale
-            te *= scale
-    
-        eff_sp = sp + direction * ts
-        eff_ep = ep - direction * te
-        eff_len = (eff_ep - eff_sp).Length
-    
-        return eff_sp, eff_ep, ts, te, eff_len
         
 
 class DuctNetworkViewProvider:
