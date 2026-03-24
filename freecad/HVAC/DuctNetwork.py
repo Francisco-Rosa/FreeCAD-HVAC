@@ -1690,11 +1690,13 @@ class DuctNetwork:
         segment_map = self.collectSegmentObjects(net)
     
         for node_id in parser.nodes():
+            # Get node analysis
             analysis = parser.node_analysis(node_id)
             degree = int(analysis.get("degree", 0))
             if degree <= 0:
                 continue
     
+            # Run classification for identifying junction family
             family = hvaclib.classify_junction_family(analysis)
             point = analysis["point"]
             node_key_tuple = analysis["node_key"]
@@ -1711,7 +1713,6 @@ class DuctNetwork:
                 analysis["edge_refs"],
                 segment_map=segment_map,
             )
-            
             connected_ports = [
                 {
                     "edge_key": p.edge_key,
@@ -1726,7 +1727,8 @@ class DuctNetwork:
                 }
                 for p in port_objs
             ]
-    
+            
+            # Build analysis JSON for the junction
             analysis_json = json.dumps(
                 {
                     "degree": degree,
@@ -1753,6 +1755,7 @@ class DuctNetwork:
     
             junction_obj = existing_junctions.get(node_key)
     
+            # If junction does not exist, create a new one
             if junction_obj is None:
                 junction_obj = DuctJunction.create(
                     doc,
@@ -1764,33 +1767,36 @@ class DuctNetwork:
                     center_point=point,
                     degree=degree,
                 )
-    
+                # Get and set default segment properties from default library
                 default_lib_id = default_lib.id
                 default_type_id = hvaclib.default_junction_type_id(family)
-    
                 if hasattr(junction_obj, "LibraryId"):
                     junction_obj.LibraryId = default_lib_id
                 if hasattr(junction_obj, "TypeId"):
                     junction_obj.TypeId = default_type_id
     
                 changed = True
-    
+                
+                # If source object is marked as hidden, hide junction geometry
                 if self._hidden_source_names:
                     self._setGeometryVisibilityDeferred(junction_obj, False)
                 else:
                     self._setGeometryVisibilityDeferred(junction_obj, True)
     
+            # Add junction to geometry folder if not already present
             if junction_obj not in geometry.OutList:
                 geometry.addObject(junction_obj)
                 changed = True
     
             live_objs.add(junction_obj)
     
+            # Get library and type IDs, setting defaults if not present
             library_id = getattr(junction_obj, "LibraryId", "") or default_lib.id
             type_id = getattr(junction_obj, "TypeId", "")
             if not type_id:
                 type_id = hvaclib.default_junction_type_id(family)
-    
+            
+            # Update metadata based on updated data
             meta_changed = junction_obj.Proxy.updateMetadata(
                 junction_obj,
                 owner=net,
@@ -1806,15 +1812,18 @@ class DuctNetwork:
                 analysis_json=analysis_json,
             )
             changed = changed or meta_changed
-    
+            
+            # Update property schema based on type ID and library ID
             schema_changed = junction_obj.Proxy.applyTypeSchema(junction_obj)
             changed = changed or schema_changed
     
+            # Update label for segment object based on source object and edge index
             new_label = DuctJunction.labelFor(family, node_id)
             if junction_obj.Label != new_label:
                 junction_obj.Label = new_label
                 changed = True
     
+        # Remove old junctions
         for junction_obj in list(existing_junctions.values()):
             if junction_obj not in live_objs:
                 self.removeGeometryObject(net, junction_obj)
