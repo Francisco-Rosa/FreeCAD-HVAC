@@ -9,7 +9,14 @@
   },
   "properties": [
     {
-      "name": "RunTrimLength",
+      "name": "RunTrimLengthA",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Trim length for the main run ports",
+      "default": 100.0
+    },
+    {
+      "name": "RunTrimLengthB",
       "prop_type": "App::PropertyLength",
       "group": "Dimensions",
       "description": "Trim length for the main run ports",

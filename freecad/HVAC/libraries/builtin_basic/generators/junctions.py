@@ -364,8 +364,9 @@ def build_tee(context):
     run_hint = max(run_a_hint, run_b_hint)
     branch_hint = _section_size_hint(api, branch)
 
-    run_trim = _safe_trim(props.get("RunTrimLength", 0.0), 0.5 * run_hint)
-    branch_trim = _safe_trim(props.get("BranchTrimLength", 0.0), 0.5 * branch_hint)
+    run_trim_a_sug = _safe_trim(props.get("RunTrimLengthA", 0.0), 0.5 * run_hint)
+    run_trim_b_sug = _safe_trim(props.get("RunTrimLengthB", 0.0), 0.5 * run_hint)
+    branch_trim_sug = _safe_trim(props.get("BranchTrimLength", 0.0), 0.5 * branch_hint)
     inner_inset = float(props.get("CenterInset", 0.0) or 0.0)
     if inner_inset <= 1e-6:
         inner_inset = max(0.05 * max(run_hint, branch_hint), 1.0)
@@ -383,24 +384,27 @@ def build_tee(context):
     angle_sine = math.sin(angle)
     angle_cosine = math.cos(angle)
     if angle_sine > 0.1:
-        scale = angle_cosine / angle_sine
+        scale_run = angle_cosine / angle_sine
+        min_branch_trim = abs(max(run_a_hint, run_b_hint) / 2 / angle_sine) + abs(branch_hint / 2 * angle_sine / angle_cosine)
+    else:
+        scale_run = 0.0
+        min_branch_trim = 0.0
     # adjust trim to account for branch duct size
     if run_a_hint >= run_b_hint:
-        pos_a = c1a + api.port_direction(run_a) * (run_trim + branch_hint/2 + run_a_hint/2 * scale)
-        pos_b = c1b + api.port_direction(run_b) * (run_trim + branch_hint/2 - run_b_hint/2 * scale)
+        pos_a = c1a + api.port_direction(run_a) * (run_trim_a_sug + branch_hint/2 + run_a_hint/2 * scale_run)
+        pos_b = c1b + api.port_direction(run_b) * (run_trim_b_sug + branch_hint/2 - run_b_hint/2 * scale_run)
     else:
-        pos_a = c1a + api.port_direction(run_a) * (run_trim + branch_hint/2 - run_a_hint/2 * scale)
-        pos_b = c1b + api.port_direction(run_b) * (run_trim + branch_hint/2 + run_b_hint/2 * scale)
+        pos_a = c1a + api.port_direction(run_a) * (run_trim_a_sug + branch_hint/2 - run_a_hint/2 * scale_run)
+        pos_b = c1b + api.port_direction(run_b) * (run_trim_b_sug + branch_hint/2 + run_b_hint/2 * scale_run)
     run_trim_a = (pos_a - api.port_position(run_a)).Length
     run_trim_b = (pos_b - api.port_position(run_b)).Length
+    branch_trim = max(min_branch_trim, branch_trim_sug)
     port_a = api.copy_port(run_a, position=pos_a)
     port_b = api.copy_port(run_b, position=pos_b)
     if run_a_hint >= run_b_hint:
-        # mid_pos = api.port_position(port_a) - api.port_direction(port_a) * (run_trim + branch_hint)
         mid_pos = c1a - api.port_direction(port_a) * branch_hint
         port_mid = api.copy_port(port_a, position=mid_pos)
     else:
-        # mid_pos = api.port_position(port_b) - api.port_direction(port_b) * (run_trim + branch_hint)
         mid_pos = c1b - api.port_direction(port_b) * branch_hint
         port_mid = api.copy_port(port_b, position=mid_pos)
     section_a = api.make_section_wire_from_port(port_a)
