@@ -1791,6 +1791,10 @@ class DuctNetwork:
             return
         
         self._sync_scheduled = True
+        if initial_sync:
+            FreeCAD.Console.PrintMessage("HVAC - Sync requested (Initial sync).\n")
+        else:
+            FreeCAD.Console.PrintMessage("HVAC - Sync requested.\n")
         QtCore.QTimer.singleShot(0, lambda o=obj: self._runDeferredSync(o))
     
     def _runDeferredSync(self, obj):
@@ -1809,21 +1813,38 @@ class DuctNetwork:
         self._sync_in_progress = True
         try:
             parser = hvaclib.DuctNetworkParser(list(base_folder.OutList))
-    
-            # Stage 1: junctions first so their execute() writes ConnectionLengthsJson (Except for initial sync) 
-            # Do not run junction update on initial sync since edge tags will not be updated
-            if not self._initial_sync:  
+            FreeCAD.Console.PrintMessage("HVAC - Sync - Duct network parsed.\n")
+            
+            if self._initial_sync:  
+                # Do not run junction update on initial sync since edge tags will not be updated in segments
+                # Doing so will clear all junctions since edges could not be found
+                
+                # Stage 1: Sync segments first to update edge data after document reload
+                self.syncSegments(obj, parser, initial_sync=self._initial_sync)
+                obj.Document.recompute()
+                
+                # Stage 2: Sync junctions, so that their execute() writes ConnectionLengthsJson
+                self.syncJunctions(obj, parser)
+                obj.Document.recompute()
+                
+                # Stage 3: Sync segments which consume the junction trim data
+                self.syncSegments(obj, parser, initial_sync=False)
+                obj.Document.recompute()
+                
+            else:  
+                # Stage 1: Sync junctions first, so that their execute() writes ConnectionLengthsJson
                 changed_junctions = self.syncJunctions(obj, parser)
+                FreeCAD.Console.PrintMessage("HVAC - Sync - syncJunctions called.\n")
                 if changed_junctions:
                     obj.Document.recompute()
     
-            # Stage 2: segments consume the junction trim data
-            changed_segments = self.syncSegments(obj, parser, initial_sync=self._initial_sync)
-    
+                # Stage 2: Sync segments which consume the junction trim data
+                changed_segments = self.syncSegments(obj, parser, initial_sync=False)
+                FreeCAD.Console.PrintMessage("HVAC - Sync - syncSegments called.\n")
+                if changed_segments:
+                    obj.Document.recompute()
+                    
             self._initial_sync = False
-    
-            if changed_segments:
-                obj.Document.recompute()
     
         except Exception as err:
             FreeCAD.Console.PrintError(traceback.format_exc())
