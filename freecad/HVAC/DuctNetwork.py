@@ -1727,7 +1727,6 @@ class DuctNetwork:
                 }
                 for p in port_objs
             ]
-            
             # Build analysis JSON for the junction
             analysis_json = json.dumps(
                 {
@@ -1973,14 +1972,15 @@ class DuctNetwork:
                     changed = proxy.applyTypeSchema(obj) or changed
                 except Exception:
                     pass
-
+            
+            # Touch the modified obects for recomputation
             try:
                 obj.touch()
             except Exception:
                 pass
 
         if changed:
-            doc.recompute()
+            # Sync all affected networks
             for net in nets_to_sync:
                 proxy = getattr(net, "Proxy", None)
                 if proxy:
@@ -2178,7 +2178,7 @@ def create_new_duct_network(name="DuctNetwork", set_active=True):
     """Create new duct network"""
     # Create new duct netowork and create default folders
     net = DuctNetwork.createObject(name)
-    print("HVAC - New DuctNetwork created")
+    FreeCAD.Console.PrintMessage("HVAC - New DuctNetwork created")
     if set_active:
         # Set as active network and enable edit mode
         activate_duct_network(net, set_edit=False)
@@ -2196,7 +2196,7 @@ def modify_duct_network(net):
     """Modify the selected HVAC duct network object"""
     # Set as active network and enable edit mode
     activate_duct_network(net, set_edit=True)
-    print("HVAC - Edit DuctNetwork completed")
+    FreeCAD.Console.PrintMessage("HVAC - Edit DuctNetwork completed")
 
 def delete_duct_networks(nets, remove_internal_only=False):
     """Delete the selected HVAC duct network object"""
@@ -2221,4 +2221,4 @@ def delete_duct_networks(nets, remove_internal_only=False):
         if not remove_internal_only:
             doc.removeObject(net.Name)
     hvaclib.refreshState()
-    print("HVAC - Deleted selected {} DuctNetwork(s)".format(len(nets)))
+    FreeCAD.Console.PrintMessage("HVAC - Deleted selected {} DuctNetwork(s)".format(len(nets)))
