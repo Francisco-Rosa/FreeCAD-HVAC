@@ -838,30 +838,6 @@ class DuctNetworkParser:
             return "cross"
         return "manifold"
 
-    def junction_nodes(self):
-        #TODO
-        out = []
-        for nid in self.nodes():
-            d = self.node_degree(nid)
-            if d >= 2:
-                out.append(nid)
-        return out
-        
-    def node_key(self, node_id):
-        return self._key(self.node_point[node_id])
-
-    def node_degree(self, node_id):
-        if self.graph is None:
-            raise RuntimeError("Graph not built. Call build_graph() first.")
-        return int(self.graph.degree[node_id])
-
-    def node_edges(self, node_id):
-        refs = []
-        for eref, (u, v) in self.edge_u_v.items():
-            if u == node_id or v == node_id:
-                refs.append(eref)
-        return refs
-
     def node_vectors(self, node_id):
         p = FreeCAD.Vector(*self.node_xyz(node_id))
         out = []
