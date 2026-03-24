@@ -707,12 +707,8 @@ class DuctNetworkParser:
         Collapse points by tolerance using quantization.
         Points within ~tol map to the same key.
         """
-        t = float(self.tol)
-        return (
-            int(round(p[0] / t)),
-            int(round(p[1] / t)),
-            int(round(p[2] / t)),
-        )
+        from .DuctNetwork import DuctJunction
+        return DuctJunction.makeSimpleKey(p)
 
     def _get_node_id(self, p):
         k = self._key(p)
@@ -807,7 +803,23 @@ class DuctNetworkParser:
     
     def node_key(self, node_id):
         """Return persistent snapped-key for a node."""
-        return self._key(self.node_point[node_id])
+        edge_refs = self.node_edges(node_id)
+        
+        if len(edge_refs) == 0:
+            return self._key(self.node_point[node_id])
+        
+        elif len(edge_refs) == 1:
+            u, v = self.edge_u_v[edge_refs[0]]
+            if node_id == u:
+                label = 's'
+            elif node_id == v:
+                label = 'e'
+            else:
+                return self._key(self.node_point[node_id])
+            return edge_refs[0].tag + "_" + label
+        
+        else:
+            return "_".join([ref.tag for ref in edge_refs])
     
     def node_degree(self, node_id):
         if self.graph is None:

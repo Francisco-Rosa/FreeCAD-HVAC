@@ -851,9 +851,18 @@ class DuctJunction:
         return bool(obj) and hasattr(obj, "Proxy") and isinstance(obj.Proxy, DuctJunction)
 
     @staticmethod
-    def makeKey(node_key):
-        return "NODE:{}_{}_{}".format(node_key[0], node_key[1], node_key[2])
-
+    def makeSimpleKey(p):
+        """
+        Collapse points by tolerance using quantization.
+        Points within ~tol map to the same key.
+        """
+        t = 1e-6
+        return (
+            int(round(p[0] / t)),
+            int(round(p[1] / t)),
+            int(round(p[2] / t)),
+        )
+    
     @staticmethod
     def labelFor(family, node_id):
         family_label = str(family).capitalize() if family else "Junction"
@@ -1674,7 +1683,7 @@ class DuctNetwork:
         
         return changed
         
-    def syncJunctions(self, net, parser):
+    def syncJunctions(self, net, parser, initial_sync=False):
         """
         Synchronize derived DuctJunction objects with parser nodes.
     
@@ -1705,8 +1714,7 @@ class DuctNetwork:
             # Run classification for identifying junction family
             family = hvaclib.classify_junction_family(analysis)
             point = analysis["point"]
-            node_key_tuple = analysis["node_key"]
-            node_key = DuctJunction.makeKey(node_key_tuple)
+            node_key = analysis["node_key"]
     
             connected_edge_keys = [
                 edge_ref.tag
@@ -1758,7 +1766,23 @@ class DuctNetwork:
                 }
             )
     
-            junction_obj = existing_junctions.get(node_key)
+            # If initial sync, the tags are regenerated hence find element based on position
+            # Also update the existing junction's key in the dictionary with the modified key
+            if initial_sync:
+                junction_obj = None
+                matched_old_key = None
+                for old_key, junc in existing_junctions.items():
+                    if DuctJunction.makeSimpleKey(junc.CenterPoint) == DuctJunction.makeSimpleKey(point):
+                        junction_obj = junc
+                        matched_old_key = old_key
+                        break
+    
+                if matched_old_key is not None and matched_old_key != node_key:
+                    existing_junctions.pop(matched_old_key, None)
+                    existing_junctions[node_key] = junction_obj
+            # Else find element based on key
+            else:
+                junction_obj = existing_junctions.get(node_key)
     
             # If junction does not exist, create a new one
             if junction_obj is None:
@@ -1876,7 +1900,7 @@ class DuctNetwork:
                 obj.Document.recompute()
                 
                 # Stage 2: Sync junctions, so that their execute() writes ConnectionLengthsJson
-                self.syncJunctions(obj, parser)
+                self.syncJunctions(obj, parser, initial_sync=self._initial_sync)
                 obj.Document.recompute()
                 
                 # Stage 3: Sync segments which consume the junction trim data
@@ -1890,7 +1914,7 @@ class DuctNetwork:
                     obj.Document.recompute()
                     
                 # Stage 2: Sync junctions, for creating ports; so that their execute() writes ConnectionLengthsJson
-                changed_junctions = self.syncJunctions(obj, parser)
+                changed_junctions = self.syncJunctions(obj, parser, initial_sync=False)
                 if changed_junctions or force_recompute:
                     obj.Document.recompute()
     
