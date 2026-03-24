@@ -9,18 +9,25 @@
   },
   "properties": [
     {
-      "name": "RunTrimLength",
+      "name": "TrimLengthA",
       "prop_type": "App::PropertyLength",
       "group": "Dimensions",
-      "description": "Trim length for run ports",
-      "default": 120.0
+      "description": "Trim length for port A",
+      "default": 100.0
     },
     {
-      "name": "BranchTrimLength",
+      "name": "TrimLengthB",
       "prop_type": "App::PropertyLength",
       "group": "Dimensions",
-      "description": "Trim length for branch port",
-      "default": 120.0
+      "description": "Trim length for port B",
+      "default": 100.0
+    },
+    {
+      "name": "TrimLengthC",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Trim length for port C",
+      "default": 100.0
     }
   ],
   "generator": {

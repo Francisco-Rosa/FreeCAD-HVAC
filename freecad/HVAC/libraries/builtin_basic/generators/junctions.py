@@ -22,6 +22,7 @@
 ################################################################################
 
 import math
+from turtle import position
 import FreeCAD
 import Part
 
@@ -450,35 +451,45 @@ def build_wye(context):
 
     if len(ports) != 3:
         raise ValueError("Wye requires exactly 3 ports")
+        
+    port_a = ports[0]
+    port_b = ports[1]
+    port_c = ports[2]
+    
+    a_pos = api.port_position(port_a)
+    b_pos = api.port_position(port_b)
+    c_pos = api.port_position(port_c)
+    center = (a_pos + b_pos + c_pos) / 3.0
+    
+    a_size_hint = _section_size_hint(api, port_a)
+    b_size_hint = _section_size_hint(api, port_b)
+    c_size_hint = _section_size_hint(api, port_c)
+    
+    a_dir = api.port_direction(port_a)
+    b_dir = api.port_direction(port_b)
+    c_dir = api.port_direction(port_c)
 
-    run_a_idx, run_b_idx, branch_idx = _find_run_pair(api, ports, angle_tol_deg=60.0)
+    a_trim_sug = _safe_trim(props.get("TrimLengthA", 0.0), 0.5 * a_size_hint)
+    b_trim_sug = _safe_trim(props.get("TrimLengthB", 0.0), 0.5 * b_size_hint)
+    c_trim_sug = _safe_trim(props.get("TrimLengthC", 0.0), 0.5 * c_size_hint)
+    
+    port_a_end = api.copy_port(port_a, position=a_pos + a_dir * a_trim_sug)
+    port_b_end = api.copy_port(port_b, position=b_pos + b_dir * b_trim_sug)
+    port_c_end = api.copy_port(port_c, position=c_pos + c_dir * c_trim_sug)
 
-    run_a = ports[run_a_idx]
-    run_b = ports[run_b_idx]
-    branch = ports[branch_idx]
+    leg_a = _make_leg_to_center(api, port_a, center, a_trim_sug, inner_inset=0)
+    leg_b = _make_leg_to_center(api, port_b, center, b_trim_sug, inner_inset=0)
+    leg_c = _make_leg_to_center(api, port_c, center, c_trim_sug, inner_inset=0)
 
-    run_hint = max(_section_size_hint(api, run_a), _section_size_hint(api, run_b))
-    branch_hint = _section_size_hint(api, branch)
-
-    run_trim = _safe_trim(props.get("RunTrimLength", 0.0), 0.5 * run_hint)
-    branch_trim = _safe_trim(props.get("BranchTrimLength", 0.0), 0.5 * branch_hint)
-    inner_inset = float(props.get("CenterInset", 0.0) or 0.0)
-    if inner_inset <= 1e-6:
-        inner_inset = max(0.05 * max(run_hint, branch_hint), 1.0)
-
-    run_leg_a = _make_leg_to_center(api, run_a, center, run_trim, inner_inset=inner_inset)
-    run_leg_b = _make_leg_to_center(api, run_b, center, run_trim, inner_inset=inner_inset)
-    branch_leg = _make_leg_to_center(api, branch, center, branch_trim, inner_inset=inner_inset)
-
-    shape = api.fuse_shapes([run_leg_a, run_leg_b, branch_leg])
+    shape = api.fuse_shapes([leg_a, leg_b, leg_c])
 
     return {
         "shape": shape,
         "connection_lengths": api.build_trim_rec_from_port_lengths(
             [
-                (run_a, run_trim),
-                (run_b, run_trim),
-                (branch, branch_trim),
+                (port_a, a_trim_sug),
+                (port_b, b_trim_sug),
+                (port_c, c_trim_sug),
             ]
         ),
     }
