@@ -1024,6 +1024,25 @@ class DuctNetwork:
             obj.DefaultSegmentProfile = hvaclib.default_segment_profile_for_library(
                 getattr(obj, "DefaultLibraryId", "")
             )
+            
+        if not hasattr(obj, "DefaultAttachment"):
+            obj.addProperty(
+                "App::PropertyEnumeration",
+                "DefaultAttachment",
+                "HVAC",
+                "Default attachment for newly created duct segments"
+            )
+            obj.DefaultAttachment = list(hvaclib.ATTACH_MAP.keys())
+            obj.DefaultAttachment = "Center"
+        
+        if not hasattr(obj, "DefaultOffset"):
+            obj.addProperty(
+                "App::PropertyVector",
+                "DefaultOffset",
+                "HVAC",
+                "Default offset for newly created duct segments"
+            )
+            obj.DefaultOffset = FreeCAD.Vector(0, 0, 0)
     
     @staticmethod
     def getDefaultLibraryId(net):
@@ -1052,7 +1071,14 @@ class DuctNetwork:
 
         lib_id = DuctNetwork.getDefaultLibraryId(net)
         return hvaclib.default_segment_profile_for_library(lib_id)
+        
+    @staticmethod
+    def getDefaultAttachment(net):
+        return str(getattr(net, "DefaultAttachment", "Center"))
 
+    @staticmethod
+    def getDefaultOffset(net):
+        return FreeCAD.Vector(getattr(net, "DefaultOffset", FreeCAD.Vector(0, 0, 0)))
 
     ## Library defaults management
     
@@ -1064,6 +1090,8 @@ class DuctNetwork:
         """
         library_id = DuctNetwork.getDefaultLibraryId(net)
         profile = DuctNetwork.getDefaultSegmentProfile(net)
+        attachement = DuctNetwork.getDefaultAttachment(net)
+        segment = DuctNetwork.getDefaultOffset(net)
 
         valid_profiles = hvaclib.segment_profiles_for_library(library_id)
         if profile not in valid_profiles:
@@ -1073,15 +1101,23 @@ class DuctNetwork:
             library_id,
             profile,
         )
-
+        
         return {
             "library_id": library_id,
             "profile": profile,
             "type_id": type_id,
+            "attachment": attachement,
+            "offset": segment,
         }
 
     @staticmethod
-    def applyNetworkTypeDefaults(net, library_id="", segment_profile=""):
+    def applyNetworkTypeDefaults(
+        net, 
+        library_id=None,
+        segment_profile=None,
+        default_attachment=None,
+        default_offset=None
+    ):
         """
         Apply network-level default type settings.
         """
@@ -1108,6 +1144,17 @@ class DuctNetwork:
                 if getattr(net, "DefaultSegmentProfile", "") != fallback_profile:
                     net.DefaultSegmentProfile = fallback_profile
                     changed = True
+                    
+        if default_attachment is not None and getattr(net, "DefaultAttachment", "Center") != default_attachment:
+            net.DefaultAttachment = default_attachment
+            changed = True
+    
+        if default_offset is not None:
+            cur = FreeCAD.Vector(getattr(net, "DefaultOffset", FreeCAD.Vector(0, 0, 0)))
+            new = FreeCAD.Vector(default_offset)
+            if cur != new:
+                net.DefaultOffset = new
+                changed = True
 
         if changed and net.Document:
             try:
@@ -1173,6 +1220,16 @@ class DuctNetwork:
                 )
                 if hasattr(obj, "AnalysisJson") and obj.AnalysisJson != analysis_json:
                     obj.AnalysisJson = analysis_json
+                    changed = True
+                    
+                default_attachment = DuctNetwork.getDefaultAttachment(net)
+                if getattr(obj, "Attachment", "Center") != default_attachment:
+                    obj.Attachment = default_attachment
+                    changed = True
+                
+                default_offset = DuctNetwork.getDefaultOffset(net)
+                if FreeCAD.Vector(getattr(obj, "Offset", FreeCAD.Vector(0, 0, 0))) != default_offset:
+                    obj.Offset = default_offset
                     changed = True
 
             elif DuctJunction.isDuctJunction(obj):
@@ -1586,6 +1643,10 @@ class DuctNetwork:
                     segment_obj.Profile = defaults["profile"]
                 if hasattr(segment_obj, "TypeId"):
                     segment_obj.TypeId = defaults["type_id"]
+                if hasattr(segment_obj, "Attachment"):
+                    segment_obj.Attachment = defaults["attachment"]
+                if hasattr(segment_obj, "Offset"):
+                    segment_obj.Offset = defaults["offset"]
                 
                 changed = True
     

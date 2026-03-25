@@ -215,12 +215,87 @@ class TaskPanelNetworkTypeDefaults:
         # )
         # note.setWordWrap(True)
         # layout.addWidget(note)
+        
+        layout.addWidget(self._makeSeparator())
+        
+        layout.addWidget(QtWidgets.QLabel(
+            translate("HVAC_NetworkTypeDefaults", "Default attachment:")
+        ))
+        layout.addLayout(self._buildAttachmentGrid())
+        
+        layout.addWidget(self._makeSeparator())
+        
+        layout.addWidget(QtWidgets.QLabel(
+            translate("HVAC_NetworkTypeDefaults", "Default offset:")
+        ))
+        layout.addLayout(self._buildOffsetEditors())
 
         self._populateLibraries()
         self._loadFromNetwork()
 
         self.library_combo.currentIndexChanged.connect(self._refreshProfiles)
 
+    def _makeSeparator(self):
+        line = QtWidgets.QFrame()
+        line.setFrameShape(QtWidgets.QFrame.HLine)
+        line.setFrameShadow(QtWidgets.QFrame.Sunken)
+        return line
+        
+    def _buildAttachmentGrid(self):
+        grid = QtWidgets.QGridLayout()
+        grid.setContentsMargins(0, 0, 0, 0)
+        grid.setHorizontalSpacing(1)
+        grid.setVerticalSpacing(1)
+    
+        self.attachment_group = QtWidgets.QButtonGroup(self.form)
+        self.attachment_group.setExclusive(True)
+        self._attachment_buttons = {}
+    
+        items = [
+            ("TopLeft",       "↖", 0, 0),
+            ("TopCenter",     "↑", 0, 1),
+            ("TopRight",      "↗", 0, 2),
+            ("CenterLeft",    "←", 1, 0),
+            ("Center",        "•", 1, 1),
+            ("CenterRight",   "→", 1, 2),
+            ("BottomLeft",    "↙", 2, 0),
+            ("BottomCenter",  "↓", 2, 1),
+            ("BottomRight",   "↘", 2, 2),
+        ]
+    
+        for key, text, r, c in items:
+            btn = QtWidgets.QToolButton()
+            btn.setText(text)
+            btn.setCheckable(True)
+            btn.setToolTip(key)
+            btn.setFixedSize(28, 24)
+            self.attachment_group.addButton(btn)
+            self._attachment_buttons[key] = btn
+            grid.addWidget(btn, r, c)
+    
+        return grid
+        
+    def _buildOffsetEditors(self):
+        row = QtWidgets.QGridLayout()
+
+        self.offset_x = QtWidgets.QDoubleSpinBox()
+        self.offset_y = QtWidgets.QDoubleSpinBox()
+        self.offset_z = QtWidgets.QDoubleSpinBox()
+
+        for w in (self.offset_x, self.offset_y, self.offset_z):
+            w.setDecimals(3)
+            w.setRange(-1e6, 1e6)
+            w.setSingleStep(10.0)
+
+        row.addWidget(QtWidgets.QLabel("X"), 0, 0)
+        row.addWidget(self.offset_x, 0, 1)
+        row.addWidget(QtWidgets.QLabel("Y"), 1, 0)
+        row.addWidget(self.offset_y, 1, 1)
+        row.addWidget(QtWidgets.QLabel("Z"), 2, 0)
+        row.addWidget(self.offset_z, 2, 1)
+    
+        return row
+    
     def _populateLibraries(self):
         reg = hvaclib.get_hvac_library_registry()
         self.library_combo.clear()
@@ -254,7 +329,7 @@ class TaskPanelNetworkTypeDefaults:
             idx = self.library_combo.findData(lib_id)
             if idx >= 0:
                 self.library_combo.setCurrentIndex(idx)
-
+                
         self._refreshProfiles()
 
         profile = getattr(self.network_obj, "DefaultSegmentProfile", "")
@@ -262,6 +337,30 @@ class TaskPanelNetworkTypeDefaults:
             idx = self.profile_combo.findData(profile)
             if idx >= 0:
                 self.profile_combo.setCurrentIndex(idx)
+                
+        attachment = str(getattr(self.network_obj, "DefaultAttachment", "Center"))
+        if attachment in self._attachment_buttons:
+            self._attachment_buttons[attachment].setChecked(True)
+        elif "Center" in self._attachment_buttons:
+            self._attachment_buttons["Center"].setChecked(True)
+        
+        offset = FreeCAD.Vector(getattr(self.network_obj, "DefaultOffset", FreeCAD.Vector(0, 0, 0)))
+        self.offset_x.setValue(offset.x)
+        self.offset_y.setValue(offset.y)
+        self.offset_z.setValue(offset.z)
+        
+    def _selectedAttachment(self):
+        for key, btn in self._attachment_buttons.items():
+            if btn.isChecked():
+                return key
+        return "Center"
+    
+    def _currentOffset(self):
+        return FreeCAD.Vector(
+            self.offset_x.value(),
+            self.offset_y.value(),
+            self.offset_z.value(),
+        )
 
     def accept(self):
         if self.apply_callback:
@@ -269,6 +368,8 @@ class TaskPanelNetworkTypeDefaults:
                 self.network_obj,
                 library_id=self.library_combo.currentData(),
                 segment_profile=self.profile_combo.currentData(),
+                default_attachment=self._selectedAttachment(),
+                default_offset=self._currentOffset(),
             )
         return True
 
