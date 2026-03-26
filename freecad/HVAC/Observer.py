@@ -42,7 +42,11 @@ class NewSketchObserver:
         self.created_sketch = None
         self._finished = False
         self._seen_dialog = False
-
+        
+        # Suspend sync to prevent transient sync requests while sketching
+        if self.network_obj and hasattr(self.network_obj, "Proxy") and self.network_obj.Proxy:
+            self.network_obj.Proxy.suspendSync()
+            
         self._timer = QtCore.QTimer()
         self._timer.setInterval(200)
         self._timer.timeout.connect(self.check_finished)
@@ -78,6 +82,9 @@ class NewSketchObserver:
             self.callback(self.network_obj, self.created_sketch)
         finally:
             FreeCAD.removeDocumentObserver(self)
+            # Resume sync after sketching is done and request sync
+            if self.network_obj and hasattr(self.network_obj, "Proxy") and self.network_obj.Proxy:
+                self.network_obj.Proxy.resumeSync(self.network_obj, request_sync=True)
 
 
 class NewDraftLineObserver:
@@ -92,6 +99,10 @@ class NewDraftLineObserver:
         self.created_objects = []
         self._finished = False
         self._seen_dialog = False
+        
+        # Suspend sync to prevent transient sync requests while creating lines
+        if self.network_obj and hasattr(self.network_obj, "Proxy") and self.network_obj.Proxy:
+            self.network_obj.Proxy.suspendSync()
 
         self._timer = QtCore.QTimer()
         self._timer.setInterval(200)
@@ -129,11 +140,14 @@ class NewDraftLineObserver:
         try:
             self.callback(self.network_obj, self.created_objects)
         finally:
-            # Switch back workbench to HVAC
-            Gui.activateWorkbench(hvaclib.WORKBENCH_NAME)
             # Always remove observer after one use
             FreeCAD.removeDocumentObserver(self)
-
+            # Resume sync after creation is done and request sync
+            if self.network_obj and hasattr(self.network_obj, "Proxy") and self.network_obj.Proxy:
+                self.network_obj.Proxy.resumeSync(self.network_obj, request_sync=True)
+            # Switch back workbench to HVAC
+            Gui.activateWorkbench(hvaclib.WORKBENCH_NAME)
+                
 
 class DuctNetworkChangeObserver:
     """
@@ -288,8 +302,10 @@ class DuctNetworkChangeObserver:
                 except Exception:
                     pass
             
-            proxy.setBaseObjectEditing(net, obj, False)
-            proxy.requestSync(net)
+            proxy.setBaseObjectEditing(net, obj, False)            
+            # Resume sync after editing is done and request sync
+            if net and hasattr(net, "Proxy") and net.Proxy:
+                net.Proxy.resumeSync(net, request_sync=True)
 
     def _checkEditedBaseObject(self):
         """
@@ -336,3 +352,7 @@ class DuctNetworkChangeObserver:
         proxy = getattr(net, "Proxy", None)
         if proxy:
             proxy.setBaseObjectEditing(net, obj, True)
+            
+        # Suspend sync to prevent transient sync requests while editing
+        if net and hasattr(net, "Proxy") and net.Proxy:
+            net.Proxy.suspendSync()

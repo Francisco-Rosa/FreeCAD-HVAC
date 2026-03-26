@@ -927,6 +927,7 @@ class DuctNetwork:
         self._initial_sync = True
         self._sync_in_progress = False
         self._sync_scheduled = False
+        self._sync_suspended = False
         self._hidden_source_names = set()
         self.setProperties(obj)
         
@@ -945,6 +946,7 @@ class DuctNetwork:
         self._initial_sync = True
         self._sync_in_progress = False
         self._sync_scheduled = False
+        self._sync_suspended = False
         self._hidden_source_names = set()
         self.setProperties(obj)
         self.requestSync(obj, initial_sync=True)
@@ -1923,7 +1925,10 @@ class DuctNetwork:
                             
     def requestSync(self, obj, initial_sync=None, force_recompute=False):
         if initial_sync is not None:
-            self._initial_sync = bool(initial_sync)
+            self._initial_sync = bool(initial_sync)            
+        
+        if self._sync_suspended:
+                return
         
         if self._sync_scheduled:
             return
@@ -1934,6 +1939,14 @@ class DuctNetwork:
         else:
             FreeCAD.Console.PrintMessage("HVAC - Sync requested.\n")
         QtCore.QTimer.singleShot(0, lambda o=obj: self._runDeferredSync(o, force_recompute))
+        
+    def suspendSync(self):
+        self._sync_suspended = True
+    
+    def resumeSync(self, obj, request_sync=True):
+        self._sync_suspended = False
+        if request_sync == True:
+            self.requestSync(obj)
     
     def _runDeferredSync(self, obj, force_recompute=False):
         self._sync_scheduled = False
