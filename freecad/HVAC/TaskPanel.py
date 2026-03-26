@@ -206,6 +206,14 @@ class TaskPanelNetworkTypeDefaults:
         ))
         self.profile_combo = QtWidgets.QComboBox()
         layout.addWidget(self.profile_combo)
+        
+        layout.addWidget(self._makeSeparator())
+        
+        layout.addWidget(QtWidgets.QLabel(
+            translate("HVAC_NetworkTypeDefaults", "Default dimensions:")
+        ))
+        
+        layout.addLayout(self._buildDimensionEditors())
 
         # note = QtWidgets.QLabel(
         #     translate(
@@ -241,6 +249,31 @@ class TaskPanelNetworkTypeDefaults:
         line.setFrameShadow(QtWidgets.QFrame.Sunken)
         return line
         
+    def _buildDimensionEditors(self):
+        row = QtWidgets.QGridLayout()
+        row.setContentsMargins(0, 0, 0, 0)
+    
+        self.default_diameter = QtWidgets.QDoubleSpinBox()
+        self.default_height = QtWidgets.QDoubleSpinBox()
+        self.default_width = QtWidgets.QDoubleSpinBox()
+    
+        for w in (self.default_diameter, self.default_width, self.default_height):
+            w.setDecimals(3)
+            w.setRange(0.0, 1e9)
+            w.setSingleStep(10.0)
+            w.setSuffix(" mm")
+    
+        row.addWidget(QtWidgets.QLabel("Diameter"), 0, 0)
+        row.addWidget(self.default_diameter, 0, 1)
+    
+        row.addWidget(QtWidgets.QLabel("Height"), 1, 0)
+        row.addWidget(self.default_height, 1, 1)
+    
+        row.addWidget(QtWidgets.QLabel("Width"), 2, 0)
+        row.addWidget(self.default_width, 2, 1)
+    
+        return row
+    
     def _buildAttachmentGrid(self):
         grid = QtWidgets.QGridLayout()
         grid.setContentsMargins(0, 0, 0, 0)
@@ -338,6 +371,10 @@ class TaskPanelNetworkTypeDefaults:
             if idx >= 0:
                 self.profile_combo.setCurrentIndex(idx)
                 
+        self.default_diameter.setValue(float(getattr(self.network_obj, "DefaultDiameter", 100.0)))
+        self.default_width.setValue(float(getattr(self.network_obj, "DefaultWidth", 100.0)))
+        self.default_height.setValue(float(getattr(self.network_obj, "DefaultHeight", 100.0)))
+                
         attachment = str(getattr(self.network_obj, "DefaultAttachment", "Center"))
         if attachment in self._attachment_buttons:
             self._attachment_buttons[attachment].setChecked(True)
@@ -370,6 +407,9 @@ class TaskPanelNetworkTypeDefaults:
                 segment_profile=self.profile_combo.currentData(),
                 default_attachment=self._selectedAttachment(),
                 default_offset=self._currentOffset(),
+                default_diameter=self.default_diameter.value(),
+                default_width=self.default_width.value(),
+                default_height=self.default_height.value(),
             )
         return True
 

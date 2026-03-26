@@ -119,6 +119,7 @@ class DuctSegment:
         obj.Proxy = self
         self._allow_delete = False
         self.setProperties(obj)
+        self.applyOwnerDefaults(obj, owner)
         self.updateMetadata(
             obj,
             owner=owner,
@@ -248,13 +249,6 @@ class DuctSegment:
             obj.TrimStart = 0.0
         if not obj.TrimEnd:
             obj.TrimEnd = 0.0
-        
-        if not obj.Diameter:
-            obj.Diameter = 100.0
-        if not obj.Width:
-            obj.Width = 100.0
-        if not obj.Height:
-            obj.Height = 100.0
 
         if not getattr(obj, "LibraryId", ""):
             lib = hvaclib.HVACLibraryService.get_active_hvac_library()
@@ -263,19 +257,6 @@ class DuctSegment:
 
         if not getattr(obj, "AnalysisJson", ""):
             obj.AnalysisJson = "{}"
-            
-        if not getattr(obj, "Attachment", ""):
-            obj.Attachment = list(hvaclib.ATTACH_MAP.keys())
-            obj.Attachment = "Center"
-            
-        if not obj.ProfileXAxis:
-            obj.ProfileXAxis = FreeCAD.Vector(0, 0, 0)
-        
-        try:
-            if obj.Offset != FreeCAD.Vector(0, 0, 0):
-                pass
-        except Exception:
-            obj.Offset = FreeCAD.Vector(0, 0, 0)
 
         for prop in (
             "OwnerNetworkName",
@@ -295,7 +276,35 @@ class DuctSegment:
                 obj.setEditorMode(prop, 1)
             except Exception:
                 pass
-
+                
+    def applyOwnerDefaults(self, obj, owner):
+        if owner is None:
+            return
+    
+        try:
+            obj.Attachment = list(hvaclib.ATTACH_MAP.keys())
+            obj.Attachment = str(getattr(owner, "DefaultAttachment", "Center"))
+        except Exception:
+            obj.Attachment = list(hvaclib.ATTACH_MAP.keys())
+            obj.Attachment = "Center"
+    
+        try:
+            obj.Offset = FreeCAD.Vector(getattr(owner, "DefaultOffset", FreeCAD.Vector(0, 0, 0)))
+        except Exception:
+            obj.Offset = FreeCAD.Vector(0, 0, 0)
+    
+        if not getattr(obj, "Diameter", 0):
+            obj.Diameter = float(getattr(owner, "DefaultDiameter", 100.0))
+    
+        if not getattr(obj, "Width", 0):
+            obj.Width = float(getattr(owner, "DefaultWidth", 100.0))
+    
+        if not getattr(obj, "Height", 0):
+            obj.Height = float(getattr(owner, "DefaultHeight", 100.0))
+    
+        if not getattr(obj, "ProfileXAxis", None):
+            obj.ProfileXAxis = FreeCAD.Vector(0, 0, 0)
+                
     def applyTypeSchema(self, obj):
         reg = hvaclib.HVACLibraryService.get_hvac_library_registry()
         lib_id = getattr(obj, "LibraryId", "")
@@ -982,7 +991,7 @@ class DuctNetwork:
                 "HVAC Types",
                 "Default HVAC library for derived geometry"
             )
-
+        
         if "DefaultSegmentProfile" not in obj.PropertiesList:
             obj.addProperty(
                 "App::PropertyString",
@@ -990,35 +999,73 @@ class DuctNetwork:
                 "HVAC Types",
                 "Default segment profile from selected library"
             )
-
-        if not getattr(obj, "DefaultLibraryId", ""):
-            lib = hvaclib.HVACLibraryService.get_active_hvac_library()
-            if lib:
-                obj.DefaultLibraryId = lib.id
-
-        if not getattr(obj, "DefaultSegmentProfile", ""):
-            obj.DefaultSegmentProfile = hvaclib.HVACLibraryService.default_segment_profile_for_library(
-                getattr(obj, "DefaultLibraryId", "")
-            )
-            
-        if not hasattr(obj, "DefaultAttachment"):
+        
+        if "DefaultAttachment" not in obj.PropertiesList:
             obj.addProperty(
                 "App::PropertyEnumeration",
                 "DefaultAttachment",
-                "HVAC",
-                "Default attachment for newly created duct segments"
+                "HVAC Types",
+                "Default section attachment for new segments"
             )
             obj.DefaultAttachment = list(hvaclib.ATTACH_MAP.keys())
             obj.DefaultAttachment = "Center"
         
-        if not hasattr(obj, "DefaultOffset"):
+        if "DefaultOffset" not in obj.PropertiesList:
             obj.addProperty(
                 "App::PropertyVector",
                 "DefaultOffset",
-                "HVAC",
-                "Default offset for newly created duct segments"
+                "HVAC Types",
+                "Default section offset for new segments"
             )
+        
+        if "DefaultDiameter" not in obj.PropertiesList:
+            obj.addProperty(
+                "App::PropertyLength",
+                "DefaultDiameter",
+                "HVAC Types",
+                "Default circular duct diameter"
+            )
+        
+        if "DefaultWidth" not in obj.PropertiesList:
+            obj.addProperty(
+                "App::PropertyLength",
+                "DefaultWidth",
+                "HVAC Types",
+                "Default rectangular duct width"
+            )
+        
+        if "DefaultHeight" not in obj.PropertiesList:
+            obj.addProperty(
+                "App::PropertyLength",
+                "DefaultHeight",
+                "HVAC Types",
+                "Default rectangular duct height"
+            )
+        
+        if not getattr(obj, "DefaultLibraryId", ""):
+            lib = hvaclib.HVACLibraryService.get_active_hvac_library()
+            if lib:
+                obj.DefaultLibraryId = lib.id
+        
+        if not getattr(obj, "DefaultSegmentProfile", ""):
+            obj.DefaultSegmentProfile = hvaclib.HVACLibraryService.default_segment_profile_for_library(
+                getattr(obj, "DefaultLibraryId", "")
+            )
+        
+        try:
+            if obj.DefaultOffset != FreeCAD.Vector(0, 0, 0):
+                pass
+        except Exception:
             obj.DefaultOffset = FreeCAD.Vector(0, 0, 0)
+        
+        if not getattr(obj, "DefaultDiameter", 0):
+            obj.DefaultDiameter = 100.0
+        
+        if not getattr(obj, "DefaultWidth", 0):
+            obj.DefaultWidth = 100.0
+        
+        if not getattr(obj, "DefaultHeight", 0):
+            obj.DefaultHeight = 100.0
     
     @staticmethod
     def getDefaultLibraryId(net):
@@ -1088,56 +1135,57 @@ class DuctNetwork:
 
     @staticmethod
     def applyNetworkTypeDefaults(
-        net, 
+        network_obj, 
         library_id=None,
         segment_profile=None,
         default_attachment=None,
-        default_offset=None
+        default_offset=None,
+        default_diameter=None,
+        default_width=None,
+        default_height=None,
     ):
         """
         Apply network-level default type settings.
         """
-        if net is None:
+        if network_obj is None:
             return
 
         changed = False
 
-        if library_id and getattr(net, "DefaultLibraryId", "") != library_id:
-            net.DefaultLibraryId = library_id
-            changed = True
-
-        effective_library_id = library_id or getattr(net, "DefaultLibraryId", "")
-
-        valid_profiles = hvaclib.HVACLibraryService.segment_profiles_for_library(effective_library_id)
-
-        if segment_profile and segment_profile in valid_profiles:
-            if getattr(net, "DefaultSegmentProfile", "") != segment_profile:
-                net.DefaultSegmentProfile = segment_profile
-                changed = True
-        else:
-            fallback_profile = valid_profiles[0] if valid_profiles else ""
-            if getattr(net, "DefaultSegmentProfile", "") not in valid_profiles:
-                if getattr(net, "DefaultSegmentProfile", "") != fallback_profile:
-                    net.DefaultSegmentProfile = fallback_profile
-                    changed = True
-                    
-        if default_attachment is not None and getattr(net, "DefaultAttachment", "Center") != default_attachment:
-            net.DefaultAttachment = default_attachment
+        if library_id is not None and getattr(network_obj, "DefaultLibraryId", "") != str(library_id):
+            network_obj.DefaultLibraryId = str(library_id)
             changed = True
     
-        if default_offset is not None:
-            cur = FreeCAD.Vector(getattr(net, "DefaultOffset", FreeCAD.Vector(0, 0, 0)))
-            new = FreeCAD.Vector(default_offset)
-            if cur != new:
-                net.DefaultOffset = new
-                changed = True
-
-        if changed and net.Document:
-            try:
-                net.touch()
-            except Exception:
-                pass
-            net.Document.recompute()
+        if segment_profile is not None and getattr(network_obj, "DefaultSegmentProfile", "") != str(segment_profile):
+            network_obj.DefaultSegmentProfile = str(segment_profile)
+            changed = True
+    
+        if default_attachment is not None and str(getattr(network_obj, "DefaultAttachment", "Center")) != str(default_attachment):
+            network_obj.DefaultAttachment = str(default_attachment)
+            changed = True
+    
+        if default_offset is not None and FreeCAD.Vector(getattr(network_obj, "DefaultOffset", FreeCAD.Vector(0, 0, 0))) != FreeCAD.Vector(default_offset):
+            network_obj.DefaultOffset = FreeCAD.Vector(default_offset)
+            changed = True
+    
+        if default_diameter is not None and abs(float(getattr(network_obj, "DefaultDiameter", 100.0)) - float(default_diameter)) > 1e-9:
+            network_obj.DefaultDiameter = float(default_diameter)
+            changed = True
+    
+        if default_width is not None and abs(float(getattr(network_obj, "DefaultWidth", 100.0)) - float(default_width)) > 1e-9:
+            network_obj.DefaultWidth = float(default_width)
+            changed = True
+    
+        if default_height is not None and abs(float(getattr(network_obj, "DefaultHeight", 100.0)) - float(default_height)) > 1e-9:
+            network_obj.DefaultHeight = float(default_height)
+            changed = True
+    
+        if changed:
+            network_obj.touch()
+            if network_obj.Document:
+                network_obj.Document.recompute()
+    
+        return changed
 
     @staticmethod
     def resetObjectsToNetworkDefaults(objects):
