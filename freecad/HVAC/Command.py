@@ -137,7 +137,7 @@ class CommandEditBaseObject:
         return text
 
     def GetResources(self):
-        return {'Pixmap': 'Draft_SubelementHighlight',
+        return {'Pixmap': hvaclib.get_icon_path("ModifyRouting.svg"),
                 'MenuText': QT_TRANSLATE_NOOP('HVAC_EditBaseObject', 'Modify routing'),
                 'ToolTip': QT_TRANSLATE_NOOP('HVAC_EditBaseObject',  'Modify routing of selected duct')}
 
@@ -181,7 +181,7 @@ class CommandDeleteDuctNetwork:
         return text
 
     def GetResources(self):
-        return {'Pixmap': hvaclib.get_icon_path("DeleteDuctsIcon.svg"),
+        return {'Pixmap': "",
                 'MenuText': QT_TRANSLATE_NOOP('HVAC_DeleteDuctNetwork', 'Delete Network'),
                 'ToolTip': QT_TRANSLATE_NOOP('HVAC_DeleteDuctNetwork', 'Delete the selected HVAC Duct Network')}
 
@@ -257,7 +257,7 @@ class CommandEditType:
 
     def GetResources(self):
         return {
-            'Pixmap': hvaclib.get_icon_path("ModifyDuctsIcon.svg"),
+            'Pixmap': hvaclib.get_icon_path("EditType.svg"),
             'MenuText': QT_TRANSLATE_NOOP('HVAC_EditType', 'Edit Type'),
             'ToolTip': QT_TRANSLATE_NOOP('HVAC_EditType', 'Edit library/type of selected duct segments or junctions'),
             'CmdType': 'ForEdit',
@@ -300,7 +300,7 @@ class CommandEditPlacement:
 
     def GetResources(self):
         return {
-            'Pixmap': hvaclib.get_icon_path("ModifyDuctsIcon.svg"),
+            'Pixmap': hvaclib.get_icon_path("EditPlacement.svg"),
             'MenuText': QT_TRANSLATE_NOOP('HVAC_EditPlacement', 'Edit Placement'),
             'ToolTip': QT_TRANSLATE_NOOP(
                 'HVAC_EditPlacement',
@@ -337,7 +337,7 @@ class CommandEditNetworkTypeDefaults:
 
     def GetResources(self):
         return {
-            'Pixmap': hvaclib.get_icon_path("ModifyDuctsIcon.svg"),
+            'Pixmap': hvaclib.get_icon_path("Defaults.svg"),
             'MenuText': QT_TRANSLATE_NOOP('HVAC_NetworkTypeDefaults', 'Network Defaults'),
             'ToolTip': QT_TRANSLATE_NOOP('HVAC_NetworkTypeDefaults', 'Edit default HVAC library and segment auto-type settings for the active network'),
             'CmdType': 'ForEdit',
@@ -367,7 +367,7 @@ class CommandResetTypesToNetworkDefaults:
 
     def GetResources(self):
         return {
-            'Pixmap': hvaclib.get_icon_path("ModifyDuctsIcon.svg"),
+            'Pixmap': hvaclib.get_icon_path("ResetType.svg"),
             'MenuText': QT_TRANSLATE_NOOP('HVAC_ResetTypesToDefaults', 'Reset Types to Defaults'),
             'ToolTip': QT_TRANSLATE_NOOP(
                 'HVAC_ResetTypesToDefaults',
