@@ -274,10 +274,3 @@ class HVACLibraryRegistry:
             lengths_module=lengths.get("module", ""),
             lengths_function=lengths.get("function", ""),
         )
-        
-
-_registry = HVACLibraryRegistry()
-
-
-def registry():
-    return _registry

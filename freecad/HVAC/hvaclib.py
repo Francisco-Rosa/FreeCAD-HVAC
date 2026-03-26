@@ -31,12 +31,11 @@ from dataclasses import dataclass
 
 import FreeCAD
 import FreeCADGui as Gui
-import Part
 from PySide import QtGui, QtCore
 translate = FreeCAD.Qt.translate
 preferences = FreeCAD.ParamGet("User parameter:BaseApp/Preferences/Mod/HVAC")
 
-from .Library import registry as hvac_library_registry
+from .Library import HVACLibraryRegistry
 
 # Enable loading external libraries from the ext_libs directory
 path = os.path.dirname(__file__)
@@ -81,46 +80,46 @@ else:
 #------------------------------------------------------------------------------
 
 class HVACLibraryService:
-    
-    @staticmethod
-    def get_hvac_library_registry():
-        reg = hvac_library_registry()
-        if not getattr(reg, "_search_paths", None):
-            reg.set_search_paths(get_default_library_search_paths())
-        reg.ensure_loaded()
-        return reg
-        
-    @staticmethod
-    def get_active_hvac_library():
-        reg = HVACLibraryService.get_hvac_library_registry()
-        return reg.get_active_library()
 
-    @staticmethod
-    def reload_hvac_libraries():
-        reg = HVACLibraryService.get_hvac_library_registry()
-        reg.reload()
-        return reg
+    _registry: HVACLibraryRegistry = HVACLibraryRegistry()
 
-    @staticmethod
-    def segment_profiles_for_library(library_id):
-        reg = HVACLibraryService.get_hvac_library_registry()
-        lib = reg.get_library(library_id)
+    @classmethod
+    def _get_registry(cls) -> HVACLibraryRegistry:
+        if not getattr(cls._registry, "_search_paths", None):
+            cls._registry.set_search_paths(get_default_library_search_paths())
+        cls._registry.ensure_loaded()
+        return cls._registry
+
+    @classmethod
+    def get_hvac_library_registry(cls) -> HVACLibraryRegistry:
+        return cls._get_registry()
+
+    @classmethod
+    def get_active_hvac_library(cls):
+        return cls._get_registry().get_active_library()
+
+    @classmethod
+    def reload_hvac_libraries(cls) -> HVACLibraryRegistry:
+        cls._get_registry().reload()
+        return cls._registry
+
+    @classmethod
+    def segment_profiles_for_library(cls, library_id: str) -> list:
+        lib = cls._get_registry().get_library(library_id)
         if lib is None:
             return []
         return lib.list_profiles(category="segment", family="straight_segment")
 
-    @staticmethod
-    def default_segment_profile_for_library(library_id):
-        reg = HVACLibraryService.get_hvac_library_registry()
-        lib = reg.get_library(library_id)
+    @classmethod
+    def default_segment_profile_for_library(cls, library_id: str) -> str:
+        lib = cls._get_registry().get_library(library_id)
         if lib is None:
             return ""
         return lib.default_profile(category="segment", family="straight_segment")
 
-    @staticmethod
-    def default_segment_type_id_for_profile(library_id, profile):
-        reg = HVACLibraryService.get_hvac_library_registry()
-        lib = reg.get_library(library_id)
+    @classmethod
+    def default_segment_type_id_for_profile(cls, library_id: str, profile: str) -> str:
+        lib = cls._get_registry().get_library(library_id)
         if lib is None:
             return ""
 
@@ -134,7 +133,7 @@ class HVACLibraryService:
         return type_defs[0].id
 
     @staticmethod
-    def classify_junction_family(node_analysis):
+    def classify_junction_family(node_analysis: dict) -> str:
         degree = int(node_analysis.get("degree", 0))
         collinear_pairs = node_analysis.get("collinear_pairs", [])
         orthogonal_pairs = node_analysis.get("orthogonal_pairs", [])
@@ -163,7 +162,7 @@ class HVACLibraryService:
         return "manifold"
 
     @staticmethod
-    def default_junction_type_id(family):
+    def default_junction_type_id(family: str) -> str:
         mapping = {
             "terminal": "terminal_marker",
             "transition": "transition_generic",
@@ -175,17 +174,17 @@ class HVACLibraryService:
         }
         return mapping.get(family, "manifold_marker")
 
-    @staticmethod
-    def all_junction_type_defs(library_id=None, family=None):
-        reg = HVACLibraryService.get_hvac_library_registry()
+    @classmethod
+    def all_junction_type_defs(cls, library_id: str | None = None, family: str | None = None) -> list:
+        reg = cls._get_registry()
         lib = reg.get_library(library_id) if library_id else reg.get_active_library()
         if lib is None:
             return []
         return lib.list_types(category="junction", family=family)
 
-    @staticmethod
-    def all_type_defs_for_object(obj):
-        reg = HVACLibraryService.get_hvac_library_registry()
+    @classmethod
+    def all_type_defs_for_object(cls, obj) -> list:
+        reg = cls._get_registry()
         library_id = getattr(obj, "LibraryId", "")
         family = getattr(obj, "Family", "")
         profile = getattr(obj, "Profile", "")
@@ -206,17 +205,16 @@ class HVACLibraryService:
 
         return []
 
-    @staticmethod
-    def type_labels_for_object(obj):
+    @classmethod
+    def type_labels_for_object(cls, obj) -> list:
         out = []
-        for tdef in HVACLibraryService.all_type_defs_for_object(obj):
+        for tdef in cls.all_type_defs_for_object(obj):
             out.append((tdef.label, tdef.id))
         return out
 
-    @staticmethod
-    def debug_print_loaded_libraries():
-        reg = HVACLibraryService.get_hvac_library_registry()
-        libs = reg.list_libraries()
+    @classmethod
+    def debug_print_loaded_libraries(cls) -> None:
+        libs = cls._get_registry().list_libraries()
         if not libs:
             FreeCAD.Console.PrintWarning("HVAC - No libraries loaded.\n")
             return
