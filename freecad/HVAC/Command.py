@@ -138,7 +138,7 @@ class CommandEditBaseObject:
 
     def GetResources(self):
         return {'Pixmap': hvaclib.get_icon_path("ModifyRouting.svg"),
-                'MenuText': QT_TRANSLATE_NOOP('HVAC_EditBaseObject', 'Modify routing'),
+                'MenuText': QT_TRANSLATE_NOOP('HVAC_EditBaseObject', 'Modify Routing'),
                 'ToolTip': QT_TRANSLATE_NOOP('HVAC_EditBaseObject',  'Modify routing of selected duct segment')}
 
     def IsActive(self):
