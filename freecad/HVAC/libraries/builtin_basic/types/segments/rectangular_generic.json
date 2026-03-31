@@ -1,0 +1,27 @@
+{
+  "id": "rectangular_generic",
+  "label": "Rectangular Generic",
+  "category": "segment",
+  "family": "curved_segment",
+  "profiles": ["Rectangular"],
+  "properties": [
+    {
+      "name": "Width",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Rectangular duct width",
+      "default": 100.0
+    },
+    {
+      "name": "Height",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Rectangular duct height",
+      "default": 100.0
+    }
+  ],
+  "generator": {
+    "module": "segments",
+    "function": "build_rectangular_curved"
+  }
+}

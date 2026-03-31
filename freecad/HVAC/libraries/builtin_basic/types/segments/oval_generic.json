@@ -1,0 +1,27 @@
+{
+  "id": "oval_generic",
+  "label": "Oval Generic",
+  "category": "segment",
+  "family": "curved_segment",
+  "profiles": ["Oval"],
+  "properties": [
+    {
+      "name": "Width",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Oval duct overall width",
+      "default": 200.0
+    },
+    {
+      "name": "Height",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Oval duct overall height",
+      "default": 100.0
+    }
+  ],
+  "generator": {
+    "module": "segments",
+    "function": "build_oval_curved"
+  }
+}

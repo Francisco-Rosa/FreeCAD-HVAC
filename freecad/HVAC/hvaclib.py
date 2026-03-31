@@ -25,8 +25,9 @@ import os
 import platform
 import sys
 import traceback
+import math
 
-import FreeCAD
+import FreeCAD, Part
 import FreeCADGui as Gui
 from PySide import QtGui, QtCore
 translate = FreeCAD.Qt.translate
@@ -342,8 +343,33 @@ def isWire(obj):
             obj.TypeId == "Part::FeaturePython"
             and hasattr(obj, "Proxy")
             and hasattr(obj.Proxy, "Type")
-            and getattr(obj.Proxy, "Type") == "Wire"
+            and getattr(obj.Proxy, "Type") in ["Wire", "BSpline", "Circle", "BezCurve"]
         )
+    except:
+        return None
+        
+def SketchGeomType(obj):
+    try:
+        if hasattr(obj, "TypeId"):
+            geomtype = getattr(obj, "TypeId")
+            if geomtype in ['Part::GeomLineSegment', 'Part::GeomLine', 'Part::GeomBSplineCurve', 
+                'Part::GeomCircle', 'Part::GeomArcOfCircle']:
+                return geomtype
+            else:
+                return "Unknown"
+    except:
+        return None
+        
+def EdgeType(obj):
+    try:
+        if obj.TypeId == "Part::FeaturePython" \
+        and hasattr(obj, "Proxy") \
+        and hasattr(obj.Proxy, "Type"):
+            edgetype = getattr(obj.Proxy, "Type")
+            if edgetype in ["Wire", "BSpline", "Circle", "BezCurve"]:
+                return edgetype
+            else:
+                return "Unknown"
     except:
         return None
 
@@ -412,19 +438,16 @@ def get_segment_section_params(seg):
         return {
             "Diameter": float(getattr(seg, "Diameter", 0.0) or 0.0),
         }
-
     if profile == "Rectangular":
         return {
             "Width": float(getattr(seg, "Width", 0.0) or 0.0),
             "Height": float(getattr(seg, "Height", 0.0) or 0.0),
         }
-        
     if profile == "Oval":
         return {
             "Width": float(getattr(seg, "Width", 0.0) or 0.0),
             "Height": float(getattr(seg, "Height", 0.0) or 0.0),
         }
-
     # Generic fallback for future profiles
     out = {}
     for name in ("Diameter", "Width", "Height"):
@@ -445,6 +468,54 @@ def get_section_extents(section_params):
         return d, d
     # fallback
     return 0.0, 0.0
+    
+def curve_kind(curve):
+    """
+    Returns type of curve
+    """
+    # Case 1: Draft object
+    if getattr(curve, "Proxy", "") and hasattr(curve.Proxy, "Type"):
+        return EdgeType(curve)
+        
+    # Case 2: Part object/ Sketch object
+    elif getattr(curve, "TypeID", ""):
+        return SketchGeomType(curve)
+        
+    return "Unknown"
+    
+def parse_edge_info(edge):
+    """
+    Parse edge information into a dictionary.
+    """
+    if edge is None:
+        return None
+        
+    v1 = FreeCAD.Vector(edge.Vertexes[0].Point)
+    v2 = FreeCAD.Vector(edge.Vertexes[-1].Point)
+    fp = float(edge.FirstParameter)
+    lp = float(edge.LastParameter)
+
+    try:
+        d1 = edge.tangentAt(fp)
+    except Exception:
+        d1 = v2 - v1
+    try:
+        d2 = edge.tangentAt(lp)
+    except Exception:
+        d2 = v2 - v1
+
+    d1.normalize()
+    d2.normalize()
+
+    return {
+        "path_kind": curve_kind(edge),
+        "edge": edge,
+        "start_point": v1,
+        "end_point": v2,
+        "start_direction": d1,
+        "end_direction": d2,
+        "length": float(edge.Length),
+    }
     
 def make_profile_frame(direction, preferred_x=None, origin=None):
     """
@@ -507,8 +578,7 @@ def compute_port_position(base_point, direction, section_params, attachment, use
     _, local_x, local_y, local_z = make_profile_frame(direction, preferred_x=profile_x_axis)
     attach_offset = (-ax * W * 0.5) * local_x + (-ay * H * 0.5) * local_y
     return base_point + attach_offset + user_offset_vec
-
-
+      
 #------------------------------------------------------------------------------
 # Return paths...
 #------------------------------------------------------------------------------

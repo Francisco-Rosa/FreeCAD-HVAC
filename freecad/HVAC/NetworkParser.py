@@ -24,7 +24,7 @@
 from dataclasses import dataclass
 import math
 
-import FreeCAD
+import FreeCAD, Part
 
 from . import hvaclib
 from .hvaclib import (
@@ -204,7 +204,7 @@ class DuctNetworkParser:
     # Line extraction from source objects
     # ======================================================================
 
-    def _store_parsed_line(self, obj, sp, ep, tag):
+    def _store_parsed_line(self, obj, sp, ep, tag, edge_no):
         """
         Store one parsed line under both:
         - per-object storage
@@ -214,72 +214,94 @@ class DuctNetworkParser:
         if not obj_name:
             return
 
-        self.lines_map.setdefault(obj_name, []).append((sp, ep, tag))
-        self.all_lines.append((sp, ep, tag))
-
+        self.lines_map.setdefault(obj_name, []).append((sp, ep, tag, edge_no))
+        self.all_lines.append((sp, ep, tag, edge_no))
+        
     def _iter_line_segments_from_sketch(self, sketch_obj, tol=1e-9):
         """
-        Yield (start_point, end_point, tag) for all non-construction straight
-        line segments in a Sketch.
+        Yield per-geometry path records for supported non-construction sketch
+        geometries.
+    
+        Output tuple:
+            (
+                start_xyz,
+                end_xyz,
+                tag,
+                path_json,
+                start_dir_xyz,
+                end_dir_xyz,
+            )
         """
         geos = getattr(sketch_obj, "Geometry", []) or []
-
+    
         for slno, geo in enumerate(geos):
-            # Skip construction geometry where possible
             try:
                 if sketch_obj.getConstruction(slno):
                     continue
             except Exception:
                 pass
+    
+            sp = getattr(geo, "StartPoint", None)
+            ep = getattr(geo, "EndPoint", None)
+            if sp is None or ep is None:
+                continue
+    
+            if (sp.sub(ep)).Length <= tol:
+                continue
+    
+            tag = hvaclib.makeLineKey(sketch_obj.Name, slno)
+    
+            # Build a Part edge from sketch geometry
+            kind = hvaclib.SketchGeomType(geo)
+            if kind == "Unknown":
+                continue
 
-            # Accept only straight line-like geometry
-            if hasattr(geo, "StartPoint") and hasattr(geo, "EndPoint"):
-                typeid = getattr(geo, "TypeId", "")
-                is_line = (
-                    "Line" in typeid
-                    or (typeid == "" and geo.__class__.__name__ in ("LineSegment", "Line"))
-                )
-
-                if not is_line:
-                    continue
-
-                sp = geo.StartPoint
-                ep = geo.EndPoint
-
-                if (sp.sub(ep)).Length <= tol:
-                    continue
-
-                tag = hvaclib.makeLineKey(sketch_obj.Name, slno)
-                yield (vec_to_xyz(sp), vec_to_xyz(ep), tag)
+            edge = Part.Edge(geo)
+    
+            yield (
+                vec_to_xyz(sp),
+                vec_to_xyz(ep),
+                tag,
+                slno
+            )
 
     def _iter_line_segments_from_shape(self, obj, tol=1e-9):
         """
-        Yield (start_point, end_point, tag) for all straight edges found in
-        obj.Shape. Useful for Draft wires and other Part-based line objects.
+        Yield per-edge path records for supported shape edges.
+    
+        Output tuple:
+            (
+                start_xyz,
+                end_xyz,
+                tag,
+                path_json,
+                start_dir_xyz,
+                end_dir_xyz,
+            )
         """
         shape = getattr(obj, "Shape", None)
         if shape is None:
             return
-
+    
         for slno, edge in enumerate(getattr(shape, "Edges", []) or []):
             curve = getattr(edge, "Curve", None)
-            if curve is None:
+            kind = hvaclib.EdgeType(edge)
+            if curve is None or kind == "Unknown":
                 continue
-
-            typeid = getattr(curve, "TypeId", "")
-            is_line = "GeomLine" in typeid or curve.__class__.__name__ in ("GeomLine",)
-
-            if not is_line:
-                continue
-
+    
             v1 = edge.Vertexes[0].Point
             v2 = edge.Vertexes[-1].Point
-
             if (v1.sub(v2)).Length <= tol:
                 continue
-
+    
             tag = hvaclib.makeLineKey(obj.Name, slno)
-            yield (vec_to_xyz(v1), vec_to_xyz(v2), tag)
+    
+            yield (
+                vec_to_xyz(v1),
+                vec_to_xyz(v2),
+                tag,
+                slno
+            )
 
     # ======================================================================
     # Public line compilation
@@ -294,12 +316,12 @@ class DuctNetworkParser:
 
         for obj in objs:
             if isWire(obj):
-                for sp, ep, tag in self._iter_line_segments_from_shape(obj):
-                    self._store_parsed_line(obj, sp, ep, tag)
+                for sp, ep, tag, edge_no in self._iter_line_segments_from_shape(obj):
+                    self._store_parsed_line(obj, sp, ep, tag, edge_no)
 
             elif isSketch(obj):
-                for sp, ep, tag in self._iter_line_segments_from_sketch(obj):
-                    self._store_parsed_line(obj, sp, ep, tag)
+                for sp, ep, tag, edge_no in self._iter_line_segments_from_sketch(obj):
+                    self._store_parsed_line(obj, sp, ep, tag, edge_no)
 
         return self.lines_map, self.all_lines
 
@@ -434,11 +456,11 @@ class DuctNetworkParser:
         # Build geometric graph from parsed lines
         # --------------------------------------------------------------
         for obj_name, lines in self.lines_map.items():
-            for local_index, (sp, ep, tag) in enumerate(lines):
+            for slno, (sp, ep, tag, edge_no) in enumerate(lines):
                 geom_u = self._get_or_create_geometric_node_id(sp)
                 geom_v = self._get_or_create_geometric_node_id(ep)
 
-                edge_ref = EdgeRef(obj_name=obj_name, local_index=local_index, tag=tag)
+                edge_ref = EdgeRef(obj_name=obj_name, local_index=edge_no, tag=tag)
 
                 self.edge_u_v[edge_ref] = (geom_u, geom_v)
                 self.edge_geom[edge_ref] = (sp, ep)
@@ -448,7 +470,7 @@ class DuctNetworkParser:
                     geom_u, geom_v,
                     key=edge_ref,
                     obj=obj_name,
-                    local_index=local_index,
+                    local_index=edge_no,
                     sp=sp,
                     ep=ep,
                 )
@@ -555,19 +577,19 @@ class DuctNetworkParser:
     def build_junction_ports(self, analysis_node_id, edge_refs, segment_map=None):
         """
         Build generic junction ports for an analysis node.
-
+    
         For grouped analysis nodes:
         - one logical analysis node may represent multiple geometric points
         - each incident edge still uses its own actual geometric member point
-
+    
         This keeps topology logical while keeping port placement geometric.
         """
         ports = []
         segment_map = segment_map or {}
-
+    
         for edge_ref in edge_refs:
             edge_key = edge_ref.tag
-
+    
             # ----------------------------------------------------------
             # Find which geometric member of the group this edge touches
             # ----------------------------------------------------------
@@ -576,7 +598,7 @@ class DuctNetworkParser:
             )
             if member_geom_node is None:
                 continue
-
+    
             # ----------------------------------------------------------
             # Determine whether this node touches the start or end of edge
             # ----------------------------------------------------------
@@ -585,16 +607,16 @@ class DuctNetworkParser:
             )
             if segment_end not in ("start", "end"):
                 continue
-
+    
             # ----------------------------------------------------------
             # Use the actual geometric member point as local port origin
             # ----------------------------------------------------------
             member_point = FreeCAD.Vector(*self.node_point[member_geom_node])
-
+    
             sp, ep = self.edge_line(edge_ref)
             sp_vec = FreeCAD.Vector(*sp)
             ep_vec = FreeCAD.Vector(*ep)
-
+            
             if segment_end == "start":
                 other_point = ep_vec
             else:
@@ -607,39 +629,49 @@ class DuctNetworkParser:
                 continue
 
             direction_from_port.normalize()
-
+            
             # ----------------------------------------------------------
             # Read segment properties if the segment object is available
             # ----------------------------------------------------------
             seg_obj = segment_map.get(edge_key)
-
             if seg_obj:
                 section_params = hvaclib.get_segment_section_params(seg_obj)
                 profile = getattr(seg_obj, "Profile", "")
                 attachment = getattr(seg_obj, "Attachment", "Center")
                 user_offset = getattr(seg_obj, "Offset", FreeCAD.Vector(0, 0, 0))
                 profile_x_axis = getattr(seg_obj, "ProfileXAxis", FreeCAD.Vector(0, 0, 0))
+                
+                # Override port directions from curve tangent
+                from .DuctNetwork import DuctSegment
+                edge = DuctSegment.resolveSourceEdge(seg_obj)
+                if edge:
+                    edge_info = hvaclib.parse_edge_info(edge)
+                    if segment_end == "start":
+                        direction_from_port = edge_info["start_direction"]
+                        direction_along_segment = edge_info["start_direction"]
+                    elif segment_end == "end":
+                        direction_from_port = -edge_info["end_direction"]
+                        direction_along_segment = edge_info["end_direction"]
             else:
                 section_params = {}
                 profile = ""
                 attachment = "Center"
                 user_offset = FreeCAD.Vector(0, 0, 0)
                 profile_x_axis = FreeCAD.Vector(0, 0, 0)
-
+        
             # ----------------------------------------------------------
             # Compute actual profile-aware port position
             # ----------------------------------------------------------
             base_point = FreeCAD.Vector(member_point)
-
             final_position = hvaclib.compute_port_position(
                 base_point,
                 direction_along_segment,
                 section_params,
                 attachment,
                 user_offset,
-                profile_x_axis
+                profile_x_axis,
             )
-
+    
             ports.append(JunctionPort(
                 edge_key=edge_key,
                 segment_end=segment_end,
@@ -652,9 +684,9 @@ class DuctNetworkParser:
                 profile_x_axis=(
                     vec_to_xyz(profile_x_axis)
                     if profile_x_axis.Length > 1e-12 else None
-                )
+                ),
             ))
-
+    
         return ports
 
     # ======================================================================

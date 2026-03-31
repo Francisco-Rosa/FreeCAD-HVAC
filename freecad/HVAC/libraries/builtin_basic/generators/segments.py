@@ -21,8 +21,6 @@
 #                                                                              #
 ################################################################################
 
-import FreeCAD
-
 
 def build_rectangular_straight(context):
     api = context["hvac_api"]
@@ -34,7 +32,7 @@ def build_rectangular_straight(context):
     width = float(props.get("Width", 100.0))
     height = float(props.get("Height", 100.0))
     profile_x_axis = context.get("profile_x_axis")
-
+    
     shape = api.make_straight_shape(
         start_point=sp,
         end_point=ep,
@@ -45,6 +43,7 @@ def build_rectangular_straight(context):
         },
         profile_x_axis=profile_x_axis,
     )
+        
     return {"shape": shape}
 
 
@@ -67,6 +66,7 @@ def build_circular_straight(context):
         },
         profile_x_axis=profile_x_axis,
     )
+    
     return {"shape": shape}
 
 
@@ -75,8 +75,8 @@ def build_oval_straight(context):
     
     sp = context["start_point"]
     ep = context["end_point"]
-
     props = dict(context.get("properties", {}) or {})
+    
     width = float(props.get("Width", 200.0))
     height = float(props.get("Height", 100.0))
     profile_x_axis = context.get("profile_x_axis")
@@ -91,5 +91,125 @@ def build_oval_straight(context):
         },
         profile_x_axis=profile_x_axis,
     )
+        
+    return {"shape": shape}
+
+
+def build_rectangular_curved(context):
+    api = context["hvac_api"]
+    
+    sp = context["start_point"]
+    ep = context["end_point"]
+    props = dict(context.get("properties", {}) or {})
+
+    width = float(props.get("Width", 100.0))
+    height = float(props.get("Height", 100.0))
+    profile_x_axis = context.get("profile_x_axis")
+    path_edge = context.get("path_edge", None)
+    
+    if path_edge is None:
+        shape = api.make_straight_shape(
+            start_point=sp,
+            end_point=ep,
+            profile="Rectangular",
+            section_params={
+                "Width": width,
+                "Height": height,
+            },
+            profile_x_axis=profile_x_axis,
+        )
+    else:
+        direction = context.get("start_direction", None)
+        shape = api.make_curved_shape(
+            start_point=sp,
+            end_point=ep,
+            profile="Rectangular",
+            section_params={
+                "Width": width,
+                "Height": height,
+            },
+            path=path_edge,
+            profile_x_axis=profile_x_axis,
+            direction = direction
+        )
+        
+    return {"shape": shape}
+
+
+def build_circular_curved(context):
+    api = context["hvac_api"]
+
+    sp = context["start_point"]
+    ep = context["end_point"]
+    props = dict(context.get("properties", {}) or {})
+
+    diameter = float(props.get("Diameter", 100.0))
+    profile_x_axis = context.get("profile_x_axis")
+    path_edge = context.get("path_edge", None)
+
+    if path_edge is None:
+        shape = api.make_straight_shape(
+            start_point=sp,
+            end_point=ep,
+            profile="Circular",
+            section_params={
+                "Diameter": diameter,
+            },
+            profile_x_axis=profile_x_axis,
+        )
+    else:
+        direction = context.get("start_direction", None)
+        shape = api.make_curved_shape(
+            start_point=sp,
+            end_point=ep,
+            profile="Circular",
+            section_params={
+                "Diameter": diameter,
+            },
+            path=path_edge,
+            profile_x_axis=profile_x_axis,
+            direction = direction
+        )
+        
+    return {"shape": shape}
+
+
+def build_oval_curved(context):
+    api = context["hvac_api"]
+    
+    sp = context["start_point"]
+    ep = context["end_point"]
+    props = dict(context.get("properties", {}) or {})
+    
+    width = float(props.get("Width", 200.0))
+    height = float(props.get("Height", 100.0))
+    profile_x_axis = context.get("profile_x_axis")
+    path_edge = context.get("path_edge", None)
+
+    if path_edge is None:
+        shape = api.make_straight_shape(
+            start_point=sp,
+            end_point=ep,
+            profile="Oval",
+            section_params={
+                "Width": width,
+                "Height": height,
+            },
+            profile_x_axis=profile_x_axis,
+        )
+    else:
+        direction = context.get("start_direction", None)
+        shape = api.make_curved_shape(
+            start_point=sp,
+            end_point=ep,
+            profile="Oval",
+            section_params={
+                "Width": width,
+                "Height": height,
+            },
+            path=path_edge,
+            profile_x_axis=profile_x_axis,
+            direction = direction
+        )
 
     return {"shape": shape}
