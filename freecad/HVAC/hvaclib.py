@@ -116,15 +116,20 @@ class HVACLibraryService:
         return lib.default_profile(category="segment", family="straight_segment")
 
     @classmethod
-    def default_segment_type_id_for_profile(cls, library_id: str, profile: str) -> str:
+    def default_segment_type_id(cls, library_id: str, profile: str, curved: bool = False) -> str:
         lib = cls._get_registry().get_library(library_id)
         if lib is None:
             return ""
-
+        
+        if curved:
+            family = "curved_segment"
+        else:
+            family = "straight_segment"
+            
         type_defs = lib.list_types(
-            category="segment",
-            family="straight_segment",
-            profile=profile if profile else None,
+            category = "segment",
+            family = family,
+            profile = profile if profile else None,
         )
         if not type_defs:
             return ""
@@ -348,11 +353,12 @@ def isWire(obj):
     except:
         return None
         
-def SketchGeomType(obj):
+def GeomType(obj):
     try:
         if hasattr(obj, "TypeId"):
             geomtype = getattr(obj, "TypeId")
-            if geomtype in ['Part::GeomLineSegment', 'Part::GeomLine', 'Part::GeomBSplineCurve', 
+            if geomtype in ['Part::GeomLineSegment', 'Part::GeomLine', 
+                'Part::GeomBSplineCurve', 'Part::GeomBezierCurve',
                 'Part::GeomCircle', 'Part::GeomArcOfCircle']:
                 return geomtype
             else:
@@ -360,18 +366,46 @@ def SketchGeomType(obj):
     except:
         return None
         
-def EdgeType(obj):
-    try:
-        if obj.TypeId == "Part::FeaturePython" \
-        and hasattr(obj, "Proxy") \
-        and hasattr(obj.Proxy, "Type"):
-            edgetype = getattr(obj.Proxy, "Type")
-            if edgetype in ["Wire", "BSpline", "Circle", "BezCurve"]:
-                return edgetype
-            else:
-                return "Unknown"
-    except:
-        return None
+def CurveKind(curve):
+    """
+    Returns type of curve
+    """
+    if curve:
+        kind = GeomType(curve)
+    else:
+        kind = "Unknown"
+        
+    if kind in ['Part::GeomLineSegment', 'Part::GeomLine']:
+        return "straight"
+    elif kind in ['Part::GeomBSplineCurve', 'Part::GeomBezierCurve', 
+                  'Part::GeomCircle', 'Part::GeomArcOfCircle']:
+        return "curved"
+        
+    return "Unknown"
+        
+def EdgeKind(edge):
+    """
+    Returns type of curve
+    """
+    if edge and hasattr(edge, 'Curve'):
+        kind = CurveKind(edge.Curve)
+    else:
+        kind = "Unknown"
+    return kind
+
+def BaseCurveKind(base_obj_name, local_index):
+    """
+    Returns base type of curve
+    """
+    base_obj = get_obj_by_name(base_obj_name)
+    # Case 1: Sketch object
+    if base_obj and isSketch(base_obj):
+        if len(base_obj.Geometry) > local_index:
+            return CurveKind(base_obj.Geometry[local_index])
+    elif base_obj and isWire(base_obj):
+        if len(base_obj.Shape.Edges) > local_index:
+            return EdgeKind(base_obj.Shape.Edges[local_index])
+    return "Unknown"
 
 def get_obj_name(obj):
     # Get object name from FreeCAD object
@@ -469,20 +503,6 @@ def get_section_extents(section_params):
     # fallback
     return 0.0, 0.0
     
-def curve_kind(curve):
-    """
-    Returns type of curve
-    """
-    # Case 1: Draft object
-    if getattr(curve, "Proxy", "") and hasattr(curve.Proxy, "Type"):
-        return EdgeType(curve)
-        
-    # Case 2: Part object/ Sketch object
-    elif getattr(curve, "TypeID", ""):
-        return SketchGeomType(curve)
-        
-    return "Unknown"
-    
 def parse_edge_info(edge):
     """
     Parse edge information into a dictionary.
@@ -508,7 +528,7 @@ def parse_edge_info(edge):
     d2.normalize()
 
     return {
-        "path_kind": curve_kind(edge),
+        "path_kind": EdgeKind(edge),
         "edge": edge,
         "start_point": v1,
         "end_point": v2,

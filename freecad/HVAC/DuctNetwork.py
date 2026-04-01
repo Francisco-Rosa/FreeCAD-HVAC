@@ -195,13 +195,13 @@ class DuctSegment:
         
                 if routed_edge is not None:
                     path_edge = routed_edge
-                    path_kind = hvaclib.curve_kind(routed_edge)
+                    path_kind = hvaclib.EdgeKind(routed_edge)
                     start_point = rsp
                     end_point = rep
                     start_dir = rsd
                     end_dir = red
                 else:
-                    path_kind = hvaclib.curve_kind(edge)
+                    path_kind = hvaclib.EdgeKind(edge)
     
             context = {
                 "obj": obj,
@@ -746,7 +746,7 @@ class DuctSegment:
                     trim_start if trim_start is not None else getattr(obj, "TrimStart", 0.0),
                     trim_end if trim_end is not None else getattr(obj, "TrimEnd", 0.0)
                 )
-                path_kind = hvaclib.curve_kind(edge)
+                path_kind = hvaclib.EdgeKind(edge)
             else:
                 trim_start, trim_end, eff_sp, eff_ep, eff_sd, eff_ed, eff_len = DuctSegment.computeTrimDataBasic(
                     start_point,
@@ -754,7 +754,7 @@ class DuctSegment:
                     trim_start,
                     trim_end,
                 )
-                path_kind = "Line"
+                path_kind = "straight"
                 
             if eff_sp is not None and getattr(obj, "EffectiveStartPoint", None) != eff_sp:
                 obj.EffectiveStartPoint = eff_sp
@@ -1433,7 +1433,7 @@ class DuctNetwork:
     ## Library defaults management
     
     @staticmethod
-    def defaultSegmentSelection(net):
+    def defaultSegmentSelection(net, kind='straight'):
         """
         Return network default segment library/profile/type.
         Used only when creating a new segment or resetting one to defaults.
@@ -1447,10 +1447,10 @@ class DuctNetwork:
         if profile not in valid_profiles:
             profile = hvaclib.HVACLibraryService.default_segment_profile_for_library(library_id)
 
-        type_id = hvaclib.HVACLibraryService.default_segment_type_id_for_profile(
-            library_id,
-            profile,
-        )
+        if kind == "straight":
+            type_id = hvaclib.HVACLibraryService.default_segment_type_id(library_id, profile, curved=False)
+        else:
+            type_id = hvaclib.HVACLibraryService.default_segment_type_id(library_id, profile, curved=True)
         
         return {
             "library_id": library_id,
@@ -1544,10 +1544,19 @@ class DuctNetwork:
                 if not default_profile:
                     default_profile = hvaclib.HVACLibraryService.default_segment_profile_for_library(default_lib.id)
 
-                default_type_id = hvaclib.HVACLibraryService.default_segment_type_id_for_profile(
-                    default_lib.id,
-                    default_profile,
-                )
+                kind = hvaclib.BaseCurveKind(obj.SourceObjectName, obj.SourceIndex)
+                if kind == "straight":
+                    default_type_id = hvaclib.HVACLibraryService.default_segment_type_id(
+                        default_lib.id,
+                        default_profile,
+                        curved=False,
+                    )
+                else:
+                    default_type_id = hvaclib.HVACLibraryService.default_segment_type_id(
+                        default_lib.id,
+                        default_profile,
+                        curved=True,
+                    )
 
                 if hasattr(obj, "LibraryId") and obj.LibraryId != default_lib.id:
                     obj.LibraryId = default_lib.id
@@ -1989,8 +1998,10 @@ class DuctNetwork:
                     source_obj=source_obj,
                     source_index=edge_ref.local_index,
                 )
+                
                 # Get and set default segment properties from default library
-                defaults = self.defaultSegmentSelection(net)
+                kind = hvaclib.BaseCurveKind(edge_ref.obj_name, edge_ref.local_index)
+                defaults = self.defaultSegmentSelection(net, kind=kind)
                 if hasattr(segment_obj, "LibraryId"):
                     segment_obj.LibraryId = defaults["library_id"]
                 if hasattr(segment_obj, "Profile"):
@@ -2041,7 +2052,11 @@ class DuctNetwork:
                 profile = hvaclib.HVACLibraryService.default_segment_profile_for_library(library_id)
             type_id = getattr(segment_obj, "TypeId", "")
             if not type_id:
-                type_id = hvaclib.HVACLibraryService.default_segment_type_id_for_profile(library_id, profile)
+                kind = hvaclib.BaseCurveKind(edge_ref.obj_name, edge_ref.local_index)
+                if kind == "straight":
+                    type_id = hvaclib.HVACLibraryService.default_segment_type_id(library_id, profile, curved=False)
+                else:
+                    type_id = hvaclib.HVACLibraryService.default_segment_type_id(library_id, profile, curved=True)
             
             # Update metadata based on updated data
             meta_changed = segment_obj.Proxy.updateMetadata(
