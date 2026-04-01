@@ -544,6 +544,37 @@ class HVACLibraryAPI:
     # Sweep helpers
     # ------------------------------------------------------------------
     @staticmethod
+    def make_curved_shape(start_point, end_point, profile, section_params, path, profile_x_axis=None, direction = None):
+        p1 = HVACLibraryAPI.vec(start_point)
+        p2 = HVACLibraryAPI.vec(end_point)
+        if direction is None:
+            direction = p2 - p1
+        direction.normalize()
+
+        if (p2 - p1).Length <= HVACLibraryAPI.EPS:
+            raise ValueError("Start and end points cannot be identical")
+
+        section_wire = HVACLibraryAPI.make_section_wire(
+            profile=profile,
+            section_params=section_params,
+            center=p1,
+            direction=direction,
+            profile_x_axis=profile_x_axis,
+        )
+        path_wire = Part.Wire([path])
+        shape = HVACLibraryAPI.make_pipe_shell(
+            spine_wire=path_wire,
+            profile_wires=[section_wire],
+            make_solid=True,
+            is_frenet=False,
+        )
+        
+        try:
+            return shape.removeSplitter()
+        except Exception:
+            return shape
+            
+    @staticmethod
     def make_pipe_shell(spine_wire, profile_wires, make_solid=True, is_frenet=False):
         shell = Part.BRepOffsetAPI.MakePipeShell(spine_wire)
         for pw in profile_wires:

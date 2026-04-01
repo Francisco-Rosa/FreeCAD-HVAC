@@ -25,8 +25,9 @@ import os
 import platform
 import sys
 import traceback
+import math
 
-import FreeCAD
+import FreeCAD, Part
 import FreeCADGui as Gui
 from PySide import QtGui, QtCore
 translate = FreeCAD.Qt.translate
@@ -115,15 +116,20 @@ class HVACLibraryService:
         return lib.default_profile(category="segment", family="straight_segment")
 
     @classmethod
-    def default_segment_type_id_for_profile(cls, library_id: str, profile: str) -> str:
+    def default_segment_type_id(cls, library_id: str, profile: str, curved: bool = False) -> str:
         lib = cls._get_registry().get_library(library_id)
         if lib is None:
             return ""
-
+        
+        if curved:
+            family = "curved_segment"
+        else:
+            family = "straight_segment"
+            
         type_defs = lib.list_types(
-            category="segment",
-            family="straight_segment",
-            profile=profile if profile else None,
+            category = "segment",
+            family = family,
+            profile = profile if profile else None,
         )
         if not type_defs:
             return ""
@@ -342,10 +348,64 @@ def isWire(obj):
             obj.TypeId == "Part::FeaturePython"
             and hasattr(obj, "Proxy")
             and hasattr(obj.Proxy, "Type")
-            and getattr(obj.Proxy, "Type") == "Wire"
+            and getattr(obj.Proxy, "Type") in ["Wire", "BSpline", "Circle", "BezCurve"]
         )
     except:
         return None
+        
+def GeomType(obj):
+    try:
+        if hasattr(obj, "TypeId"):
+            geomtype = getattr(obj, "TypeId")
+            if geomtype in ['Part::GeomLineSegment', 'Part::GeomLine', 
+                'Part::GeomBSplineCurve', 'Part::GeomBezierCurve',
+                'Part::GeomCircle', 'Part::GeomArcOfCircle']:
+                return geomtype
+            else:
+                return "Unknown"
+    except:
+        return None
+        
+def CurveKind(curve):
+    """
+    Returns type of curve
+    """
+    if curve:
+        kind = GeomType(curve)
+    else:
+        kind = "Unknown"
+        
+    if kind in ['Part::GeomLineSegment', 'Part::GeomLine']:
+        return "straight"
+    elif kind in ['Part::GeomBSplineCurve', 'Part::GeomBezierCurve', 
+                  'Part::GeomCircle', 'Part::GeomArcOfCircle']:
+        return "curved"
+        
+    return "Unknown"
+        
+def EdgeKind(edge):
+    """
+    Returns type of curve
+    """
+    if edge and hasattr(edge, 'Curve'):
+        kind = CurveKind(edge.Curve)
+    else:
+        kind = "Unknown"
+    return kind
+
+def BaseCurveKind(base_obj_name, local_index):
+    """
+    Returns base type of curve
+    """
+    base_obj = get_obj_by_name(base_obj_name)
+    # Case 1: Sketch object
+    if base_obj and isSketch(base_obj):
+        if len(base_obj.Geometry) > local_index:
+            return CurveKind(base_obj.Geometry[local_index])
+    elif base_obj and isWire(base_obj):
+        if len(base_obj.Shape.Edges) > local_index:
+            return EdgeKind(base_obj.Shape.Edges[local_index])
+    return "Unknown"
 
 def get_obj_name(obj):
     # Get object name from FreeCAD object
@@ -412,19 +472,16 @@ def get_segment_section_params(seg):
         return {
             "Diameter": float(getattr(seg, "Diameter", 0.0) or 0.0),
         }
-
     if profile == "Rectangular":
         return {
             "Width": float(getattr(seg, "Width", 0.0) or 0.0),
             "Height": float(getattr(seg, "Height", 0.0) or 0.0),
         }
-        
     if profile == "Oval":
         return {
             "Width": float(getattr(seg, "Width", 0.0) or 0.0),
             "Height": float(getattr(seg, "Height", 0.0) or 0.0),
         }
-
     # Generic fallback for future profiles
     out = {}
     for name in ("Diameter", "Width", "Height"):
@@ -445,6 +502,40 @@ def get_section_extents(section_params):
         return d, d
     # fallback
     return 0.0, 0.0
+    
+def parse_edge_info(edge):
+    """
+    Parse edge information into a dictionary.
+    """
+    if edge is None:
+        return None
+        
+    v1 = FreeCAD.Vector(edge.Vertexes[0].Point)
+    v2 = FreeCAD.Vector(edge.Vertexes[-1].Point)
+    fp = float(edge.FirstParameter)
+    lp = float(edge.LastParameter)
+
+    try:
+        d1 = edge.tangentAt(fp)
+    except Exception:
+        d1 = v2 - v1
+    try:
+        d2 = edge.tangentAt(lp)
+    except Exception:
+        d2 = v2 - v1
+
+    d1.normalize()
+    d2.normalize()
+
+    return {
+        "path_kind": EdgeKind(edge),
+        "edge": edge,
+        "start_point": v1,
+        "end_point": v2,
+        "start_direction": d1,
+        "end_direction": d2,
+        "length": float(edge.Length),
+    }
     
 def make_profile_frame(direction, preferred_x=None, origin=None):
     """
@@ -507,8 +598,7 @@ def compute_port_position(base_point, direction, section_params, attachment, use
     _, local_x, local_y, local_z = make_profile_frame(direction, preferred_x=profile_x_axis)
     attach_offset = (-ax * W * 0.5) * local_x + (-ay * H * 0.5) * local_y
     return base_point + attach_offset + user_offset_vec
-
-
+      
 #------------------------------------------------------------------------------
 # Return paths...
 #------------------------------------------------------------------------------
