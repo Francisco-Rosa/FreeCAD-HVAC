@@ -22,7 +22,6 @@
 ################################################################################
 
 """This module implements HVAC duct description classes."""
-from cmath import e
 import json
 import traceback
 import FreeCAD, Part
@@ -537,7 +536,7 @@ class DuctSegment:
             trimmed_edge, ts, te
         """
         if edge is None:
-            return None, 0.0, 0.0
+            return 0.0, 0.0, None, None, None, None, 0.0, None
 
         ts, te, fp, lp, p1, p2, eff_sp, eff_ep, d1, d2, raw_length = DuctSegment.computeEdgeTrimData(
             edge, 
@@ -546,10 +545,10 @@ class DuctSegment:
         )
 
         if raw_length <= 1e-9:
-            return edge.copy(), 0.0, 0.0
+            return 0.0, 0.0, None, None, None, None, 0.0, edge.copy()
 
         if p2 <= p1:
-            return None, ts, te
+            return ts, te, None, None, None, None, 0.0, None
 
         try:
             trimmed = edge.Curve.toShape(p1, p2)
@@ -1223,15 +1222,147 @@ class DuctJunctionViewProvider:
         return False
 
 
+class DuctJunctionVirtual:
+    """User-authored logical junction definition used to group parser nodes."""
+
+    TYPE = "DuctJunctionVirtual"
+
+    def __init__(self, obj, owner=None, member_node_keys=None, member_points=None):
+        obj.Proxy = self
+        self.setProperties(obj)
+        self.updateMetadata(obj, 
+            owner=owner, 
+            member_node_keys=member_node_keys or [],
+            member_points=member_points or [] )
+
+    def onDocumentRestored(self, obj):
+        obj.Proxy = self
+        self.setProperties(obj)
+
+    def __getstate__(self):
+        return None
+
+    def __setstate__(self, state):
+        pass
+
+    def execute(self, obj):
+        # No generated geometry yet. Keep empty.
+        pass
+
+    def setProperties(self, obj):
+        self._addProperty(obj, "App::PropertyString", "OwnerNetworkName", "HVAC", "Owning duct network")
+        self._addProperty(obj, "App::PropertyStringList", "MemberNodeKeys", "HVAC", "Array of member node keys")
+        self._addProperty(obj, "App::PropertyVectorList", "MemberPoints", "HVAC", "Array of junction points")
+
+        # Read-only internal metadata
+        for prop in ("OwnerNetworkName", "MemberNodeKeys", "MemberPoints"):
+            try:
+                obj.setEditorMode(prop, 1)
+            except Exception:
+                pass
+
+        if not getattr(obj, "MemberNodeKeys", []):
+            obj.MemberNodeKeys = []
+            
+        if not getattr(obj, "MemberPoints", []):
+            obj.MemberPoints = []
+            
+
+    def updateMetadata(self, obj, owner=None, member_node_keys=[], member_points=[]):
+        changed = False
+        
+        def compare_vector_lists(list1, list2, tol=1e-6):
+            if len(list1) != len(list2):
+                return False
+            for v1, v2 in zip(list1, list2):
+                if (v1 - v2).Length > tol:
+                    return False
+            return True
+
+        owner_name = owner.Name if owner else getattr(obj, "OwnerNetworkName", "")
+        if getattr(obj, "OwnerNetworkName", "") != owner_name:
+            obj.OwnerNetworkName = owner_name
+            changed = True
+
+        if getattr(obj, "MemberNodeKeys", []) != member_node_keys:
+            obj.MemberNodeKeys = member_node_keys
+            changed = True
+                
+        member_points_vecs = [FreeCAD.Vector(t) for t in member_points]
+        if compare_vector_lists(getattr(obj, "MemberPoints", []), member_points_vecs) is False:
+            obj.MemberPoints = member_points_vecs
+            changed = True
+
+        # Friendly label
+        try:
+            keys = list(member_node_keys or [])
+            if keys:
+                obj.Label = "Virtual Junction ({})".format(len(keys))
+        except Exception:
+            pass
+
+        return changed
+
+    @classmethod
+    def create(cls, doc, name, owner, member_node_keys, member_points):
+        vj = doc.addObject("App::FeaturePython", name)
+        cls(vj, owner=owner, member_node_keys=member_node_keys, member_points=member_points)
+        DuctJunctionVirtualViewProvider(vj.ViewObject)
+        return vj
+
+    @staticmethod
+    def isDuctJunctionVirtual(obj):
+        return bool(obj) and hasattr(obj, "Proxy") and isinstance(obj.Proxy, DuctJunctionVirtual)
+
+    @staticmethod
+    def getMemberNodeKeys(obj):
+        return getattr(obj, "MemberNodeKeys", [])
+        
+    @staticmethod
+    def getMemberPoints(obj):
+        points = getattr(obj, "MemberPoints", "")
+        return [tuple(x) for x in points]
+
+    @staticmethod
+    def _addProperty(obj, prop_type, prop_name, group, description):
+        if prop_name not in obj.PropertiesList:
+            obj.addProperty(prop_type, prop_name, group, description)
+            
+
+class DuctJunctionVirtualViewProvider:
+    def __init__(self, vobj):
+        vobj.Proxy = self
+
+    def attach(self, vobj):
+        self.Object = vobj.Object
+
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        state.pop("Object", None)
+        return state
+
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+
+    def getIcon(self):
+        return hvaclib.get_icon_path("Junction.svg")
+
+    def onDelete(self, vobj, subelements):
+        # User must be able to delete these directly from the tree.
+        return True
+        
+
 class DuctNetwork:
     """Visualize and configure HVAC duct network in FreeCAD's 3D view."""
 
     CONTEXT_KEY = hvaclib.DUCT_NETWORK_CONTEXT_KEY
     FOLDER_BASE_NAME = "Base"
     FOLDER_GEOMETRY_NAME = "Geometry"
+    FOLDER_TOPOLOGY_NAME = "Topology"
 
     def __init__(self, obj):
         obj.Proxy = self
+        self.Object = obj
         self._runtime_param_cache = {}
         self._allow_internal_delete = False
         self._initial_sync = True
@@ -1239,11 +1370,14 @@ class DuctNetwork:
         self._sync_scheduled = False
         self._sync_suspended = False
         self._hidden_source_names = set()
+        self._parser = None
         self.setProperties(obj)
         
     def __getstate__(self):
         state = self.__dict__.copy()
+        state.pop("Object", None)
         state.pop("_hidden_source_names", None)
+        state.pop("_parser", None)
         return state
 
     def __setstate__(self, state):
@@ -1251,6 +1385,7 @@ class DuctNetwork:
 
     def onDocumentRestored(self, obj):
         obj.Proxy = self
+        self.Object = obj
         self._runtime_param_cache = {}
         self._allow_internal_delete = False
         self._initial_sync = True
@@ -1258,6 +1393,7 @@ class DuctNetwork:
         self._sync_scheduled = False
         self._sync_suspended = False
         self._hidden_source_names = set()
+        self._parser = None
         self.setProperties(obj)
         self.requestSync(obj, initial_sync=True)
         
@@ -1306,6 +1442,24 @@ class DuctNetwork:
                 obj.Geometry.OwnerNetworkName = obj.Name
             if getattr(obj.Geometry, "FolderRole", "") != self.FOLDER_GEOMETRY_NAME:
                 obj.Geometry.FolderRole = self.FOLDER_GEOMETRY_NAME
+                
+        # Topology folder
+        if "Topology" not in obj.PropertiesList:
+            obj.addProperty("App::PropertyLink", "Topology", "HVAC", "Topology (internal)")
+        if getattr(obj, "Topology", None) is None and doc is not None:
+            folder_topology = DuctManagedFolder.create(
+                doc, 
+                f"{obj.Name}_{self.FOLDER_TOPOLOGY_NAME}",
+                owner=obj, 
+                role=self.FOLDER_TOPOLOGY_NAME
+            )
+            folder_topology.Label = self.FOLDER_TOPOLOGY_NAME
+            obj.Topology = folder_topology
+        elif obj.Topology:
+            if getattr(obj.Topology, "OwnerNetworkName", "") != obj.Name:
+                obj.Topology.OwnerNetworkName = obj.Name
+            if getattr(obj.Topology, "FolderRole", "") != self.FOLDER_TOPOLOGY_NAME:
+                obj.Topology.FolderRole = self.FOLDER_TOPOLOGY_NAME
                 
         # -------------------------------------------------
         # Library/type defaults for this network
@@ -1708,6 +1862,14 @@ class DuctNetwork:
             net.Proxy.requestSync(net)
         net.Document.recompute()
         return True
+        
+    @staticmethod
+    def addVirtualJunctionObject(obj, member_node_keys, member_points):
+        doc = obj.Document
+        name = doc.getUniqueObjectName("VirtualJunction")
+        vj = DuctJunctionVirtual.create(doc, name, owner=obj, member_node_keys=member_node_keys, member_points=member_points)
+        obj.Topology.addObject(vj)
+        return vj
 
     @staticmethod
     def removeBaseObject(net, obj):
@@ -1771,6 +1933,39 @@ class DuctNetwork:
             if key:
                 junctions[key] = child
         return junctions
+        
+    @staticmethod
+    def collectVirtualJunctionObjects(obj):
+        topology_objs = []
+        topology = getattr(obj, "Topology", None)
+        if topology:
+            for child in list(getattr(topology, "Group", []) or []):
+                if DuctJunctionVirtual.isDuctJunctionVirtual(child):
+                    topology_objs.append(child)
+        return topology_objs
+        
+    @staticmethod
+    def getNodeGroups(obj, parser):
+        """Compile node groups from virtual junction objects and the parser's node ID map."""
+        node_groups = []
+        
+        node_id_by_key = {parser.geometric_node_key(nid): nid for nid in parser.geometric_nodes()}
+        virtual_objs = DuctNetwork.collectVirtualJunctionObjects(obj)
+        
+        for vj in virtual_objs:
+            keys = DuctJunctionVirtual.getMemberNodeKeys(vj)
+            ids = []
+    
+            for key in keys:
+                nid = node_id_by_key.get(key)
+                if nid is not None:
+                    ids.append(nid)
+    
+            ids = sorted(set(ids))
+            if len(ids) >= 2:
+                node_groups.append(ids)
+    
+        return node_groups
     
     @staticmethod
     def setActive(obj):
@@ -1940,6 +2135,41 @@ class DuctNetwork:
         return None
     
     # Functions for syncing object data with the network parser
+    
+    @staticmethod
+    def syncVirtualJunctions(obj, parser, initial_sync=False):
+        """Update the MemberNodes property of virtual junction objects
+            from the actual node keys from parser."""
+        for vj in DuctNetwork.collectVirtualJunctionObjects(obj):
+            # Use quantized point keys to look up new node keys from parser
+            stored_points = DuctJunctionVirtual.getMemberPoints(vj)
+            stored_keys = DuctJunctionVirtual.getMemberNodeKeys(vj)
+            # Get quantised nodemap from parser
+            geo_nodekey_map = {parser.geometric_node_key(id): point for (id, point) in parser.geometric_node_point_map().items()}
+            # Find nodekeys from nodemap
+            member_keys = []
+            member_points = []
+                        
+            # If initial_sync, use stored points to udate modified keys
+            if initial_sync:
+                for key, point in geo_nodekey_map.items():
+                    if hvaclib.vec_in_list(point, stored_points) and not hvaclib.vec_in_list(point, member_points):
+                        member_keys.append(key)
+                        member_points.append(point)
+            # Else use stored keys to find updated points
+            else:
+                for key, point in geo_nodekey_map.items():
+                    if key in stored_keys and key not in member_keys:
+                        member_keys.append(key)
+                        member_points.append(point)
+            
+            # Update the MemberNodeKeys property with the new node keys
+            vj.Proxy.updateMetadata(
+                vj, 
+                owner=obj, 
+                member_node_keys=member_keys, 
+                member_points=member_points
+            )
 
     def syncSegments(self, net, parser, initial_sync=False):
         """
@@ -2133,7 +2363,7 @@ class DuctNetwork:
         live_objs = set()
         existing_junctions = self.collectJunctionObjects(net)
         segment_map = self.collectSegmentObjects(net)
-    
+        
         for node_id in parser.nodes():
             # Get node analysis
             analysis = parser.node_analysis(node_id)
@@ -2313,6 +2543,15 @@ class DuctNetwork:
         self._sync_suspended = False
         if request_sync == True:
             self.requestSync(obj)
+            
+    def getParser(self, rebuild=False, set_node_groups=True):
+        if self._parser is None or rebuild:
+            parser = DuctNetworkParser(list(self.Object.Base.OutList))
+            if set_node_groups:
+                node_groups = DuctNetwork.getNodeGroups(self.Object, parser)
+                parser.set_node_groups(node_groups)
+            self._parser = parser
+        return self._parser
     
     def _runDeferredSync(self, obj, force_recompute=False):
         self._sync_scheduled = False
@@ -2321,26 +2560,27 @@ class DuctNetwork:
             return
         if self._sync_in_progress:
             return
-    
-        base_folder = getattr(obj, "Base", None)
-        geometry_folder = getattr(obj, "Geometry", None)
-        if base_folder is None or geometry_folder is None:
-            return
-    
+        
         self._sync_in_progress = True
         try:
-            parser = DuctNetworkParser(list(base_folder.OutList))
             
             if self._initial_sync:  
                 # Do not run junction update on initial sync since edge tags will not be updated in segments
                 # Doing so will clear all junctions since edges could not be found
                 
+                # Get parser for syncing virtual junctions
+                parser = self.getParser(rebuild=True, set_node_groups=False)
+                # Update VirtualJunction keys
+                self.syncVirtualJunctions(obj, parser, initial_sync=True)
+                # Rebuild parser after syncing virtual junctions
+                parser = self.getParser(rebuild=True)
+                
                 # Stage 1: Sync segments first to update edge data after document reload
-                self.syncSegments(obj, parser, initial_sync=self._initial_sync)
+                self.syncSegments(obj, parser, initial_sync=True)
                 obj.Document.recompute()
                 
                 # Stage 2: Sync junctions, so that their execute() writes ConnectionLengthsJson
-                self.syncJunctions(obj, parser, initial_sync=self._initial_sync)
+                self.syncJunctions(obj, parser, initial_sync=True)
                 obj.Document.recompute()
                 
                 # Stage 3: Sync segments which consume the junction trim data
@@ -2348,6 +2588,13 @@ class DuctNetwork:
                 obj.Document.recompute()
                 
             else:  
+                # Get parser
+                parser = self.getParser(rebuild=True, set_node_groups=False)
+                # Update VirtualJunction keys
+                self.syncVirtualJunctions(obj, parser, initial_sync=False)
+                # Rebuild parser after syncing virtual junctions
+                parser = self.getParser(rebuild=True)
+                
                 # Stage 1: Sync segments first to update edge data
                 changed_segments = self.syncSegments(obj, parser, initial_sync=False)
                 if changed_segments or force_recompute:
@@ -2669,6 +2916,7 @@ class DuctNetworkViewProvider:
         try:
             if obj.Base: kids.append(obj.Base)
             if obj.Geometry: kids.append(obj.Geometry)
+            if obj.Topology: kids.append(obj.Topology)
         except Exception:
             pass
         return kids

@@ -452,6 +452,14 @@ def vec_quant(p):
 def vec_to_xyz(v):
     """Return (x,y,z) tuple from a FreeCAD.Vector-like object."""
     return (float(v.x), float(v.y), float(v.z))
+    
+def vec_in_list(p, p_list):
+    """Return True if points are within tolerance."""
+    t = 1e-6
+    for p2 in p_list:
+        if all(abs(p[i] - p2[i]) < t for i in range(3)):
+            return True
+    return False
 
 # Attachment offset with duct direction along Z axis +ve direction
 # Viewed from start of duct, X axis -> To Left, Y axis -> To Top

@@ -129,7 +129,13 @@ class DuctNetworkParser:
         """
         Return the snapped/quantized key used to merge nearby geometric points.
         """
-        return hvaclib.vec_quant(point_xyz)
+        p = point_xyz
+        t = self.tol
+        return (
+            int(round(p[0] / t)),
+            int(round(p[1] / t)),
+            int(round(p[2] / t)),
+        )
 
     def _get_or_create_geometric_node_id(self, point_xyz):
         """
@@ -540,9 +546,9 @@ class DuctNetworkParser:
 
             centroid = FreeCAD.Vector(0, 0, 0)
             for p in pts:
-                centroid = centroid.add(p)
+                centroid = centroid + p
 
-            centroid = centroid.multiply(1.0 / float(len(pts)))
+            centroid = centroid * (1.0 / float(len(pts)))
             self.analysis_node_point[analysis_node_id] = vec_to_xyz(centroid)
 
         # --------------------------------------------------------------
@@ -716,6 +722,12 @@ class DuctNetworkParser:
         Return raw geometric node ids.
         """
         return sorted(self.node_point.keys())
+        
+    def geometric_node_point_map(self):
+        """
+        Return geometric point map: node id -> (x,y,z)
+        """
+        return dict(self.node_point)
 
     def node_xyz(self, analysis_node_id):
         """
@@ -730,6 +742,14 @@ class DuctNetworkParser:
         Return geometric node ids that belong to this analysis node.
         """
         return list(self._get_analysis_members(analysis_node_id))
+        
+    def node_group_members_xyz(self, analysis_node_id):
+        """
+        Return geometric points corresponding to an analysis node.
+        """
+        geo_nids = self._get_analysis_members(analysis_node_id)
+        points = [self.node_point[id] for id in geo_nids]
+        return points
 
     def edges(self):
         """
@@ -791,6 +811,21 @@ class DuctNetworkParser:
     # Node identity / classification helpers
     # ======================================================================
 
+    def geometric_node_key(self, geom_node_id):
+        local_labels = []
+        
+        for edge_ref, (geom_u, geom_v) in self.edge_u_v.items():
+            if geom_u == geom_node_id:
+                local_labels.append(edge_ref.tag + "_s")
+            elif geom_v == geom_node_id:
+                local_labels.append(edge_ref.tag + "_e")
+
+        if local_labels:
+            return "+".join(sorted(local_labels))
+        else:
+            return str(self._point_snap_key(self.node_point[geom_node_id]))
+        
+    
     def node_key(self, analysis_node_id):
         """
         Return a persistent key for the analysis node.
@@ -837,18 +872,7 @@ class DuctNetworkParser:
         parts = []
 
         for geom_node_id in sorted(members):
-            local_labels = []
-
-            for edge_ref, (geom_u, geom_v) in self.edge_u_v.items():
-                if geom_u == geom_node_id:
-                    local_labels.append(edge_ref.tag + "_s")
-                elif geom_v == geom_node_id:
-                    local_labels.append(edge_ref.tag + "_e")
-
-            if local_labels:
-                parts.append("+".join(sorted(local_labels)))
-            else:
-                parts.append(str(self._point_snap_key(self.node_point[geom_node_id])))
+            parts.append(self.geometric_node_key(geom_node_id))
 
         return "group:" + "|".join(parts)
 

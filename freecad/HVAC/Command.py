@@ -130,6 +130,111 @@ class CommandModifyDuctNetwork:
             DuctNetwork.modify_duct_network(active_hvac_network)
             
             
+class CommandCreateVirtualJunction:
+    def GetResources(self):
+        return {
+            "Pixmap": hvaclib.get_icon_path("CreateVirtJunction.svg"),
+            "MenuText": "Create Junction",
+            "ToolTip": "Create a virtual junction from the selected base points/ junctions",
+        }
+
+    def IsActive(self):
+        return FreeCAD.ActiveDocument is not None and hvaclib.activeHVACNetwork() is not None
+            
+    def _GetSelectedPoints(self, parser):
+        
+        from .DuctNetwork import DuctNetwork, DuctJunction
+        
+        # Get selection extended including points
+        sels = Gui.Selection.getSelectionEx()
+        if not sels:
+            FreeCAD.Console.PrintWarning("HVAC - Select two or more base points.\n")
+            return
+        
+        points = set()
+        
+        for sel in sels:
+            if sel.Object is None:
+                return None
+        
+            # Case 1: Base point selected
+            if DuctNetwork.isBaseObject(sel.Object):
+                # Find point in selection
+                point = None
+                for sub in list(getattr(sel, "SubObjects", []) or []):
+                    if hasattr(sub, "Point"):
+                        point = sub.Point
+                        break
+                    if hasattr(sub, "Vertexes") and len(sub.Vertexes) == 1:
+                        point = sub.Vertexes[0].Point
+                        break
+                if point:
+                    points.add(hvaclib.vec_to_xyz(point))
+
+            # Case 2: Terminal Junction selected
+            if DuctJunction.isDuctJunction(sel.Object):
+                ana_nid = sel.Object.NodeId
+                geo_points = parser.node_group_members_xyz(ana_nid)
+                if geo_points:
+                    points.add(geo_points[0])
+                
+        return list(points)
+
+    def Activated(self):
+        from .DuctNetwork import DuctNetwork, DuctJunctionVirtual
+        
+        # Get active network
+        net = hvaclib.activeHVACNetwork()
+        if net is None:
+            FreeCAD.Console.PrintWarning("HVAC - No active duct network.\n")
+            return
+            
+        # Get parser from network object
+        parser = net.Proxy.getParser()
+
+        # Get selected points
+        selected_points = self._GetSelectedPoints(parser)
+        # Get quantised nodemap from parser
+        geo_node_map = {key: item for (key, item) in parser.geometric_node_point_map().items()}
+        # Find nodekeys from nodemap
+        member_keys = []
+        member_points = []
+        for id, point in geo_node_map.items():
+            if hvaclib.vec_in_list(point, selected_points) and not hvaclib.vec_in_list(point, member_points):
+                key = parser.geometric_node_key(id)
+                member_keys.append(key)
+                member_points.append(point)
+        
+        if len(member_keys) < 2:
+            FreeCAD.Console.PrintWarning("HVAC - Select at least two valid base points.\n")
+            return
+
+        # Reject overlap with existing virtual junction definitions
+        used = set()
+        for vj in DuctNetwork.collectVirtualJunctionObjects(net):
+            used.update(DuctJunctionVirtual.getMemberNodeKeys(vj))
+            
+        overlap = used.intersection(member_keys)
+        if overlap:
+            FreeCAD.Console.PrintWarning(
+                "HVAC - Selected point(s) already belong to another virtual junction: {}\n".format(
+                    ", ".join(sorted(overlap))
+                )
+            )
+            return
+        
+        # Create virtual junction
+        doc = net.Document
+        doc.openTransaction("Create Virtual Junction")
+        try:
+            DuctNetwork.addVirtualJunctionObject(net, member_keys, member_points)
+            net.Proxy.requestSync(net)
+            doc.commitTransaction()
+        except Exception:
+            doc.abortTransaction()
+            raise
+            
+            
 class CommandEditBaseObject:
     """Edit base object of selected duct."""
 
@@ -457,6 +562,7 @@ if FreeCAD.GuiUp:
     FreeCAD.Gui.addCommand('HVAC_CreateDuctNetwork', CommandCreateDuctNetwork())
     FreeCAD.Gui.addCommand('HVAC_ModifyDuctNetwork', CommandModifyDuctNetwork())
     FreeCAD.Gui.addCommand('HVAC_EditBaseObject', CommandEditBaseObject())
+    FreeCAD.Gui.addCommand('HVAC_CreateVirtualJunction', CommandCreateVirtualJunction())
     FreeCAD.Gui.addCommand('HVAC_DeleteDuctNetwork', CommandDeleteDuctNetwork())
     FreeCAD.Gui.addCommand('HVAC_ActivateDuctNetwork', CommandActivateDuctNetwork())
     FreeCAD.Gui.addCommand("HVAC_CreateSketch", CommandCreateSketch())

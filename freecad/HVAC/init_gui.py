@@ -62,6 +62,7 @@ class HVAC(Gui.Workbench):
                                 'HVAC_CreateLine',
                                 'HVAC_CreateSpline',
                                 'HVAC_EditBaseObject',
+                                'HVAC_CreateVirtualJunction',
                                 "Separator",
                                 'HVAC_EditType',
                                 'HVAC_EditPlacement',
@@ -77,6 +78,7 @@ class HVAC(Gui.Workbench):
                                 'HVAC_CreateLine',
                                 'HVAC_CreateSpline',
                                 'HVAC_EditBaseObject',
+                                'HVAC_CreateVirtualJunction',
                                 "Separator",
                                 'HVAC_EditType',
                                 'HVAC_EditPlacement',
@@ -92,6 +94,7 @@ class HVAC(Gui.Workbench):
                                 'HVAC_CreateLine',
                                 'HVAC_CreateSpline',
                                 'HVAC_EditBaseObject',
+                                'HVAC_CreateVirtualJunction',
                                 "Separator",
                                 'HVAC_EditType',
                                 'HVAC_EditPlacement',
@@ -192,7 +195,8 @@ class HVAC(Gui.Workbench):
                 self.commands = ['HVAC_CreateSketch',
                                  'HVAC_CreateLine',
                                  'HVAC_CreateSpline',
-                                 'HVAC_EditBaseObject']
+                                 'HVAC_EditBaseObject',
+                                 'HVAC_CreateVirtualJunction']
                 self.title = translate("HVAC", "Routing Tools")
                 
             def shouldShow(self):
