@@ -31,7 +31,6 @@ from PySide.QtCore import QT_TRANSLATE_NOOP
 translate = FreeCAD.Qt.translate
 
 from ..utils import hvaclib
-from ..ui import Observer
 from ..ui import TaskPanel
 from ..core.NetworkParser import DuctNetworkParser
 from ..core.Segment import DuctSegment
@@ -537,61 +536,6 @@ class DuctNetwork:
         DuctNetwork(net)
         DuctNetworkViewProvider(net.ViewObject)
         return net
-
-    def createSketchInteractive(self):
-        """
-        Open the standard FreeCAD sketch creation panel and,
-        after the sketch is created, move it under obj.Base.
-        """
-        obj = self.Object
-        if FreeCAD.ActiveDocument is None or Gui.ActiveDocument is None:
-            return
-
-        # Make this network active in the 3D view context
-        self.setActive()
-        
-        # Install observer before running the command
-        def callback(obj, sketch):
-            if sketch:
-                obj.Proxy.addBaseObject(sketch)
-                obj.Proxy.showAllJunctionGeometry()
-                
-        obs = Observer.NewSketchObserver(obj, callback)
-        FreeCAD.addDocumentObserver(obs)
-        
-        # Launch the built-in sketch creation command
-        self.hideAllJunctionGeometry()
-        Gui.runCommand("Sketcher_NewSketch")
-
-    def createDraftLineInteractive(self, linetype='Line'):
-        """
-        Open the standard Draft Line command and, after the user exits the tool,
-        move all newly created Draft line objects under obj.Base.
-        """
-        obj = self.Object
-        if FreeCAD.ActiveDocument is None or Gui.ActiveDocument is None:
-            return
-
-        # Make this network active in the 3D view context
-        self.setActive()
-        
-        # Install observer before running the command
-        def callback(net, objs):
-            for obj in objs:
-                if hvaclib.isWire(obj):
-                    net.Proxy.addBaseObject(obj)
-            net.Proxy.showAllJunctionGeometry()
-                
-        obs = Observer.NewDraftLineObserver(obj, callback)
-        FreeCAD.addDocumentObserver(obs)
-        
-        # Launch the built-in Draft Line/ BSpline creation command
-        self.hideAllJunctionGeometry()
-        Gui.activateWorkbench("DraftWorkbench")
-        if linetype=='Line':
-            Gui.runCommand("Draft_Line")
-        elif linetype=='BSpline':
-            Gui.runCommand("Draft_BSpline")
 
     def addBaseObject(self, obj):
         net = self.Object
