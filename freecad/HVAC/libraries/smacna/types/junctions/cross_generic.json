@@ -2,7 +2,8 @@
   "id": "cross_generic",
   "label": "Cross - Generic",
   "category": "junction",
-  "family": "cross",
+  "topology": "cross",
+  "family": ["cross"],
   "profiles": ["Circular", "Rectangular", "Oval"],
   "constraints": {
     "degree": 4

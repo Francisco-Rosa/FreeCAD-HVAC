@@ -1,8 +1,9 @@
 {
-  "id": "wye_generic",
+  "id": "branch_generic",
   "label": "Wye - Generic",
   "category": "junction",
-  "family": "wye",
+  "topology": "branch",
+  "family": ["branch.wye", "branch.tee", "branch.lateral_tee", "branch.wye.3d", "branch.tee.3d", "branch.lateral_tee.3d", "branch.generic"],
   "profiles": ["Circular", "Rectangular", "Oval"],
   "constraints": {
     "degree": 3

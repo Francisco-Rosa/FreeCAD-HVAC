@@ -1,8 +1,9 @@
 {
-  "id": "tee_generic",
+  "id": "branch_tee_generic",
   "label": "Tee - Generic",
   "category": "junction",
-  "family": "tee",
+  "topology": "branch",
+  "family": ["tee"],
   "profiles": ["Circular", "Rectangular", "Oval"],
   "constraints": {
     "degree": 3

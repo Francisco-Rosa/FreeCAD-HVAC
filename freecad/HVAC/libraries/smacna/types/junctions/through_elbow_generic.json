@@ -1,23 +1,24 @@
 {
-  "id": "transition_generic",
-  "label": "Transition - Generic",
+  "id": "through_elbow_generic",
+  "label": "Elbow - Generic",
   "category": "junction",
-  "family": "transition",
+  "topology": "through",
+  "family": ["elbow"],
   "profiles": ["Circular", "Rectangular", "Oval"],
   "constraints": {
     "degree": 2
   },
   "properties": [
     {
-      "name": "TransitionLength",
+      "name": "CenterlineRadius",
       "prop_type": "App::PropertyLength",
       "group": "Dimensions",
-      "description": "Transition body length",
+      "description": "Elbow centerline radius",
       "default": 300.0
     }
   ],
   "generator": {
     "module": "junctions",
-    "function": "build_transition"
+    "function": "build_elbow"
   }
 }

@@ -84,6 +84,27 @@ class HVACLibraryAPI:
         return s * (1.0 / float(len(pts)))
         
     @staticmethod
+    def distance_between_lines(origin_i, dir_i, origin_j, dir_j):
+        """
+        Compute the perpendicular distance between two lines in 3D.
+        Each line is defined by a FreeCAD.Vector origin and direction.
+        Handles parallel/coincident lines as a special case.
+        """    
+        u_i = FreeCAD.Vector(dir_i).normalize()
+        u_j = FreeCAD.Vector(dir_j).normalize()
+        w0  = FreeCAD.Vector(origin_i) - FreeCAD.Vector(origin_j)
+    
+        cross = u_i.cross(u_j)
+        denom = cross.Length
+    
+        if denom < 1e-10:
+            # Lines are parallel — distance is |w0 × u_i|
+            return w0.cross(u_i).Length
+    
+        # Skew lines — |(w0 · (d_i × d_j))| / |d_i × d_j|
+        return abs(w0.dot(cross)) / denom
+        
+    @staticmethod
     def closest_points_on_lines(p0, d0, p1, d1):
         """
         Return closest points c0 on L0 and c1 on L1 for:

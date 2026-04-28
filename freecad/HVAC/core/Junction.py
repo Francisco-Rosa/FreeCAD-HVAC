@@ -45,9 +45,9 @@ class DuctJunction:
         owner=None,
         node_id=0,
         node_key="",
-        node_kind="",
         center_point=None,
         degree=0,
+        topology=""
     ):
         obj.Proxy = self
         self.Object = obj
@@ -57,9 +57,9 @@ class DuctJunction:
             owner=owner,
             node_id=node_id,
             node_key=node_key,
-            node_kind=node_kind,
             center_point=center_point,
             degree=degree,
+            topology=topology
         )
 
     def onDocumentRestored(self, obj):
@@ -140,12 +140,12 @@ class DuctJunction:
         self._addProperty(obj, "App::PropertyString", "OwnerNetworkName", "HVAC", "Owning duct network")
         self._addProperty(obj, "App::PropertyInteger", "NodeId", "HVAC", "Parser node id")
         self._addProperty(obj, "App::PropertyString", "NodeKey", "HVAC", "Persistent snapped node key")
-        self._addProperty(obj, "App::PropertyString", "NodeKind", "HVAC", "Junction classification")
-        self._addProperty(obj, "App::PropertyInteger", "Degree", "HVAC", "Node degree")
         self._addProperty(obj, "App::PropertyVector", "CenterPoint", "HVAC", "Junction center point")
+        self._addProperty(obj, "App::PropertyInteger", "Degree", "HVAC", "Node degree")
+        self._addProperty(obj, "App::PropertyString", "Topology", "HVAC", "Junction topology")
+        self._addProperty(obj, "App::PropertyString", "Family", "HVAC", "Classified fitting family")
 
         self._addProperty(obj, "App::PropertyString", "LibraryId", "HVAC", "HVAC library id")
-        self._addProperty(obj, "App::PropertyString", "Family", "HVAC", "Classified fitting family")
         self._addProperty(obj, "App::PropertyString", "TypeId", "HVAC", "Selected fitting type id")
         self._addProperty(obj, "App::PropertyStringList", "ConnectedEdgeKeys", "HVAC", "Connected segment keys")
         self._addProperty(obj, "App::PropertyString", "ConnectionLengthsJson", "HVAC", "Per-edge connection lengths")
@@ -166,9 +166,9 @@ class DuctJunction:
             "OwnerNetworkName",
             "NodeId",
             "NodeKey",
-            "NodeKind",
-            "Degree",
             "CenterPoint",
+            "Degree",
+            "Topology",
             "Family",
             "ConnectedEdgeKeys",
             "ConnectionLengthsJson",
@@ -226,9 +226,9 @@ class DuctJunction:
         owner=None,
         node_id=0,
         node_key="",
-        node_kind="",
         center_point=None,
         degree=0,
+        topology="",
         family="",
         type_id="",
         library_id="",
@@ -251,28 +251,30 @@ class DuctJunction:
             obj.NodeKey = str(node_key)
             changed = True
 
-        if getattr(obj, "NodeKind", "") != str(node_kind):
-            obj.NodeKind = str(node_kind)
-            changed = True
-
-        if getattr(obj, "Degree", None) != int(degree):
-            obj.Degree = int(degree)
-            changed = True
-
         if center_point is not None:
             center_vec = FreeCAD.Vector(*center_point)
             if obj.CenterPoint != center_vec:
                 obj.CenterPoint = center_vec
                 changed = True
-
-        if library_id and getattr(obj, "LibraryId", "") != str(library_id):
-            obj.LibraryId = str(library_id)
+                
+        if getattr(obj, "Degree", None) != int(degree):
+            obj.Degree = int(degree)
+            changed = True
+            
+        if getattr(obj, "Topology", "") != str(topology):
+            obj.Topology = str(topology)
+            # If topology changes, set TypeId to default for the topology
+            obj.TypeId = hvaclib.HVACLibraryService.default_topology_type_id(obj.Topology)
             changed = True
 
         if family and getattr(obj, "Family", "") != str(family):
             obj.Family = str(family)
-            # If family changes, set TypeId to default for the family
-            obj.TypeId = hvaclib.HVACLibraryService.default_junction_type_id(family)
+            # If family changes, set TypeId to default for the topology
+            obj.TypeId = hvaclib.HVACLibraryService.default_topology_type_id(obj.Topology)
+            changed = True
+        
+        if library_id and getattr(obj, "LibraryId", "") != str(library_id):
+            obj.LibraryId = str(library_id)
             changed = True
 
         if type_id and getattr(obj, "TypeId", "") != str(type_id):
@@ -301,16 +303,16 @@ class DuctJunction:
         return changed
 
     @classmethod
-    def create(cls, doc, name, owner, node_id, node_key, node_kind, center_point, degree):
+    def create(cls, doc, name, owner, node_id, node_key, center_point, degree, topology):
         junction = doc.addObject("Part::FeaturePython", name)
         cls(
             junction,
             owner=owner,
             node_id=node_id,
             node_key=node_key,
-            node_kind=node_kind,
             center_point=center_point,
             degree=degree,
+            topology=topology
         )
         DuctJunctionViewProvider(junction.ViewObject)
         return junction
@@ -486,4 +488,3 @@ class DuctJunctionVirtualViewProvider:
     def onDelete(self, vobj, subelements):
         # User must be able to delete these directly from the tree.
         return True
-        

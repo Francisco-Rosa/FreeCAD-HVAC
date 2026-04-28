@@ -1,0 +1,31 @@
+{
+  "id": "through_generic",
+  "label": "Through - Generic",
+  "category": "junction",
+  "topology": "through",
+  "family": ["through.straight", "through.offset", "through.bend", "through.bend.3d", "through.bend_90", "through.bend_90.3d"],
+  "profiles": ["Generic"],
+  "constraints": {
+    "degree": 2
+  },
+  "properties": [
+    {
+      "name": "CenterlineRadius",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Elbow centerline radius",
+      "default": 300.0
+    },
+    {
+      "name": "TransitionLength",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Transition body length",
+      "default": 300.0
+    }
+  ],
+  "generator": {
+    "module": "junctions",
+    "function": "build_through_generic"
+  }
+}

@@ -1,8 +1,9 @@
 {
-  "id": "transition_generic",
+  "id": "through_transition_generic",
   "label": "Transition - Generic",
   "category": "junction",
-  "family": "transition",
+  "topology": "through",
+  "family": ["transition"],
   "profiles": ["Circular", "Rectangular", "Oval"],
   "constraints": {
     "degree": 2

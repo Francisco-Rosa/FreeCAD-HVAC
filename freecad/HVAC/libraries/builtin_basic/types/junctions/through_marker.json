@@ -1,8 +1,9 @@
 {
-  "id": "transition_marker",
-  "label": "Transition - Marker",
+  "id": "through_marker",
+  "label": "Through - Marker",
   "category": "junction",
-  "family": "transition",
+  "topology": "through",
+  "family": ["through.straight", "through.offset", "through.bend", "through.bend.3d", "through.bend_90", "through.bend_90.3d"],
   "profiles": ["Generic"],
   "constraints": {
     "degree": 2

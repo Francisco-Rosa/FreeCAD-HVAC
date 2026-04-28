@@ -1,8 +1,9 @@
 {
-  "id": "tee_marker",
-  "label": "Tee - Marker",
+  "id": "branch_marker",
+  "label": "Branch - Marker",
   "category": "junction",
-  "family": "tee",
+  "topology": "branch",
+  "family": ["wye", "tee"],
   "profiles": ["Generic"],
   "constraints": {
     "degree": 3
@@ -12,12 +13,12 @@
       "name": "MarkerDiameter",
       "prop_type": "App::PropertyLength",
       "group": "Dimensions",
-      "description": "Marker diameter",
+      "description": "Wye marker diameter",
       "default": 260.0
     }
   ],
   "generator": {
     "module": "junctions",
-    "function": "build_tee_marker"
+    "function": "build_wye_marker"
   }
 }

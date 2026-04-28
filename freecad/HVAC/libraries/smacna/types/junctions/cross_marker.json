@@ -2,7 +2,8 @@
   "id": "cross_marker",
   "label": "Cross - Marker",
   "category": "junction",
-  "family": "cross",
+  "topology": "cross",
+  "family": ["cross"],
   "profiles": ["Generic"],
   "constraints": {
     "degree": 4

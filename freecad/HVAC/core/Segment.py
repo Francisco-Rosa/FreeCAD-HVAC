@@ -545,8 +545,8 @@ class DuctSegment:
         except Exception:
             red = rep - rsp
     
-        rsd = DuctSegment._unit(rsd, rep - rsp)
-        red = DuctSegment._unit(red, rep - rsp)
+        rsd = self._unit(rsd, rep - rsp)
+        red = self._unit(red, rep - rsp)
     
         return routed_edge, rsp, rep, rsd, red
     

@@ -136,46 +136,15 @@ class HVACLibraryService:
         return type_defs[0].id
 
     @staticmethod
-    def classify_junction_family(node_analysis: dict) -> str:
-        degree = int(node_analysis.get("degree", 0))
-        collinear_pairs = node_analysis.get("collinear_pairs", [])
-        orthogonal_pairs = node_analysis.get("orthogonal_pairs", [])
-
-        if degree <= 0:
-            return "invalid"
-
-        if degree == 1:
-            return "terminal"
-
-        if degree == 2:
-            if collinear_pairs:
-                return "transition"
-            return "elbow"
-
-        if degree == 3:
-            if collinear_pairs:
-                return "tee"
-            return "wye"
-
-        if degree == 4:
-            if len(collinear_pairs) >= 2 and orthogonal_pairs:
-                return "cross"
-            return "manifold"
-
-        return "manifold"
-
-    @staticmethod
-    def default_junction_type_id(family: str) -> str:
+    def default_topology_type_id(topology: str) -> str:
         mapping = {
-            "terminal": "terminal_marker",
-            "transition": "transition_generic",
-            "elbow": "elbow_generic",
-            "tee": "tee_generic",
-            "wye": "wye_generic",
+            "end": "end_terminal_marker",
+            "through": "through_generic",
+            "branch": "branch_generic",
             "cross": "cross_generic",
-            "manifold": "manifold_generic",
+            "multiport": "multiport_generic",
         }
-        return mapping.get(family, "manifold_marker")
+        return mapping.get(topology, "multiport_marker")
 
     @classmethod
     def all_junction_type_defs(cls, library_id: str | None = None, family: str | None = None) -> list:
@@ -189,7 +158,7 @@ class HVACLibraryService:
     def all_type_defs_for_object(cls, obj) -> list:
         reg = cls._get_registry()
         library_id = getattr(obj, "LibraryId", "")
-        family = getattr(obj, "Family", "")
+        topology = getattr(obj, "Topology", "")
         profile = getattr(obj, "Profile", "")
 
         lib = reg.get_library(library_id) if library_id else reg.get_active_library()
@@ -202,7 +171,7 @@ class HVACLibraryService:
         if isDuctJunction(obj):
             return lib.list_types(
                 category="junction",
-                family=family or None,
+                topology=topology or None,
                 profile=profile or None,
             )
 
@@ -458,7 +427,9 @@ def vec(v):
         return None
     if hasattr(v, "x") and hasattr(v, "y") and hasattr(v, "z"):
         return FreeCAD.Vector(v)
-    return FreeCAD.Vector(float(v[0]), float(v[1]), float(v[2]))
+    if isinstance(v, (list, tuple)) and len(v) == 3:
+        return FreeCAD.Vector(float(v[0]), float(v[1]), float(v[2]))
+    return None
 
 def vec_to_xyz(v):
     """Return (x,y,z) tuple from a FreeCAD.Vector-like object."""

@@ -1,0 +1,24 @@
+{
+  "id": "multiport_marker",
+  "label": "Multiport - Marker",
+  "category": "junction",
+  "topology": "multiport",
+  "family": ["multiport.multiport", "multiport.multiport.3d"],
+  "profiles": ["Generic"],
+  "constraints": {
+    "degree_min": 5
+  },
+  "properties": [
+    {
+      "name": "MarkerDiameter",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Manifold marker diameter",
+      "default": 320.0
+    }
+  ],
+  "generator": {
+    "module": "junctions",
+    "function": "build_manifold_marker"
+  }
+}

@@ -158,12 +158,19 @@ def build_manifold_marker(context):
 # Generic geometric helpers
 # --------------------------------------------------------------------------    
 
-
-
 # --------------------------------------------------------------------------
-# Elbow
+# Through
 # --------------------------------------------------------------------------
 
+def build_through_generic(context):
+    family = context.get("family", None)
+    if family:
+        if family in ["through.bend", "through.bend.3d", "through.bend_90", "through.bend_90.3d"]:
+            return build_elbow(context)
+        elif family in ["through.straight", "through.offset"]:
+            return build_transition(context)
+            
+    return build_terminal_marker(context)
 
 def build_elbow(context):
     api = context.get("hvac_api", None)
@@ -230,10 +237,6 @@ def build_elbow(context):
             ]
         ),
     }
-
-# --------------------------------------------------------------------------
-# Transition
-# --------------------------------------------------------------------------
 
 def _safe_transition_length(length, d1, d2):
     L = float(length or 0.0)

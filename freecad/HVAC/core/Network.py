@@ -24,6 +24,7 @@
 """This module implements HVAC duct description classes."""
 import json
 import traceback
+from dataclasses import asdict
 import FreeCAD
 import FreeCADGui as Gui
 from PySide import QtWidgets, QtCore
@@ -479,18 +480,6 @@ class DuctNetwork:
                 if hasattr(obj, "TypeId") and obj.TypeId != default_type_id:
                     obj.TypeId = default_type_id
                     changed = True
-
-                analysis_json = json.dumps(
-                    {
-                        "profile": default_profile,
-                        "default_type_id": default_type_id,
-                        "start_node": int(getattr(obj, "StartNode", 0)),
-                        "end_node": int(getattr(obj, "EndNode", 0)),
-                    }
-                )
-                if hasattr(obj, "AnalysisJson") and obj.AnalysisJson != analysis_json:
-                    obj.AnalysisJson = analysis_json
-                    changed = True
                 
                 default_attachment = net.Proxy.getDefaultAttachment()
                 if getattr(obj, "Attachment", "Center") != default_attachment:
@@ -503,8 +492,8 @@ class DuctNetwork:
                     changed = True
 
             elif hvaclib.isDuctJunction(obj):
-                family = getattr(obj, "Family", "")
-                default_type_id = hvaclib.HVACLibraryService.default_junction_type_id(family)
+                topology = getattr(obj, "Topology", "")
+                default_type_id = hvaclib.HVACLibraryService.default_topology_type_id(topology)
 
                 if hasattr(obj, "LibraryId") and obj.LibraryId != default_lib.id:
                     obj.LibraryId = default_lib.id
@@ -947,14 +936,7 @@ class DuctNetwork:
                 family="straight_segment",
                 type_id=type_id,
                 library_id=library_id,
-                profile=profile,
-                analysis_json=json.dumps(
-                    {
-                        "profile": profile,
-                        "start_node": int(start_node),
-                        "end_node": int(end_node),
-                    }
-                ),
+                profile=profile
             )
             changed = changed or meta_changed
     
@@ -998,76 +980,33 @@ class DuctNetwork:
         geometry = getattr(net, "Geometry", None)
         if doc is None or geometry is None:
             return False
+            
+        changed = False
+        live_objs = set()
     
+        # Get default library for segment profiles
         default_lib = self.getDefaultLibrary()
         if default_lib is None:
             return False
-    
-        changed = False
-        live_objs = set()
+        
+        # Collect existing junctions and segment map
         existing_junctions = self.collectJunctionObjects()
         segment_map = self.collectSegmentObjects()
         
+        # Inspect each node from the parser and update junction objects
         for node_id in parser.nodes():
-            # Get node analysis
-            analysis = parser.node_analysis(node_id)
-            degree = int(analysis.get("degree", 0))
-            if degree <= 0:
+            node_key = parser.node_key(node_id)
+                        
+            # Get junction analysis
+            junction_analysis = parser.build_junction_analysis(node_id, segment_map)
+            if not junction_analysis:
                 continue
-    
-            # Run classification for identifying junction family
-            family = hvaclib.HVACLibraryService.classify_junction_family(analysis)
-            point = analysis["point"]
-            node_key = analysis["node_key"]
-    
-            connected_edge_keys = [
-                edge_ref.tag
-                for edge_ref in analysis["edge_refs"]
-            ]
-    
-            port_objs = parser.build_junction_ports(
-                node_id,
-                analysis["edge_refs"],
-                segment_map=segment_map,
-            )
-            connected_ports = [
-                {
-                    "edge_key": p.edge_key,
-                    "segment_end": p.segment_end,
-                    "position": p.position,
-                    "direction": p.direction,
-                    "profile": p.profile,
-                    "section_params": p.section_params,
-                    "attachment": p.attachment,
-                    "user_offset": p.user_offset,
-                    "profile_x_axis": p.profile_x_axis
-                }
-                for p in port_objs
-            ]
-            # Build analysis JSON for the junction
-            analysis_json = json.dumps(
-                {
-                    "degree": degree,
-                    "family": family,
-                    "connected_ports": connected_ports,
-                    "collinear_pairs": [
-                        [
-                            a.tag,
-                            b.tag,
-                            float(ang),
-                        ]
-                        for a, b, ang in analysis.get("collinear_pairs", [])
-                    ],
-                    "orthogonal_pairs": [
-                        [
-                            a.tag,
-                            b.tag,
-                            float(ang),
-                        ]
-                        for a, b, ang in analysis.get("orthogonal_pairs", [])
-                    ],
-                }
-            )
+            analysis_json = json.dumps(asdict(junction_analysis))
+            degree = junction_analysis.degree
+            topology = junction_analysis.topology
+            family = junction_analysis.family_key
+            point = junction_analysis.point            
+            connected_edge_keys = [p.edge_key for p in junction_analysis.connected_ports]
     
             # If initial sync, the tags are regenerated hence find element based on position
             # Also update the existing junction's key in the dictionary with the modified key
@@ -1095,13 +1034,13 @@ class DuctNetwork:
                     owner=net,
                     node_id=node_id,
                     node_key=node_key,
-                    node_kind=family,
                     center_point=point,
                     degree=degree,
+                    topology=topology
                 )
                 # Get and set default segment properties from default library
                 default_lib_id = default_lib.id
-                default_type_id = hvaclib.HVACLibraryService.default_junction_type_id(family)
+                default_type_id = hvaclib.HVACLibraryService.default_topology_type_id(topology)
                 if hasattr(junction_obj, "LibraryId"):
                     junction_obj.LibraryId = default_lib_id
                 if hasattr(junction_obj, "TypeId"):
@@ -1126,19 +1065,19 @@ class DuctNetwork:
             library_id = getattr(junction_obj, "LibraryId", "") or default_lib.id
             type_id = getattr(junction_obj, "TypeId", "")
             if not type_id:
-                type_id = hvaclib.HVACLibraryService.default_junction_type_id(family)
+                type_id = hvaclib.HVACLibraryService.default_topology_type_id(topology)
             
             # Update metadata based on updated data
             meta_changed = junction_obj.Proxy.updateMetadata(
                 owner=net,
                 node_id=node_id,
                 node_key=node_key,
-                node_kind=family,
                 center_point=point,
                 degree=degree,
+                topology=topology,
                 family=family,
-                type_id=type_id,
                 library_id=library_id,
+                type_id=type_id,
                 connected_edge_keys=connected_edge_keys,
                 analysis_json=analysis_json,
             )

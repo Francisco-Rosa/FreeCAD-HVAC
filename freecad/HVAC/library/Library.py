@@ -48,7 +48,8 @@ class HVACTypeDef:
     id: str
     label: str
     category: str
-    family: str
+    topology: str
+    family: list[str]
     profiles: list[str] = field(default_factory=list)
     constraints: dict = field(default_factory=dict)
     properties: list[HVACPropertyDef] = field(default_factory=list)
@@ -77,7 +78,7 @@ class HVACLibrary:
         for t in self.types_by_id.values():
             if category and t.category != category:
                 continue
-            if family and t.family != family:
+            if family and family not in t.family:
                 continue
             if profile and t.profiles and profile not in t.profiles:
                 continue
@@ -89,7 +90,7 @@ class HVACLibrary:
         for t in self.types_by_id.values():
             if category and t.category != category:
                 continue
-            if family and t.family != family:
+            if family and family not in t.family:
                 continue
             for p in (t.profiles or []):
                 profiles.add(p)
@@ -265,6 +266,7 @@ class HVACLibraryRegistry:
             id=raw["id"],
             label=raw.get("label", raw["id"]),
             category=raw["category"],
+            topology=raw.get("topology", "generic"),
             family=raw["family"],
             profiles=list(raw.get("profiles", []) or []),
             constraints=dict(raw.get("constraints", {}) or {}),

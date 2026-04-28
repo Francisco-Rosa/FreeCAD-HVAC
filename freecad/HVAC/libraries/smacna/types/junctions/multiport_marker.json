@@ -1,23 +1,24 @@
 {
-  "id": "terminal_marker",
-  "label": "Terminal - Marker",
+  "id": "multiport_marker",
+  "label": "Multiport - Marker",
   "category": "junction",
-  "family": "terminal",
+  "topology": "multiport",
+  "family": ["multiport"],
   "profiles": ["Generic"],
   "constraints": {
-    "degree": 1
+    "degree_min": 5
   },
   "properties": [
     {
       "name": "MarkerDiameter",
       "prop_type": "App::PropertyLength",
       "group": "Dimensions",
-      "description": "Marker diameter",
-      "default": 200.0
+      "description": "Manifold marker diameter",
+      "default": 320.0
     }
   ],
   "generator": {
     "module": "junctions",
-    "function": "build_terminal_marker"
+    "function": "build_manifold_marker"
   }
 }

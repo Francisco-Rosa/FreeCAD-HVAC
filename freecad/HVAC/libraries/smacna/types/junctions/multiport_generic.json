@@ -1,8 +1,9 @@
 {
-  "id": "manifold_generic",
-  "label": "Manifold - Generic",
+  "id": "multiport_generic",
+  "label": "Multiport - Generic",
   "category": "junction",
-  "family": "manifold",
+  "topology": "multiport",
+  "family": ["multiport"],
   "profiles": ["Circular", "Rectangular", "Oval"],
   "constraints": {
     "degree_min": 5

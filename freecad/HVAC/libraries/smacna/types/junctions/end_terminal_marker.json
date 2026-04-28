@@ -1,23 +1,24 @@
 {
-  "id": "transition_marker",
-  "label": "Transition - Marker",
+  "id": "end_terminal_marker",
+  "label": "Terminal - Marker",
   "category": "junction",
-  "family": "transition",
+  "topology": "end",
+  "family": ["terminal"],
   "profiles": ["Generic"],
   "constraints": {
-    "degree": 2
+    "degree": 1
   },
   "properties": [
     {
       "name": "MarkerDiameter",
       "prop_type": "App::PropertyLength",
       "group": "Dimensions",
-      "description": "Transition marker diameter",
-      "default": 240.0
+      "description": "Marker diameter",
+      "default": 200.0
     }
   ],
   "generator": {
     "module": "junctions",
-    "function": "build_transition_marker"
+    "function": "build_terminal_marker"
   }
 }

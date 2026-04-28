@@ -1,23 +1,24 @@
 {
-  "id": "manifold_marker",
-  "label": "Manifold - Marker",
+  "id": "end_terminal_marker",
+  "label": "Terminal - Marker",
   "category": "junction",
-  "family": "manifold",
+  "topology": "end",
+  "family": ["end.terminal"],
   "profiles": ["Generic"],
   "constraints": {
-    "degree_min": 5
+    "degree": 1
   },
   "properties": [
     {
       "name": "MarkerDiameter",
       "prop_type": "App::PropertyLength",
       "group": "Dimensions",
-      "description": "Manifold marker diameter",
-      "default": 320.0
+      "description": "Marker diameter",
+      "default": 200.0
     }
   ],
   "generator": {
     "module": "junctions",
-    "function": "build_manifold_marker"
+    "function": "build_terminal_marker"
   }
 }

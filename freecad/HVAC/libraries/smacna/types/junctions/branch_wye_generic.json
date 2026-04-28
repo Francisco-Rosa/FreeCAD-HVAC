@@ -1,37 +1,38 @@
 {
-  "id": "tee_generic",
-  "label": "Tee - Generic",
+  "id": "branch_wye_generic",
+  "label": "Wye - Generic",
   "category": "junction",
-  "family": "tee",
+  "topology": "branch",
+  "family": ["wye"],
   "profiles": ["Circular", "Rectangular", "Oval"],
   "constraints": {
     "degree": 3
   },
   "properties": [
     {
-      "name": "RunTrimLengthA",
+      "name": "TrimLengthA",
       "prop_type": "App::PropertyLength",
       "group": "Dimensions",
-      "description": "Trim length for the main run ports",
+      "description": "Trim length for port A",
       "default": 100.0
     },
     {
-      "name": "RunTrimLengthB",
+      "name": "TrimLengthB",
       "prop_type": "App::PropertyLength",
       "group": "Dimensions",
-      "description": "Trim length for the main run ports",
+      "description": "Trim length for port B",
       "default": 100.0
     },
     {
-      "name": "BranchTrimLength",
+      "name": "TrimLengthC",
       "prop_type": "App::PropertyLength",
       "group": "Dimensions",
-      "description": "Trim length for the branch port",
+      "description": "Trim length for port C",
       "default": 100.0
     }
   ],
   "generator": {
     "module": "junctions",
-    "function": "build_tee"
+    "function": "build_wye"
   }
 }

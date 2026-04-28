@@ -1,8 +1,9 @@
 {
-  "id": "elbow_generic",
+  "id": "through_elbow_generic",
   "label": "Elbow - Generic",
   "category": "junction",
-  "family": "elbow",
+  "topology": "through",
+  "family": ["through.bend", "through.bend.3d", "through.bend_90", "through.bend_90.3d"],
   "profiles": ["Circular", "Rectangular", "Oval"],
   "constraints": {
     "degree": 2
