@@ -427,7 +427,9 @@ def vec(v):
         return None
     if hasattr(v, "x") and hasattr(v, "y") and hasattr(v, "z"):
         return FreeCAD.Vector(v)
-    return FreeCAD.Vector(float(v[0]), float(v[1]), float(v[2]))
+    if isinstance(v, (list, tuple)) and len(v) == 3:
+        return FreeCAD.Vector(float(v[0]), float(v[1]), float(v[2]))
+    return None
 
 def vec_to_xyz(v):
     """Return (x,y,z) tuple from a FreeCAD.Vector-like object."""
