@@ -662,7 +662,20 @@ class DuctNetwork:
                 pass
 
         QtCore.QTimer.singleShot(0, apply)
-
+        
+    def selectAllGeometry(self):
+        """Select all generated duct objects under the Geometry folder."""
+        net = self.Object
+        Gui.Selection.clearSelection()
+    
+        for child in net.Geometry.OutList:
+            if not (hvaclib.isDuctSegment(child) or hvaclib.isDuctJunction(child)):
+                continue
+            try:
+                Gui.Selection.addSelection(child)
+            except TypeError:
+                Gui.Selection.addSelection(child.Document.Name, child.Name)
+                
     def showAllGeometry(self):
         geometry = self.Object.Geometry
         if getattr(geometry, "ViewObject", None):
@@ -1497,6 +1510,7 @@ class DuctNetworkViewProvider:
         obj = vobj.Object
         # Make it the active network
         activate_duct_network(obj, set_edit=False)
+        obj.Proxy.selectAllGeometry()
         return True
 
     def claimChildren(self):
