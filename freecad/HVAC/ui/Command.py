@@ -55,7 +55,7 @@ def createSketchInteractive(net):
             obj.Proxy.addBaseObject(sketch)
             obj.Proxy.showAllJunctionGeometry()
             
-    obs = Observer.NewSketchObserver(net, callback)
+    obs = Observer.SketchObserver(net, callback)
     FreeCAD.addDocumentObserver(obs)
     
     # Launch the built-in sketch creation command
@@ -80,7 +80,7 @@ def createDraftLineInteractive(net, linetype='Line'):
                 net.Proxy.addBaseObject(obj)
         net.Proxy.showAllJunctionGeometry()
             
-    obs = Observer.NewDraftLineObserver(net, callback)
+    obs = Observer.DraftLineObserver(net, callback)
     FreeCAD.addDocumentObserver(obs)
     
     # Launch the built-in Draft Line/ BSpline creation command
@@ -340,7 +340,7 @@ class CommandEditBaseObject:
                 def callback(net, objs):
                     pass
                 net = hvaclib.activeHVACNetwork()
-                obs = Observer.NewDraftLineObserver(net, callback)
+                obs = Observer.DraftLineObserver(net, callback)
                 FreeCAD.addDocumentObserver(obs)
                 
                 # Set change workbench and set edit mode
