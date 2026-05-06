@@ -187,7 +187,7 @@ class CommandModifyDuctNetwork:
         else:
             active_hvac_network = hvaclib.activeHVACNetwork()
             Network.modify_duct_network(active_hvac_network)
-            
+
             
 class CommandCreateVirtualJunction:
     def GetResources(self):
@@ -347,6 +347,317 @@ class CommandEditBaseObject:
                 Gui.activateWorkbench("DraftWorkbench")                
                 Gui.ActiveDocument.setEdit(base)
 
+
+class CommandReverseGeometryDirection:
+    """
+    Reverse direction of selected base geometry.
+
+    Supported selection:
+        - Sketch selected edges
+        - Draft Line object
+        - Draft Wire / Polyline object
+
+    Notes:
+        - For Sketches, only selected EdgeN sub-elements are reversed.
+        - For Draft objects, the whole Draft object is reversed.
+        - For Draft Wire sub-edge selection, the full wire is reversed.
+    """
+
+    def GetResources(self):
+        return {
+            "Pixmap": hvaclib.get_icon_path("ReverseDirection.svg"),
+            "MenuText": QT_TRANSLATE_NOOP(
+                "HVAC_ReverseGeometryDirection",
+                "Reverse Curve"
+            ),
+            "ToolTip": QT_TRANSLATE_NOOP(
+                "HVAC_ReverseGeometryDirection",
+                "Reverse the direction of selected Sketch or Draft geometry"
+            )
+        }
+
+    def IsActive(self):
+        if Gui.ActiveDocument is None:
+            return False
+        if self._get_sketch_indices():
+            return True
+        if self._get_draft_objects():
+            return True
+        return False
+
+    def Activated(self):
+        # Collect sketch and draft selections
+        sketch_selection = self._get_sketch_indices()
+        draft_objects = self._get_draft_objects()
+        if not sketch_selection and not draft_objects:
+            FreeCAD.Console.PrintWarning(
+                "HVAC - Select Sketch edge(s) or Draft Line/Wire object(s) to reverse.\n"
+            )
+            return
+            
+        doc = FreeCAD.ActiveDocument
+        reversed_sketch_count = 0
+        reversed_draft_count = 0
+        failed = []
+        doc.openTransaction("Reverse Geometry Direction")
+        try:
+            # -----------------------------------------
+            # Reverse selected Sketch geometry
+            # -----------------------------------------
+            for sketch, indices in sketch_selection.items():
+                # Reverse geometry and collect reversed geometries
+                reversed_geometries = {}
+                for geo_index in sorted(indices):
+                    geo = sketch.Geometry[geo_index]
+                    try:
+                        reversed_geometries[geo_index] = (
+                            self._reversed_sketch_geometry(geo)
+                        )
+                    except Exception as err:
+                        failed.append(
+                            "{}.Edge{}: {}".format(
+                                sketch.Name,
+                                geo_index + 1,
+                                err,
+                            )
+                        )
+                if not reversed_geometries:
+                    continue
+                # Swap endpoint constraint references and replace geometry
+                self._swap_endpoint_constraint_refs(
+                    sketch,
+                    reversed_geometries.keys(),
+                )
+                for geo_index, new_geo in reversed_geometries.items():
+                    self._replace_sketch_geometry(sketch, geo_index, new_geo)
+                    reversed_sketch_count += 1
+                # Solve sketch and recompute
+                try:
+                    sketch.solve()
+                except Exception as e:
+                    FreeCAD.Console.PrintWarning(
+                        "HVAC - Sketch solve failed: {}\n".format(e)
+                    )
+                sketch.recompute()
+            # -----------------------------------------
+            # Reverse selected Draft objects
+            # -----------------------------------------
+            for obj in draft_objects:
+                try:
+                    self._reverse_draft_object_direction(obj)
+                    obj.recompute()
+                    reversed_draft_count += 1
+                except Exception as err:
+                    failed.append(
+                        "{}: {}".format(
+                            getattr(obj, "Name", "<unknown>"),
+                            err,
+                        )
+                    )
+            doc.recompute()
+            doc.commitTransaction()
+        except Exception:
+            doc.abortTransaction()
+            raise
+
+        total = reversed_sketch_count + reversed_draft_count
+        if total:
+            FreeCAD.Console.PrintMessage(
+                "HVAC - Reversed direction of {} item(s): {} sketch edge(s), {} Draft object(s).\n".format(
+                    total,
+                    reversed_sketch_count,
+                    reversed_draft_count,
+                )
+            )
+        for msg in failed:
+            FreeCAD.Console.PrintWarning(
+                "HVAC - Could not reverse {}\n".format(msg)
+            )
+
+    # =================================================
+    # Reverse geometry direction helpers
+    # =================================================
+    
+    def _get_sketch_indices(self):
+        """
+        Return {sketch: set(geo_indices)} for selected non-construction sketch edges.
+    
+        More robust mapping:
+            selected EdgeN -> Nth visible/non-construction edge-producing Geometry item
+        """
+        result = {}
+        for sel in Gui.Selection.getSelectionEx():
+            sketch = getattr(sel, "Object", None)
+            if not hvaclib.isSketch(sketch):
+                continue
+            # Build EdgeN -> Geometry index map.
+            # Do not assume Edge1 == Geometry[0], because construction geometry
+            # may exist in sketch.Geometry but not as a normal selectable edge.
+            edge_to_geo = {}
+            edge_no = 1
+            for geo_index, geo in enumerate(sketch.Geometry):
+                try:
+                    is_construction = bool(sketch.getConstruction(geo_index))
+                except Exception:
+                    is_construction = bool(getattr(geo, "Construction", False))
+                if is_construction:
+                    continue
+                type_id = getattr(geo, "TypeId", "")
+                class_name = geo.__class__.__name__
+                # Point geometry does not correspond to a selectable EdgeN.
+                if "Point" in type_id or class_name in ("Point", "Point2d"):
+                    continue
+                edge_to_geo[edge_no] = geo_index
+                edge_no += 1
+                
+            indices = set()
+            for sub in (getattr(sel, "SubElementNames", None) or []):
+                if not sub.startswith("Edge"):
+                    continue
+                try:
+                    selected_edge_no = int(sub[4:])
+                except ValueError:
+                    continue
+                geo_index = edge_to_geo.get(selected_edge_no)
+                if geo_index is None:
+                    FreeCAD.Console.PrintWarning(
+                        "HVAC - Could not map {}.{} to sketch geometry.\n".format(
+                            sketch.Name,
+                            sub,
+                        )
+                    )
+                    continue
+                indices.add(geo_index)
+            if indices:
+                result.setdefault(sketch, set()).update(indices)
+        return result
+    
+    
+    def _get_draft_objects(self):
+            """Return list of unique selected Draft wire/line objects."""
+            seen = set()
+            result = []
+            for sel in Gui.Selection.getSelectionEx():
+                obj = getattr(sel, "Object", None)
+                if hvaclib.isWire(obj) and obj.Name not in seen:
+                    seen.add(obj.Name)
+                    result.append(obj)
+            return result
+    
+    
+    def _reversed_sketch_geometry(self, geo):
+        """
+        Return a reversed copy of a Sketcher geometry object.
+        Primary path:
+            copy + reverse()
+        Fallback:
+            StartPoint/EndPoint swap for line-like bounded geometry.
+        """
+        # Generic geometry path.
+        try:
+            new_geo = geo.copy()
+            reverse_fn = getattr(new_geo, "reverse", None)
+            if callable(reverse_fn):
+                reverse_fn()
+                return new_geo
+        except Exception:
+            pass
+        # Fallback for line segments.
+        if "LineSegment" in geo.TypeId or "LineSegment" in geo.__class__.__name__:
+            sp = getattr(geo, "StartPoint", None)
+            ep = getattr(geo, "EndPoint", None)
+            return Part.LineSegment( 
+                FreeCAD.Vector(ep),
+                FreeCAD.Vector(sp),
+            )
+        # Fallback for unsupported geometry types.
+        raise TypeError(
+            "Unsupported sketch geometry type: {}".format(
+                geo.TypeId or geo.__class__.__name__
+            )
+        )
+    
+    def _replace_sketch_geometry(self, sketch, geo_index, new_geo):
+        """
+        Replace one geometry item in a sketch.
+        """
+        set_geometry = getattr(sketch, "setGeometry", None)
+        if callable(set_geometry):
+            try:
+                set_geometry(geo_index, new_geo)
+                return
+            except Exception:
+                pass
+        geos = list(sketch.Geometry)
+        geos[geo_index] = new_geo
+        sketch.Geometry = geos
+    
+    def _swap_endpoint_constraint_refs(self, sketch, reversed_indices):
+        """
+        Keep endpoint constraints attached to the same physical endpoint
+        after geometry reversal.
+        Sketcher point references:
+            1 -> start point
+            2 -> end point
+        """
+        reversed_indices = set(reversed_indices)
+        constraints = list(getattr(sketch, "Constraints", []) or [])
+        changed = False
+    
+        for c in constraints:
+            for geo_attr, pos_attr in (
+                ("First", "FirstPos"),
+                ("Second", "SecondPos"),
+                ("Third", "ThirdPos"),
+            ):
+                if not hasattr(c, geo_attr) or not hasattr(c, pos_attr):
+                    continue
+                try:
+                    geo_id = getattr(c, geo_attr)
+                    pos_id = getattr(c, pos_attr)
+                except Exception:
+                    continue
+                if geo_id not in reversed_indices:
+                    continue
+    
+                if pos_id == 1:
+                    setattr(c, pos_attr, 2)
+                    changed = True
+                elif pos_id == 2:
+                    setattr(c, pos_attr, 1)
+                    changed = True
+    
+        if changed:
+            sketch.Constraints = constraints
+    
+    
+    def _reverse_draft_object_direction(self, obj):
+        """
+        Reverse Draft object direction by changing parametric properties.
+    
+        Do not reverse obj.Shape directly.
+        """
+        # Draft Wire / Polyline / BSpline-like path.
+        if hasattr(obj, "Points"):
+            pts = list(obj.Points)
+            if len(pts) < 2:
+                raise ValueError("Object has fewer than two points.")
+            obj.Points = list(reversed(pts))
+            return
+        # Draft Line-like fallback.
+        if hasattr(obj, "Start") and hasattr(obj, "End"):
+            start = FreeCAD.Vector(obj.Start)
+            end = FreeCAD.Vector(obj.End)
+            obj.Start = end
+            obj.End = start
+            return
+        # Unsupported object type.
+        raise TypeError(
+            "Unsupported Draft object type: {}".format(
+                getattr(obj, "TypeId", type(obj).__name__)
+            )
+        )
+            
 
 class CommandDeleteDuctNetwork:
     """Delete a selected HVAC Duct Network."""
@@ -620,6 +931,7 @@ if FreeCAD.GuiUp:
     FreeCAD.Gui.addCommand('HVAC_CreateDuctNetwork', CommandCreateDuctNetwork())
     FreeCAD.Gui.addCommand('HVAC_ModifyDuctNetwork', CommandModifyDuctNetwork())
     FreeCAD.Gui.addCommand('HVAC_EditBaseObject', CommandEditBaseObject())
+    FreeCAD.Gui.addCommand('HVAC_ReverseGeometryDirection', CommandReverseGeometryDirection())
     FreeCAD.Gui.addCommand('HVAC_CreateVirtualJunction', CommandCreateVirtualJunction())
     FreeCAD.Gui.addCommand('HVAC_DeleteDuctNetwork', CommandDeleteDuctNetwork())
     FreeCAD.Gui.addCommand('HVAC_ActivateDuctNetwork', CommandActivateDuctNetwork())

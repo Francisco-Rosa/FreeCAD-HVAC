@@ -62,6 +62,7 @@ class HVAC(Gui.Workbench):
                                 'HVAC_CreateLine',
                                 'HVAC_CreateSpline',
                                 'HVAC_EditBaseObject',
+                                'HVAC_ReverseGeometryDirection',
                                 'HVAC_CreateVirtualJunction',
                                 "Separator",
                                 'HVAC_EditType',
@@ -78,6 +79,7 @@ class HVAC(Gui.Workbench):
                                 'HVAC_CreateLine',
                                 'HVAC_CreateSpline',
                                 'HVAC_EditBaseObject',
+                                'HVAC_ReverseGeometryDirection',
                                 'HVAC_CreateVirtualJunction',
                                 "Separator",
                                 'HVAC_EditType',
@@ -94,6 +96,7 @@ class HVAC(Gui.Workbench):
                                 'HVAC_CreateLine',
                                 'HVAC_CreateSpline',
                                 'HVAC_EditBaseObject',
+                                'HVAC_ReverseGeometryDirection',
                                 'HVAC_CreateVirtualJunction',
                                 "Separator",
                                 'HVAC_EditType',
@@ -196,6 +199,7 @@ class HVAC(Gui.Workbench):
                                  'HVAC_CreateLine',
                                  'HVAC_CreateSpline',
                                  'HVAC_EditBaseObject',
+                                 'HVAC_ReverseGeometryDirection',
                                  'HVAC_CreateVirtualJunction']
                 self.title = translate("HVAC", "Routing Tools")
                 
