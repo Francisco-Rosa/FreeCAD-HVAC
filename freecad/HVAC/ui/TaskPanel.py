@@ -178,6 +178,59 @@ class TaskPanelEditDuctNetwork:
         return True
 
 
+class TaskPanelDirectionEditMode:
+    """Side panel shown while duct direction edit mode is active."""
+
+    def __init__(self, network_obj, session):
+        self.network_obj = network_obj
+        self.session = session
+
+        self.form = QtWidgets.QWidget()
+        self.form.setWindowTitle(
+            translate("HVAC_DirectionEditMode", "Edit Duct Directions")
+        )
+
+        layout = QtWidgets.QVBoxLayout(self.form)
+
+        title = QtWidgets.QLabel(
+            translate(
+                "HVAC_DirectionEditMode",
+                "Direction edit mode is active.",
+            )
+        )
+        title.setWordWrap(True)
+        layout.addWidget(title)
+
+        help_text = QtWidgets.QLabel(
+            translate(
+                "HVAC_DirectionEditMode",
+                "Select a base Sketch edge or Draft route object to reverse its direction."
+            )
+        )
+        help_text.setWordWrap(True)
+        layout.addWidget(help_text)
+
+        close_button = QtWidgets.QPushButton(
+            translate("HVAC_DirectionEditMode", "Close Direction Edit Mode")
+        )
+        close_button.clicked.connect(self._close)
+        layout.addWidget(close_button)
+
+        layout.addStretch(1)
+
+    def _close(self):
+        self.session.stop(request_sync=True)
+        Gui.Control.closeDialog()
+
+    def accept(self):
+        self.session.stop(request_sync=True)
+        return True
+
+    def reject(self):
+        self.session.stop(request_sync=True)
+        return True
+
+
 class TaskPanelNetworkTypeDefaults:
     """Task panel to edit network-level type defaults."""
 

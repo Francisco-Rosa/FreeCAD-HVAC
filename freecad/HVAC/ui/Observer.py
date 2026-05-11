@@ -27,7 +27,7 @@ import math
 import FreeCAD
 import FreeCADGui as Gui
 from pivy import coin
-from PySide import QtWidgets, QtCore
+from PySide import QtWidgets, QtCore, QtGui
 from PySide.QtCore import QT_TRANSLATE_NOOP
 translate = FreeCAD.Qt.translate
 
@@ -259,6 +259,187 @@ class DraftLineObserver:
             # Switch back workbench to HVAC
             Gui.activateWorkbench(hvaclib.WORKBENCH_NAME)
                 
+
+class DuctDirectionEditSession:
+    """
+    Temporary edit mode for reversing base-object directions.
+
+    Behaviour:
+    - enable base direction arrows
+    - hide generated geometry
+    - suspend network sync
+    - set reverse-direction cursor
+    - selecting a base edge/object runs HVAC_ReverseGeometryDirection
+    - on exit, restore visibility, arrows, sync, and cursor
+    """
+
+    def __init__(self, network_obj):
+        self.network_obj = network_obj
+        self.doc = getattr(network_obj, "Document", None)
+        self.active = False
+        self._busy = False
+        self._old_show_arrows = None
+        self._cursor_set = False
+
+    def start(self):
+        if self.active:
+            return
+
+        if self.network_obj is None or self.doc is None:
+            return
+
+        self.active = True
+
+        # Make this network active.
+        try:
+            self.network_obj.Proxy.setActive()
+        except Exception:
+            pass
+
+        # Suspend sync while directions are being edited.
+        try:
+            self.network_obj.Proxy.suspendSync()
+        except Exception:
+            pass
+
+        # Hide generated duct geometry.
+        try:
+            self.network_obj.Proxy.hideAllGeometry()
+        except Exception:
+            pass
+
+        # Enable base direction arrows.
+        try:
+            vobj = self.network_obj.ViewObject
+            self._old_show_arrows = bool(vobj.ShowBaseDirectionArrows)
+            vobj.ShowBaseDirectionArrows = True
+            self.network_obj.ViewObject.Proxy.refreshBaseDirectionArrows()
+        except Exception:
+            pass
+
+        # Change cursor to reverse command icon.
+        self._setCursor()
+
+        # Observe selection.
+        Gui.Selection.addObserver(self)
+
+        FreeCAD.Console.PrintMessage(
+            "HVAC - Direction edit mode started. Select base edges/objects to reverse.\n"
+        )
+
+    def stop(self, request_sync=True):
+        if not self.active:
+            return
+
+        self.active = False
+
+        try:
+            Gui.Selection.removeObserver(self)
+        except Exception:
+            pass
+
+        self._restoreCursor()
+
+        # Disable or restore direction arrows.
+        try:
+            vobj = self.network_obj.ViewObject
+            if self._old_show_arrows is not None:
+                vobj.ShowBaseDirectionArrows = self._old_show_arrows
+            else:
+                vobj.ShowBaseDirectionArrows = False
+            self.network_obj.ViewObject.Proxy.refreshBaseDirectionArrows()
+        except Exception:
+            pass
+
+        # Show generated geometry again.
+        try:
+            self.network_obj.Proxy.showAllGeometry()
+        except Exception:
+            pass
+
+        # Resume sync and request network update.
+        try:
+            self.network_obj.Proxy.resumeSync(request_sync=request_sync)
+        except Exception:
+            pass
+
+        try:
+            FreeCAD.ActiveDocument.recompute()
+        except Exception:
+            pass
+
+        FreeCAD.Console.PrintMessage("HVAC - Direction edit mode closed.\n")
+
+    # -------------------------------------------------
+    # Selection observer API
+    # -------------------------------------------------
+
+    def addSelection(self, doc_name, obj_name, sub_name, point):
+        if not self.active or self._busy:
+            return
+
+        doc = FreeCAD.getDocument(doc_name)
+        if doc is None or doc != self.doc:
+            return
+
+        obj = doc.getObject(obj_name)
+        if obj is None:
+            return
+
+        # Only act on base objects belonging to this network.
+        if obj not in list(getattr(self.network_obj.Base, "OutList", []) or []):
+            return
+
+        if not (hvaclib.isSketch(obj) or hvaclib.isWire(obj)):
+            return
+
+        # For sketches, only reverse selected edges.
+        # Ignore full sketch selection without EdgeN subelement.
+        if hvaclib.isSketch(obj) and not str(sub_name or "").startswith("Edge"):
+            return
+
+        self._busy = True
+        try:
+            Gui.runCommand("HVAC_ReverseGeometryDirection")
+
+            # Rebuild only direction arrows, not generated geometry.
+            try:
+                parser = self.network_obj.Proxy.getParser(
+                    rebuild=True,
+                    set_node_groups=False,
+                )
+                self.network_obj.ViewObject.Proxy.refreshBaseDirectionArrows(parser)
+            except Exception:
+                self.network_obj.ViewObject.Proxy.refreshBaseDirectionArrows()
+
+            # Clear selection so the same edge can be clicked again.
+            QtCore.QTimer.singleShot(0, Gui.Selection.clearSelection)
+
+        finally:
+            self._busy = False
+
+    # -------------------------------------------------
+    # Cursor handling
+    # -------------------------------------------------
+
+    def _setCursor(self):
+        try:
+            icon_path = hvaclib.get_icon_path("ReverseDirection.svg")
+            pixmap = QtGui.QPixmap(icon_path)
+            if not pixmap.isNull():
+                cursor = QtGui.QCursor(pixmap.scaled(24, 24))
+                QtWidgets.QApplication.setOverrideCursor(cursor)
+                self._cursor_set = True
+        except Exception:
+            self._cursor_set = False
+
+    def _restoreCursor(self):
+        try:
+            QtWidgets.QApplication.restoreOverrideCursor()
+        except Exception:
+            pass
+        self._cursor_set = False
+
 
 class DuctNetworkChangeObserver:
     """

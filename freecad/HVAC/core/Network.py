@@ -689,6 +689,19 @@ class DuctNetwork:
         for obj in list(geometry.OutList):
             if hvaclib.isDuctSegment(obj) or hvaclib.isDuctJunction(obj):
                 self._setGeometryVisibilityDeferred(obj, True)
+
+    def hideAllGeometry(self):
+        geometry = self.Object.Geometry
+    
+        if getattr(geometry, "ViewObject", None):
+            try:
+                geometry.ViewObject.Visibility = False
+            except Exception:
+                pass
+    
+        for obj in list(geometry.OutList):
+            if hvaclib.isDuctSegment(obj) or hvaclib.isDuctJunction(obj):
+                self._setGeometryVisibilityDeferred(obj, False)
                 
     def _segmentFromBaseObject(self, seg, base_obj):
         return (

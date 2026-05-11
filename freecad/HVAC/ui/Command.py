@@ -657,6 +657,54 @@ class CommandReverseGeometryDirection:
                 getattr(obj, "TypeId", type(obj).__name__)
             )
         )
+
+
+class CommandEditDuctDirections:
+    """Enter temporary direction-edit mode for base duct routes."""
+
+    def __init__(self):
+        self.session = None
+        self.task_panel = None
+
+    def GetResources(self):
+        return {
+            "Pixmap": hvaclib.get_icon_path("ReverseDirection.svg"),
+            "MenuText": QT_TRANSLATE_NOOP(
+                "HVAC_EditDuctDirections",
+                "Edit Directions",
+            ),
+            "ToolTip": QT_TRANSLATE_NOOP(
+                "HVAC_EditDuctDirections",
+                "Enter direction edit mode. Select base route elements to reverse their duct direction.",
+            ),
+            "CmdType": "ForEdit",
+        }
+
+    def IsActive(self):
+        if Gui.ActiveDocument is None:
+            return False
+
+        net = hvaclib.activeHVACNetwork()
+        if net is None:
+            return False
+
+        base = getattr(net, "Base", None)
+        return bool(base and list(base.OutList))
+
+    def Activated(self):
+        from .Observer import DuctDirectionEditSession
+        from .TaskPanel import TaskPanelDirectionEditMode
+
+        net = hvaclib.activeHVACNetwork()
+        if net is None:
+            FreeCAD.Console.PrintWarning("HVAC - No active duct network.\n")
+            return
+
+        self.session = DuctDirectionEditSession(net)
+        self.task_panel = TaskPanelDirectionEditMode(net, self.session)
+
+        self.session.start()
+        Gui.Control.showDialog(self.task_panel)
             
 
 class CommandDeleteDuctNetwork:
@@ -932,6 +980,7 @@ if FreeCAD.GuiUp:
     FreeCAD.Gui.addCommand('HVAC_ModifyDuctNetwork', CommandModifyDuctNetwork())
     FreeCAD.Gui.addCommand('HVAC_EditBaseObject', CommandEditBaseObject())
     FreeCAD.Gui.addCommand('HVAC_ReverseGeometryDirection', CommandReverseGeometryDirection())
+    FreeCAD.Gui.addCommand("HVAC_EditDuctDirections", CommandEditDuctDirections())
     FreeCAD.Gui.addCommand('HVAC_CreateVirtualJunction', CommandCreateVirtualJunction())
     FreeCAD.Gui.addCommand('HVAC_DeleteDuctNetwork', CommandDeleteDuctNetwork())
     FreeCAD.Gui.addCommand('HVAC_ActivateDuctNetwork', CommandActivateDuctNetwork())
