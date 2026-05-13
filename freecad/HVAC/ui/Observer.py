@@ -32,6 +32,7 @@ from PySide.QtCore import QT_TRANSLATE_NOOP
 translate = FreeCAD.Qt.translate
 
 from ..utils import hvaclib
+from ..ui import Toolbar
 
 
 class SketchObserver:
@@ -56,6 +57,10 @@ class SketchObserver:
         self._timer.timeout.connect(self.check_finished)
         self._timer.start()
 
+        # Create temporary toolbar
+        self._temp_toolbar = Toolbar.FloatingBaseEditToolbar
+        Toolbar.create_toolbar(self._temp_toolbar)
+
     def slotCreatedObject(self, obj):
         # Called when a new object is created in the document
         if self.finished or self.tracked_sketch is not None or self.edit_mode:
@@ -63,12 +68,14 @@ class SketchObserver:
         if obj and obj.Document == self.doc and hvaclib.isSketch(obj):
             self.tracked_sketch = obj
             self._attach_arrows()
+            Toolbar.show_toolbar(self._temp_toolbar)
             
     def set_modified_sketch(self, sketch):
         """Set the modified sketch and attach arrows if in edit mode."""
         if self.edit_mode:
             self.tracked_sketch = sketch
             self._attach_arrows()
+            Toolbar.show_toolbar(self._temp_toolbar)
             
     def _attach_arrows(self):
         """Inject arrow separator into the sketch's Coin scene."""
@@ -135,6 +142,7 @@ class SketchObserver:
         
         if self.tracked_sketch is not None:
             self._detach_arrows()
+            Toolbar.hide_toolbar(self._temp_toolbar)
         
         try:
             self.callback(self.network_obj, self.tracked_sketch)
