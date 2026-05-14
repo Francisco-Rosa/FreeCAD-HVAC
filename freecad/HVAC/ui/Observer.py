@@ -23,25 +23,30 @@
 
 """This module implements HVAC duct description classes."""
 
+import math
 import FreeCAD
 import FreeCADGui as Gui
-from PySide import QtWidgets, QtCore
+from pivy import coin
+from PySide import QtWidgets, QtCore, QtGui
 from PySide.QtCore import QT_TRANSLATE_NOOP
 translate = FreeCAD.Qt.translate
 
 from ..utils import hvaclib
+from ..ui import Toolbar
 
 
-class NewSketchObserver:
-    """New sketch creation observer"""
+class SketchObserver:
+    """New sketch creation/ modification observer"""
 
-    def __init__(self, network_obj, callback):
+    def __init__(self, network_obj, callback, edit_mode=False):
         self.network_obj = network_obj
         self.callback = callback
+        self.edit_mode = edit_mode
         self.doc = network_obj.Document
-        self.created_sketch = None
-        self._finished = False
+        self.tracked_sketch = None
+        self.finished = False
         self._seen_dialog = False
+        self._arrow_root = None  # For showing base direction arrows
         
         # Suspend sync to prevent transient sync requests while sketching
         if self.network_obj and hasattr(self.network_obj, "Proxy") and self.network_obj.Proxy:
@@ -52,16 +57,73 @@ class NewSketchObserver:
         self._timer.timeout.connect(self.check_finished)
         self._timer.start()
 
+        # Create temporary toolbar
+        self._temp_toolbar = Toolbar.FloatingBaseEditToolbar
+        Toolbar.create_toolbar(self._temp_toolbar)
+
     def slotCreatedObject(self, obj):
         # Called when a new object is created in the document
-        if self._finished or self.created_sketch is not None:
+        if self.finished or self.tracked_sketch is not None or self.edit_mode:
             return
         if obj and obj.Document == self.doc and hvaclib.isSketch(obj):
-            self.created_sketch = obj
+            self.tracked_sketch = obj
+            self._attach_arrows()
+            Toolbar.show_toolbar(self._temp_toolbar)
+            
+    def set_modified_sketch(self, sketch):
+        """Set the modified sketch and attach arrows if in edit mode."""
+        if self.edit_mode:
+            self.tracked_sketch = sketch
+            self._attach_arrows()
+            Toolbar.show_toolbar(self._temp_toolbar)
+            
+    def _attach_arrows(self):
+        """Inject arrow separator into the sketch's Coin scene."""
+        try:
+            vp = self.network_obj.ViewObject
+            if vp is None:
+                return
+            self._arrow_root = coin.SoSeparator()
+            vp.RootNode.addChild(self._arrow_root)
+        except Exception:
+            FreeCAD.Console.PrintError("Unable to attach arrows to sketch")
+            pass
+            
+    def _detach_arrows(self):
+        """Remove arrow separator from the sketch's Coin scene."""
+        if self._arrow_root is None:
+            return
+        try:
+            vp = self.network_obj.ViewObject
+            if vp is not None:
+                vp.RootNode.removeChild(self._arrow_root)
+        except Exception:
+            pass
+        self._arrow_root = None
+        
+    def _sync_arrows(self):
+        if self._arrow_root is None:
+            return
+        self._arrow_root.removeAllChildren()
+        lines = [
+            (geo.StartPoint, geo.EndPoint)
+            for geo in self.tracked_sketch.Geometry
+            if hasattr(geo, 'StartPoint') and hasattr(geo, 'EndPoint')
+        ]
+        if lines:
+            self._arrow_root.addChild(buildArrowCoinNodes(lines))
+        
+    def slotChangedObject(self, obj, prop):
+        """Rebuild arrows whenever sketch geometry changes while editing."""
+        if self.finished or self.tracked_sketch is None:
+            return
+        if obj != self.tracked_sketch or prop != "Geometry":
+            return
+        self._sync_arrows()
 
     def check_finished(self):
         """Detect when the sketch edition has been exited."""
-        if self._finished:
+        if self.finished:
             return
         # Sketcher normally opens a task panel/dialog while active.
         if Gui.Control.activeDialog():
@@ -69,17 +131,21 @@ class NewSketchObserver:
             return
         # Finalize only after the dialog has appeared once and then closed.
         if self._seen_dialog:
+            self._timer.stop()
             QtCore.QTimer.singleShot(0, self.finalize)
             return True
 
     def finalize(self):
-        if self._finished:
+        if self.finished:
             return
-        self._finished = True
-        self._timer.stop()
+        self.finished = True
+        
+        if self.tracked_sketch is not None:
+            self._detach_arrows()
+            Toolbar.hide_toolbar(self._temp_toolbar)
         
         try:
-            self.callback(self.network_obj, self.created_sketch)
+            self.callback(self.network_obj, self.tracked_sketch)
         finally:
             FreeCAD.removeDocumentObserver(self)
             # Resume sync after sketching is done and request sync
@@ -87,18 +153,20 @@ class NewSketchObserver:
                 self.network_obj.Proxy.resumeSync(request_sync=True)
 
 
-class NewDraftLineObserver:
-    """Observe Draft line creation and add all created lines to the network
+class DraftLineObserver:
+    """Observe Draft line creation/ modification and add all created lines to the network
     after the Draft tool is closed.
     """
 
-    def __init__(self, network_obj, callback):
+    def __init__(self, network_obj, callback, edit_mode=False):
         self.network_obj = network_obj
         self.callback = callback
+        self.edit_mode = edit_mode
         self.doc = network_obj.Document
-        self.created_objects = []
-        self._finished = False
+        self.tracked_objects = []
+        self.finished = False
         self._seen_dialog = False
+        self._arrow_root = None  # For showing base direction arrows
         
         # Suspend sync to prevent transient sync requests while creating lines
         if self.network_obj and hasattr(self.network_obj, "Proxy") and self.network_obj.Proxy:
@@ -111,16 +179,64 @@ class NewDraftLineObserver:
 
     def slotCreatedObject(self, obj):
         """Called whenever a new object is created in the document."""
-        if self._finished:
+        if self.finished or self.edit_mode:
             return
         if not obj or obj.Document != self.doc:
             return
-        if obj not in self.created_objects:
-            self.created_objects.append(obj)
+        if obj not in self.tracked_objects:
+            self.tracked_objects.append(obj)
+            
+    def set_modified_line(self, line):
+        """Set the modified line and attach arrows if in edit mode."""
+        if self.edit_mode:
+            self.tracked_objects.append(line)
+            self._attach_arrows()
+            
+    def _attach_arrows(self):
+        """Inject arrow separator into the sketch's Coin scene."""
+        try:
+            vp = self.network_obj.ViewObject
+            if vp is None:
+                return
+            self._arrow_root = coin.SoSeparator()
+            vp.RootNode.addChild(self._arrow_root)
+        except Exception:
+            FreeCAD.Console.PrintError("Unable to attach arrows to sketch")
+            pass
+            
+    def _detach_arrows(self):
+        """Remove arrow separator from the sketch's Coin scene."""
+        if self._arrow_root is None:
+            return
+        try:
+            vp = self.network_obj.ViewObject
+            if vp is not None:
+                vp.RootNode.removeChild(self._arrow_root)
+        except Exception:
+            pass
+        self._arrow_root = None
+        
+    def _sync_arrows(self):
+        if self._arrow_root is None:
+            return
+        self._arrow_root.removeAllChildren()
+        lines = []
+        for obj in self.tracked_objects:
+            lines.extend(iter_line_segments_from_shape(obj))
+        if lines:
+            self._arrow_root.addChild(buildArrowCoinNodes(lines))
+        
+    def slotChangedObject(self, obj, prop):
+        """Rebuild arrows whenever line geometry changes while editing."""
+        if self.finished or self.tracked_objects is None:
+            return
+        if obj not in self.tracked_objects:
+            return
+        self._sync_arrows()
 
     def check_finished(self):
         """Detect when the Draft command has been exited."""
-        if self._finished:
+        if self.finished:
             return
         # Draft Line normally opens a task panel/dialog while active.
         if Gui.Control.activeDialog():
@@ -128,17 +244,20 @@ class NewDraftLineObserver:
             return
         # Finalize only after the dialog has appeared once and then closed.
         if self._seen_dialog:
+            self._timer.stop()
             QtCore.QTimer.singleShot(0, self.finalize)
             return True
 
     def finalize(self):
-        if self._finished:
+        if self.finished:
             return
-        self._finished = True
-        self._timer.stop()
+        self.finished = True
+        
+        if self.tracked_objects is not None:
+            self._detach_arrows()
         
         try:
-            self.callback(self.network_obj, self.created_objects)
+            self.callback(self.network_obj, self.tracked_objects)
         finally:
             # Always remove observer after one use
             FreeCAD.removeDocumentObserver(self)
@@ -148,6 +267,187 @@ class NewDraftLineObserver:
             # Switch back workbench to HVAC
             Gui.activateWorkbench(hvaclib.WORKBENCH_NAME)
                 
+
+class DuctDirectionEditSession:
+    """
+    Temporary edit mode for reversing base-object directions.
+
+    Behaviour:
+    - enable base direction arrows
+    - hide generated geometry
+    - suspend network sync
+    - set reverse-direction cursor
+    - selecting a base edge/object runs HVAC_ReverseGeometryDirection
+    - on exit, restore visibility, arrows, sync, and cursor
+    """
+
+    def __init__(self, network_obj):
+        self.network_obj = network_obj
+        self.doc = getattr(network_obj, "Document", None)
+        self.active = False
+        self._busy = False
+        self._old_show_arrows = None
+        self._cursor_set = False
+
+    def start(self):
+        if self.active:
+            return
+
+        if self.network_obj is None or self.doc is None:
+            return
+
+        self.active = True
+
+        # Make this network active.
+        try:
+            self.network_obj.Proxy.setActive()
+        except Exception:
+            pass
+
+        # Suspend sync while directions are being edited.
+        try:
+            self.network_obj.Proxy.suspendSync()
+        except Exception:
+            pass
+
+        # Hide generated duct geometry.
+        try:
+            self.network_obj.Proxy.hideAllGeometry()
+        except Exception:
+            pass
+
+        # Enable base direction arrows.
+        try:
+            vobj = self.network_obj.ViewObject
+            self._old_show_arrows = bool(vobj.ShowBaseDirectionArrows)
+            vobj.ShowBaseDirectionArrows = True
+            self.network_obj.ViewObject.Proxy.refreshBaseDirectionArrows()
+        except Exception:
+            pass
+
+        # Change cursor to reverse command icon.
+        self._setCursor()
+
+        # Observe selection.
+        Gui.Selection.addObserver(self)
+
+        FreeCAD.Console.PrintMessage(
+            "HVAC - Direction edit mode started. Select base edges/objects to reverse.\n"
+        )
+
+    def stop(self, request_sync=True):
+        if not self.active:
+            return
+
+        self.active = False
+
+        try:
+            Gui.Selection.removeObserver(self)
+        except Exception:
+            pass
+
+        self._restoreCursor()
+
+        # Disable or restore direction arrows.
+        try:
+            vobj = self.network_obj.ViewObject
+            if self._old_show_arrows is not None:
+                vobj.ShowBaseDirectionArrows = self._old_show_arrows
+            else:
+                vobj.ShowBaseDirectionArrows = False
+            self.network_obj.ViewObject.Proxy.refreshBaseDirectionArrows()
+        except Exception:
+            pass
+
+        # Show generated geometry again.
+        try:
+            self.network_obj.Proxy.showAllGeometry()
+        except Exception:
+            pass
+
+        # Resume sync and request network update.
+        try:
+            self.network_obj.Proxy.resumeSync(request_sync=request_sync)
+        except Exception:
+            pass
+
+        try:
+            FreeCAD.ActiveDocument.recompute()
+        except Exception:
+            pass
+
+        FreeCAD.Console.PrintMessage("HVAC - Direction edit mode closed.\n")
+
+    # -------------------------------------------------
+    # Selection observer API
+    # -------------------------------------------------
+
+    def addSelection(self, doc_name, obj_name, sub_name, point):
+        if not self.active or self._busy:
+            return
+
+        doc = FreeCAD.getDocument(doc_name)
+        if doc is None or doc != self.doc:
+            return
+
+        obj = doc.getObject(obj_name)
+        if obj is None:
+            return
+
+        # Only act on base objects belonging to this network.
+        if obj not in list(getattr(self.network_obj.Base, "OutList", []) or []):
+            return
+
+        if not (hvaclib.isSketch(obj) or hvaclib.isWire(obj)):
+            return
+
+        # For sketches, only reverse selected edges.
+        # Ignore full sketch selection without EdgeN subelement.
+        if hvaclib.isSketch(obj) and not str(sub_name or "").startswith("Edge"):
+            return
+
+        self._busy = True
+        try:
+            Gui.runCommand("HVAC_ReverseGeometryDirection")
+
+            # Rebuild only direction arrows, not generated geometry.
+            try:
+                parser = self.network_obj.Proxy.getParser(
+                    rebuild=True,
+                    set_node_groups=False,
+                )
+                self.network_obj.ViewObject.Proxy.refreshBaseDirectionArrows(parser)
+            except Exception:
+                self.network_obj.ViewObject.Proxy.refreshBaseDirectionArrows()
+
+            # Clear selection so the same edge can be clicked again.
+            QtCore.QTimer.singleShot(0, Gui.Selection.clearSelection)
+
+        finally:
+            self._busy = False
+
+    # -------------------------------------------------
+    # Cursor handling
+    # -------------------------------------------------
+
+    def _setCursor(self):
+        try:
+            icon_path = hvaclib.get_icon_path("ReverseDirection.svg")
+            pixmap = QtGui.QPixmap(icon_path)
+            if not pixmap.isNull():
+                cursor = QtGui.QCursor(pixmap.scaled(24, 24))
+                QtWidgets.QApplication.setOverrideCursor(cursor)
+                self._cursor_set = True
+        except Exception:
+            self._cursor_set = False
+
+    def _restoreCursor(self):
+        try:
+            QtWidgets.QApplication.restoreOverrideCursor()
+        except Exception:
+            pass
+        self._cursor_set = False
+
 
 class DuctNetworkChangeObserver:
     """
@@ -163,6 +463,7 @@ class DuctNetworkChangeObserver:
         self._scheduled: set[str] = set()
         self._undo_redo_in_progress: bool = False
         self._sync_in_progress: bool = False
+        self.edit_observer = None
         
         self._edit_timer = QtCore.QTimer()
         self._edit_timer.setInterval(hvaclib.OBSERVER_TIMER_POLL_INTERVAL)
@@ -186,7 +487,7 @@ class DuctNetworkChangeObserver:
         if self._undo_redo_in_progress or self._sync_in_progress:
             return
             
-        if obj is None:
+        if obj is None or self._edited_net is None:
             return
         doc = getattr(obj, "Document", None)
         if doc is None:
@@ -306,6 +607,9 @@ class DuctNetworkChangeObserver:
             # Resume sync after editing is done and request sync
             if net and hasattr(net, "Proxy") and net.Proxy:
                 net.Proxy.resumeSync(request_sync=True)
+        
+        # Reset sketch/ line observer
+        self.edit_observer = None
 
     def _checkEditedBaseObject(self):
         """
@@ -356,3 +660,138 @@ class DuctNetworkChangeObserver:
         # Suspend sync to prevent transient sync requests while editing
         if net and hasattr(net, "Proxy") and net.Proxy:
             net.Proxy.suspendSync()
+            
+        # Setup and manage observers
+        if not self.edit_observer:
+            def callback(obj, sketch):
+                pass
+                
+            if hvaclib.isSketch(obj):
+                self.edit_observer = SketchObserver(self._edited_net, callback, edit_mode=True)
+                self.edit_observer.set_modified_sketch(obj)
+            elif hvaclib.isWire(obj):
+                self.edit_observer = DraftLineObserver(self._edited_net, callback, edit_mode=True)
+                self.edit_observer.set_modified_line(obj)
+                
+            FreeCAD.addDocumentObserver(self.edit_observer)
+            self.edit_observer._sync_arrows()
+            FreeCAD.ActiveDocument.recompute()
+
+
+def buildArrowCoinNodes(lines, size_scale=1.0):
+    """
+    Build one Coin3D node containing all direction arrows as 3D cones.
+    lines: [(sp, ep, tag, edge_no), ...]
+    """
+    root = coin.SoSeparator()
+    
+    # Draw filled faces with one color
+    mat = coin.SoMaterial()
+    mat.diffuseColor.setValue(1.0, 0.15, 0.0)
+    mat.specularColor.setValue(0.4, 0.4, 0.4)
+    mat.shininess.setValue(0.6)
+    root.addChild(mat)
+
+    for sp, ep in lines:
+        p0 = FreeCAD.Vector(*sp) if not hasattr(sp, 'x') else FreeCAD.Vector(sp)
+        p1 = FreeCAD.Vector(*ep) if not hasattr(ep, 'x') else FreeCAD.Vector(ep)
+    
+        direction = p1 - p0
+        length = direction.Length
+        if length < 1e-9:
+            continue
+        direction.normalize()
+    
+        # sizing
+        arrow_len   = max(5.0, min(length * 0.25, 80.0)) * max(0.05, float(size_scale))
+        arrow_len   = min(arrow_len, length * 0.8)
+        head_len    = arrow_len * 0.5
+        head_radius = head_len * 0.4
+        shaft_len   = arrow_len - head_len
+        shaft_radius = head_radius * 0.5
+    
+        # geometry: chain from tip backwards
+        tip         = p0 + direction * (length * 0.6)
+        cone_center = tip  - direction * (head_len * 0.5)
+        cone_base   = tip  - direction * (head_len)
+        shaft_center = cone_base - direction * (shaft_len * 0.5)
+    
+        # rotation: Coin SoCone/SoCylinder align to +Y, rotate Y → direction
+        y_axis    = FreeCAD.Vector(0, 1, 0)
+        rot_axis  = y_axis.cross(direction)
+        dot       = max(-1.0, min(1.0, y_axis.dot(direction)))
+        if rot_axis.Length > 1e-9:
+            rot_axis.normalize()
+            rot_angle = math.acos(dot)
+        else:
+            # direction is parallel to Y axis
+            if dot > 0:
+                # already +Y, identity — no rotation needed
+                rot_axis  = FreeCAD.Vector(1, 0, 0)
+                rot_angle = 0.0
+            else:
+                # exactly -Y, flip 180° around X (or Z, either works)
+                rot_axis  = FreeCAD.Vector(1, 0, 0)
+                rot_angle = math.pi
+    
+        def make_transform(center, rot_ax, angle):
+            xf = coin.SoTransform()
+            xf.translation.setValue(center.x, center.y, center.z)
+            xf.rotation.setValue(coin.SbVec3f(rot_ax.x, rot_ax.y, rot_ax.z), angle)
+            return xf
+    
+        # cone head
+        cone_sep = coin.SoSeparator()
+        cone_sep.addChild(make_transform(cone_center, rot_axis, rot_angle))
+        cone = coin.SoCone()
+        cone.bottomRadius.setValue(head_radius)
+        cone.height.setValue(head_len)
+        cone_sep.addChild(cone)
+        root.addChild(cone_sep)
+    
+        # cylinder shaft — anchored to cone base, never recomputed independently
+        shaft_sep = coin.SoSeparator()
+        shaft_sep.addChild(make_transform(shaft_center, rot_axis, rot_angle))
+        cyl = coin.SoCylinder()
+        cyl.radius.setValue(shaft_radius)
+        cyl.height.setValue(shaft_len)
+        shaft_sep.addChild(cyl)
+        root.addChild(shaft_sep)
+
+    return root
+
+def iter_line_segments_from_shape(obj, tol=1e-9):
+    """
+    Yield per-edge path records for supported shape edges.
+
+    Output tuple:
+        (
+            start_xyz,
+            end_xyz,
+            tag,
+            path_json,
+            start_dir_xyz,
+            end_dir_xyz,
+        )
+    """
+    shape = getattr(obj, "Shape", None)
+    if shape is None:
+        return
+
+    for slno, edge in enumerate(getattr(shape, "Edges", []) or []):
+        curve = getattr(edge, "Curve", None)
+        kind = hvaclib.GeomType(curve)
+        if curve is None or kind == "Unknown":
+            continue
+
+        v1 = edge.Vertexes[0].Point
+        v2 = edge.Vertexes[-1].Point
+        if (v1.sub(v2)).Length <= tol:
+            continue
+
+        tag = hvaclib.makeLineKey(obj.Name, slno)
+
+        yield (
+            hvaclib.vec_to_xyz(v1),
+            hvaclib.vec_to_xyz(v2)
+        )

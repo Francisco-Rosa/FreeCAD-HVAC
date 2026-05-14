@@ -61,8 +61,11 @@ class HVAC(Gui.Workbench):
                                 'HVAC_CreateSketch',
                                 'HVAC_CreateLine',
                                 'HVAC_CreateSpline',
-                                'HVAC_EditBaseObject',
                                 'HVAC_CreateVirtualJunction',
+                                "Separator",
+                                'HVAC_EditBaseObject',
+                                'HVAC_EditDuctDirections',
+                                # 'HVAC_ReverseGeometryDirection',
                                 "Separator",
                                 'HVAC_EditType',
                                 'HVAC_EditPlacement',
@@ -77,8 +80,11 @@ class HVAC(Gui.Workbench):
                                 'HVAC_CreateSketch',
                                 'HVAC_CreateLine',
                                 'HVAC_CreateSpline',
-                                'HVAC_EditBaseObject',
                                 'HVAC_CreateVirtualJunction',
+                                "Separator",
+                                'HVAC_EditBaseObject',
+                                'HVAC_EditDuctDirections',
+                                # 'HVAC_ReverseGeometryDirection',
                                 "Separator",
                                 'HVAC_EditType',
                                 'HVAC_EditPlacement',
@@ -93,8 +99,11 @@ class HVAC(Gui.Workbench):
                                 'HVAC_CreateSketch',
                                 'HVAC_CreateLine',
                                 'HVAC_CreateSpline',
-                                'HVAC_EditBaseObject',
                                 'HVAC_CreateVirtualJunction',
+                                "Separator",
+                                'HVAC_EditBaseObject',
+                                'HVAC_EditDuctDirections',
+                                # 'HVAC_ReverseGeometryDirection',
                                 "Separator",
                                 'HVAC_EditType',
                                 'HVAC_EditPlacement',
@@ -179,7 +188,7 @@ class HVAC(Gui.Workbench):
 
             def __init__(self):
                 super().__init__()
-                self.commands = ["HVAC_ModifyDuctNetwork", 
+                self.commands = ["HVAC_ModifyDuctNetwork",
                                 "HVAC_EditNetworkTypeDefaults"]
                 self.title = translate("HVAC", "Network")
                 
@@ -195,8 +204,9 @@ class HVAC(Gui.Workbench):
                 self.commands = ['HVAC_CreateSketch',
                                  'HVAC_CreateLine',
                                  'HVAC_CreateSpline',
+                                 'HVAC_CreateVirtualJunction',
                                  'HVAC_EditBaseObject',
-                                 'HVAC_CreateVirtualJunction']
+                                 'HVAC_EditDuctDirections']
                 self.title = translate("HVAC", "Routing Tools")
                 
             def shouldShow(self):
