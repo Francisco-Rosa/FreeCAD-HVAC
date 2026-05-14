@@ -482,43 +482,125 @@ class CommandReverseGeometryDirection:
         """
         Return {sketch: set(geo_indices)} for selected non-construction sketch edges.
     
-        More robust mapping:
-            selected EdgeN -> Nth visible/non-construction edge-producing Geometry item
+        Handles both:
+            1. Sketch edit mode:
+            selected EdgeN -> Nth visible/non-construction sketch geometry
+    
+            2. Normal 3D view mode:
+            selected EdgeN -> sketch.Shape EdgeN -> matched back to sketch.Geometry
         """
+            
         result = {}
+    
         for sel in Gui.Selection.getSelectionEx():
             sketch = getattr(sel, "Object", None)
             if not hvaclib.isSketch(sketch):
                 continue
-            # Build EdgeN -> Geometry index map.
-            # Do not assume Edge1 == Geometry[0], because construction geometry
-            # may exist in sketch.Geometry but not as a normal selectable edge.
-            edge_to_geo = {}
-            edge_no = 1
+    
+            # Check whether this sketch is currently in edit mode.
+            in_edit = Gui.ActiveDocument.getInEdit() is sketch.ViewObject
+    
+            # Find valid geometric indices
+            visible_geo_indices = []
             for geo_index, geo in enumerate(sketch.Geometry):
+                # Skip construction geometry and point geometry.
+                if sketch.getConstruction(geo_index):
+                    continue
+                if "Point" in geo.TypeId or geo.__class__.__name__ in ("Point", "Point2d"):
+                    continue
+                # Add valid geometry index to the list.
+                visible_geo_indices.append(geo_index)
+    
+
+            # Edit-mode sketcher edge mapping.
+            if in_edit:
+                edge_to_geo = {
+                    edge_no: geo_index
+                    for edge_no, geo_index in enumerate(visible_geo_indices, start=1)
+                }
+            else:
+                edge_to_geo = {}
+
+            # Geometry matching function.
+            def match_shape_edge_to_geo(sub_name):
+                """
+                Normal-mode mapping:
+                    sketch.Shape EdgeN -> matching sketch.Geometry index
+                """
                 try:
-                    is_construction = bool(sketch.getConstruction(geo_index))
+                    selected_edge = sketch.Shape.getElement(sub_name)
                 except Exception:
-                    is_construction = bool(getattr(geo, "Construction", False))
-                if is_construction:
-                    continue
-                type_id = getattr(geo, "TypeId", "")
-                class_name = geo.__class__.__name__
-                # Point geometry does not correspond to a selectable EdgeN.
-                if "Point" in type_id or class_name in ("Point", "Point2d"):
-                    continue
-                edge_to_geo[edge_no] = geo_index
-                edge_no += 1
-                
+                    try:
+                        edge_no = int(sub_name[4:])
+                        selected_edge = sketch.Shape.Edges[edge_no - 1]
+                    except Exception:
+                        return None
+    
+                if getattr(selected_edge, "ShapeType", "") != "Edge":
+                    return None
+    
+                try:
+                    diag = sketch.Shape.BoundBox.DiagonalLength
+                except Exception:
+                    diag = 1.0
+    
+                tol = 1e-7 * max(1.0, diag)
+    
+                best_geo = None
+                best_score = None
+    
+                for geo_index in visible_geo_indices:
+                    geo = sketch.Geometry[geo_index]
+    
+                    try:
+                        geo_shape = geo.toShape()
+                    except Exception:
+                        continue
+    
+                    try:
+                        dist = selected_edge.distToShape(geo_shape)[0]
+                        length_diff = abs(selected_edge.Length - geo_shape.Length)
+                    except Exception:
+                        continue
+    
+                    if dist <= tol and length_diff <= tol:
+                        score = dist + length_diff
+                        if best_score is None or score < best_score:
+                            best_score = score
+                            best_geo = geo_index
+    
+                return best_geo
+    
+            # Find selected geometry indices.
+
             indices = set()
+
             for sub in (getattr(sel, "SubElementNames", None) or []):
                 if not sub.startswith("Edge"):
                     continue
-                try:
-                    selected_edge_no = int(sub[4:])
-                except ValueError:
-                    continue
-                geo_index = edge_to_geo.get(selected_edge_no)
+    
+                geo_index = None
+
+                if not in_edit:
+                    geo_index = match_shape_edge_to_geo(sub)
+
+                if geo_index is None:
+                    try:
+                        selected_edge_no = int(sub[4:])
+                    except ValueError:
+                        continue
+                
+                    geo_index = edge_to_geo.get(selected_edge_no)
+                
+                    if geo_index is not None and not in_edit:
+                        FreeCAD.Console.PrintWarning(
+                            "HVAC - Used fallback EdgeN mapping for {}.{}; "
+                            "normal-view Sketch.Shape edge order may be unstable.\n".format(
+                                sketch.Name,
+                                sub,
+                            )
+                        )
+    
                 if geo_index is None:
                     FreeCAD.Console.PrintWarning(
                         "HVAC - Could not map {}.{} to sketch geometry.\n".format(
@@ -527,9 +609,12 @@ class CommandReverseGeometryDirection:
                         )
                     )
                     continue
+    
                 indices.add(geo_index)
+    
             if indices:
                 result.setdefault(sketch, set()).update(indices)
+    
         return result
     
     
