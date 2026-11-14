@@ -293,13 +293,21 @@ def reset_layer_materials_to_network_defaults(obj):
         default_material = _resolve_default_material(layer_defs_by_id.get(layer_id), get_owner)
         if not hvac_materials.is_material_assigned(default_material):
             default_material = hvac_materials.get_unassigned_material()
-        if default_material is not None:
+        if default_material is not None and not _same_material(getattr(obj, material_prop, None), default_material):
             try:
                 setattr(obj, material_prop, default_material)
                 changed = True
             except Exception:
                 pass
     return changed
+
+
+def _same_material(a, b):
+    """Both are the same material card (by UUID); False when either cannot say."""
+    try:
+        return bool(str(a.UUID)) and str(a.UUID) == str(b.UUID)
+    except Exception:
+        return False
 
 
 def _resolve_default_material(layer_def, get_owner):

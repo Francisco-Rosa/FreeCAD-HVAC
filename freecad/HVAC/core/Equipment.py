@@ -231,6 +231,90 @@ def create_equipment(doc, model=None, name="Equipment"):
     return make_equipment(model)
 
 
+def library_models():
+    """
+    Every equipment model of every loaded library (library/equipment_library.py),
+    sorted by label. A definition that does not load is reported on the console.
+    """
+    from ..library import equipment_library
+    from ..utils import hvaclib
+
+    registry = hvaclib.HVACLibraryService.get_hvac_library_registry()
+    models = []
+    for library in registry.list_libraries():
+        found, errors = equipment_library.load_models(library.id, library.root_path)
+        models.extend(found)
+        for error in errors:
+            FreeCAD.Console.PrintWarning("HVAC - Equipment model not loaded: {}\n".format(error))
+    return sorted(models, key=lambda model: model.label)
+
+
+def _face_at(shape, position, direction, tolerance=0.01):
+    """Name of the planar face of `shape` centred on `position` and facing `direction`, or None."""
+    position = FreeCAD.Vector(*position)
+    direction = FreeCAD.Vector(*direction)
+    for index, face in enumerate(shape.Faces):
+        if face.Surface.TypeId != "Part::GeomPlane":
+            continue
+        if (face.CenterOfMass - position).Length > tolerance:
+            continue
+        u, v = face.Surface.parameter(face.CenterOfMass)
+        if face.normalAt(u, v).dot(direction) > 0.999:
+            return "Face{}".format(index + 1)
+    return None
+
+
+def create_from_model(doc, model, values=None, position=None):
+    """
+    Place a library equipment model in `doc` as HVAC equipment: an App::Part
+    holding the unit's body (a plain solid: change a size by adding the
+    model again) and one port per connection, each with its function and its
+    snap point, markers hidden. `values` overrides the model's property
+    defaults; `position` moves the unit. Returns the App::Part; raises
+    ValueError when the values are not accepted or the model does not build.
+    """
+    from ..library import equipment_library
+    from ..library.library_api import HVACLibraryAPI
+    from ..utils import hvaclib
+
+    resolved = equipment_library.resolve_values(model, values)
+    registry = hvaclib.HVACLibraryService.get_hvac_library_registry()
+    function = getattr(registry.import_generator(model.library_id, model.module), model.function, None)
+    if function is None:
+        raise ValueError(
+            "Equipment model '{}': no function '{}' in '{}'".format(model.id, model.function, model.module)
+        )
+    result = function(HVACLibraryAPI, resolved)
+    shape = result["shape"]
+    check = HVACLibraryAPI.validate(shape, require_solid=True)
+    if not check["valid"] or check["solid_count"] != 1:
+        raise ValueError("Equipment model '{}' did not build one valid solid with these sizes".format(model.id))
+
+    part = doc.addObject("App::Part", "Equipment")
+    part.Label = model.label
+    body = doc.addObject("Part::Feature", "EquipmentBody")
+    body.Label = "{} body".format(model.label)
+    body.Shape = shape
+    part.addObject(body)
+    make_equipment(part)
+    part.addProperty("App::PropertyString", "EquipmentModel", "HVAC Equipment", "Library model this unit was made from")
+    part.EquipmentModel = "{}/{}".format(model.library_id, model.id)
+    part.setEditorMode("EquipmentModel", 1)
+    part.InternalPressureDrop = float(result.get("internal_pressure_drop", 0.0) or 0.0)
+
+    for port in result["ports"]:
+        face_name = _face_at(shape, port["position"], port["direction"])
+        if face_name is None:
+            raise ValueError("Equipment model '{}': port '{}' is not on an end face".format(model.id, port["name"]))
+        marker = _custom_fitting.add_port(body, face_name, container=part, name=port["name"])
+        ensure_equipment_port(marker, port["function"])
+        _custom_fitting.ensure_snap_point(marker)
+        _custom_fitting.hide_port(marker)
+    if position is not None:
+        part.Placement = FreeCAD.Placement(FreeCAD.Vector(*position), FreeCAD.Rotation())
+    return part
+
+
 def model_of(equipment):
     """The App::Part holding an equipment's geometry and ports: the equipment itself, or an older object's Model."""
     model = getattr(equipment, "Model", None)

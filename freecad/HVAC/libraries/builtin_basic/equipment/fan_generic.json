@@ -1,0 +1,75 @@
+{
+  "id": "fan_generic",
+  "label": "Fan",
+  "description": "A fan in a casing with an inlet and an outlet in line: a supply fan (outdoor air to supply) or an exhaust fan (return to exhaust).",
+  "geometry": {
+    "backend": "generator",
+    "module": "shared:equipment",
+    "function": "build_fan"
+  },
+  "properties": [
+    {
+      "name": "Service",
+      "label": "Service",
+      "type": "choice",
+      "options": [
+        "Supply",
+        "Exhaust"
+      ],
+      "default": "Exhaust"
+    },
+    {
+      "name": "CasingLength",
+      "label": "Casing length",
+      "type": "length",
+      "default": 800.0,
+      "min": 1.0
+    },
+    {
+      "name": "CasingWidth",
+      "label": "Casing width",
+      "type": "length",
+      "default": 600.0,
+      "min": 1.0
+    },
+    {
+      "name": "CasingHeight",
+      "label": "Casing height",
+      "type": "length",
+      "default": 600.0,
+      "min": 1.0
+    },
+    {
+      "name": "CollarLength",
+      "label": "Collar length",
+      "type": "length",
+      "default": 100.0,
+      "min": 1.0
+    },
+    {
+      "name": "PortShape",
+      "label": "Port shape",
+      "type": "choice",
+      "options": [
+        "Rectangular",
+        "Round"
+      ],
+      "default": "Round",
+      "description": "A round port takes its width as the diameter"
+    },
+    {
+      "name": "PortWidth",
+      "label": "Connection width",
+      "type": "length",
+      "default": 400.0,
+      "min": 1.0
+    },
+    {
+      "name": "PortHeight",
+      "label": "Connection height",
+      "type": "length",
+      "default": 400.0,
+      "min": 1.0
+    }
+  ]
+}

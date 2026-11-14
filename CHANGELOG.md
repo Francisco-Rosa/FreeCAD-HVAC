@@ -37,6 +37,11 @@ API versions: geometry 3, loss 1, PartScript 3.
   below.
 - Pressure balancing keeps sizing sections whole (a section shared with the critical path is reported, not
   shrunk) and keeps the reducer advice.
+- A sync rebuilds only what changed. It used to mark every fitting for recompute on every sync (and rewrote
+  labels FreeCAD had made unique, and unchanged ports), so any property edit rebuilt the whole network.
+  Reset to Defaults rebuilds only the objects it changes. Reload Libraries rebuilds everything.
+- Equipment models in a library (`<library>/equipment/*.json`, generators in `shared:equipment`): an air handling
+  unit and a fan in `builtin_basic`. "Add Equipment from Library" places one with its ports and snap points.
 - A network fed by an equipment outlet (e.g. an AHU exhaust outlet to outside) takes its air direction from the
   port: its open ends are Discharge terminals.
 - Lateral tees can be face-mounted (`Attachment`); wyes on a bullhead tee use the bullhead loss.

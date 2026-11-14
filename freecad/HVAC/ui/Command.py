@@ -1407,6 +1407,11 @@ class CommandReloadHVACLibraries:
     def Activated(self):
         hvaclib.reload_hvac_libraries()
         hvaclib.debug_print_loaded_libraries()
+        # Library code may have changed: rebuild every fitting (a normal sync only rebuilds what changed).
+        for net in hvaclib.allHVACNetworks() or []:
+            proxy = getattr(net, "Proxy", None)
+            if proxy is not None:
+                proxy.requestSync(rebuild_all=True)
         
         
 def _is_hvac_object(obj):
@@ -1497,6 +1502,36 @@ class CommandCreateEquipment:
                 doc.commitTransaction()
             FreeCAD.Console.PrintMessage("HVAC - '{}' is now HVAC equipment\n".format(part.Label))
         self.task_panel = TaskPanelPortContainer(part, kind="equipment")
+        Gui.Control.showDialog(self.task_panel)
+
+
+class CommandAddEquipment:
+    """Add a library equipment model (air handling unit, fan, ...) as HVAC equipment."""
+
+    def __init__(self):
+        self.task_panel = None
+
+    def GetResources(self):
+        return {
+            'Pixmap': hvaclib.get_icon_path("CreateDuctsIcon.svg"),
+            'MenuText': QT_TRANSLATE_NOOP('HVAC_AddEquipment', 'Add Equipment from Library'),
+            'ToolTip': QT_TRANSLATE_NOOP(
+                'HVAC_AddEquipment',
+                'Add a ready-made unit from the library (an air handling unit, a fan): pick the model, set its sizes '
+                'and position. It comes with its ports and their snap points; a duct drawn to end on a port is '
+                'connected to it automatically',
+            ),
+            'CmdType': 'ForEdit',
+        }
+
+    def IsActive(self):
+        return FreeCAD.ActiveDocument is not None and not Gui.Control.activeDialog()
+
+    def Activated(self):
+        from ..core import Equipment
+        from ..ui.TaskPanel import TaskPanelAddEquipment
+
+        self.task_panel = TaskPanelAddEquipment(FreeCAD.ActiveDocument, Equipment.library_models())
         Gui.Control.showDialog(self.task_panel)
 
 
@@ -1708,6 +1743,7 @@ if FreeCAD.GuiUp:
     FreeCAD.Gui.addCommand('HVAC_SelectAllSegments', CommandSelectAllSegments())
     FreeCAD.Gui.addCommand('HVAC_SelectAllComponents', CommandSelectAllComponents())
     FreeCAD.Gui.addCommand('HVAC_CreateEquipment', CommandCreateEquipment())
+    FreeCAD.Gui.addCommand('HVAC_AddEquipment', CommandAddEquipment())
     FreeCAD.Gui.addCommand('HVAC_LayerVisibility', CommandLayerVisibility())
     FreeCAD.Gui.addCommand('HVAC_CreateCustomFitting', CommandCreateCustomFitting())
     FreeCAD.Gui.addCommand('HVAC_ConnectEquipment', CommandConnectEquipment())

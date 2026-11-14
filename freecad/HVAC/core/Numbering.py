@@ -255,8 +255,7 @@ def _set_number_and_label(obj, number, description):
         obj.Number = number
         changed = True
     new_label = "{} — {}".format(number, description)
-    if obj.Label != new_label:
-        obj.Label = new_label
+    if hvaclib.set_label(obj, new_label):
         changed = True
     return changed
 

@@ -82,6 +82,7 @@ class HVAC(Gui.Workbench):
                     'HVAC_EditMaterial',
                     'HVAC_ResetTypesToDefaults',
                     'HVAC_CreateCustomFitting',
+                    'HVAC_AddEquipment',
                     'HVAC_CreateEquipment',
                     'HVAC_ConnectEquipment',
                     "Separator",
@@ -216,6 +217,7 @@ class HVAC(Gui.Workbench):
                                  'HVAC_CreateLine',
                                  'HVAC_CreateSpline',
                                  'HVAC_CreateVirtualJunction',
+                                 'HVAC_AddEquipment',
                                  'HVAC_EditBaseObject',
                                  'HVAC_EditDuctDirections']
                 self.title = translate("HVAC", "Routing Tools")

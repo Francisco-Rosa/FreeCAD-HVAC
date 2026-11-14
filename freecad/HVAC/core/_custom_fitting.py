@@ -203,7 +203,8 @@ def ensure_snap_point(lcs):
             except Exception:
                 pass
     label = "{} point".format(str(getattr(lcs, "PortName", "") or lcs.Label))
-    if point.Label != label:
+    current = str(point.Label)
+    if current != label and not (current.startswith(label) and current[len(label) :].isdigit()):
         point.Label = label
     return point
 

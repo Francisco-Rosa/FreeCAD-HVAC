@@ -713,16 +713,19 @@ class DuctNetwork:
     def resetObjectsToNetworkDefaults(objects):
         """
         Reset selected segment/junction objects to their owner network defaults.
+        An object already at its defaults is left alone (not rebuilt).
         """
         doc = FreeCAD.ActiveDocument
         if doc is None:
             return
 
-        changed = False
+        any_changed = False
 
         for obj in objects or []:
             if obj is None:
                 continue
+            # Per object: only one that really changed is rebuilt.
+            changed = False
 
             # A DuctJunction has no type of its own any more -- retarget to
             # its Primary DuctComponent so "reset to defaults" on a selected
@@ -838,12 +841,14 @@ class DuctNetwork:
             if _construction_schema.reset_layer_materials_to_network_defaults(obj):
                 changed = True
 
-            try:
-                obj.touch()
-            except Exception:
-                pass
+            if changed:
+                any_changed = True
+                try:
+                    obj.touch()
+                except Exception:
+                    pass
 
-        if changed:
+        if any_changed:
             doc.recompute()
 
     ## Object Management
@@ -1492,8 +1497,7 @@ class DuctNetwork:
             # to the plain unnumbered form.
             if not getattr(segment_obj, "Number", ""):
                 new_label = DuctSegment.labelFor(source_obj, edge_ref.local_index)
-                if segment_obj.Label != new_label:
-                    segment_obj.Label = new_label
+                if hvaclib.set_label(segment_obj, new_label):
                     changed = True
 
         # Remove old segments
@@ -1508,8 +1512,12 @@ class DuctNetwork:
 
         return changed
 
-    def syncJunctions(self, parser, initial_sync=False):
+    def syncJunctions(self, parser, initial_sync=False, rebuild_all=False):
         """
+        rebuild_all: mark every component for recompute (the first sync of a
+        loaded document, a library reload); otherwise only the components of
+        a junction that is new or whose classification changed are marked.
+
         Synchronize derived DuctJunction objects with parser nodes, and
         (via syncJunctionComponents) each junction's Primary/Inline
         DuctComponent children.
@@ -1647,6 +1655,7 @@ class DuctNetwork:
                 flow_class=flow_class,
                 qualifiers=qualifiers,
                 derived_values=derived_values,
+                rebuild=rebuild_all or initial_sync or is_new_junction or meta_changed,
             )
             changed = changed or components_changed
 
@@ -1656,8 +1665,7 @@ class DuctNetwork:
             # the matching comment in syncSegments.
             if not getattr(junction_obj, "Number", ""):
                 new_label = DuctJunction.labelFor(family, node_id)
-                if junction_obj.Label != new_label:
-                    junction_obj.Label = new_label
+                if hvaclib.set_label(junction_obj, new_label):
                     changed = True
 
         # Remove old junctions
@@ -1681,6 +1689,7 @@ class DuctNetwork:
         flow_class="",
         qualifiers=None,
         derived_values=None,
+        rebuild=False,
     ):
         """
         Create/update a junction's Primary DuctComponent (sticky type
@@ -1806,13 +1815,16 @@ class DuctNetwork:
         schema_changed = primary.Proxy.applyTypeSchema()
         changed = changed or schema_changed
 
+        # What follows (labels, re-applied inline schemas that did not change)
+        # does not alter any geometry: decide the rebuild on what changed so far.
+        rebuild = rebuild or changed
+
         # Once HVAC_RenumberNetwork has assigned this Primary component a
         # Number, its Label is documentation-owned by that command instead --
         # see the matching comment in syncSegments.
         if not getattr(primary, "Number", ""):
             new_label = DuctComponent.labelFor("Primary", selection.type_def.label if selection.type_def else "")
-            if primary.Label != new_label:
-                primary.Label = new_label
+            if hvaclib.set_label(primary, new_label):
                 changed = True
 
         # Inline components are retained as-is (never auto-replaced) --
@@ -1824,12 +1836,23 @@ class DuctNetwork:
                 changed = True
             if comp.Proxy.applyTypeSchema():
                 changed = True
+                rebuild = True
 
-        # Build the ordered chain and write each component's local ports.
+        # Build the ordered chain and write each component's local ports
+        # (only the ports that changed are written, and a written property
+        # marks its component for recompute by itself).
         junction_obj.Proxy.composeComponents()
 
-        for comp in junction_obj.Proxy.getComponents():
-            comp.touch()
+        # A component's geometry depends on its own properties and ports
+        # (FreeCAD marks it when either is written) and on its junction's
+        # classification, which it reads without a link. So rebuild this
+        # junction's components only when that classification or the
+        # component set changed, or when the caller asks for everything;
+        # touching every component on every sync rebuilt the whole network
+        # for any edit.
+        if rebuild:
+            for comp in junction_obj.Proxy.getComponents():
+                comp.touch()
 
         return changed
 
@@ -1842,11 +1865,18 @@ class DuctNetwork:
         except Exception:
             FreeCAD.Console.PrintError("Error refreshing base direction overlay.\n")
 
-    def requestSync(self, initial_sync=None, force_recompute=False):
+    def requestSync(self, initial_sync=None, force_recompute=False, rebuild_all=False):
+        """
+        Schedule a sync. rebuild_all also rebuilds every fitting, whether or
+        not its inputs changed (after a library reload); a normal sync only
+        rebuilds what changed.
+        """
         from PySide import QtCore
 
         if initial_sync is not None:
             self._initial_sync = bool(initial_sync)
+        if rebuild_all:
+            self._rebuild_all = True
 
         if self._sync_suspended:
             return
@@ -1900,6 +1930,9 @@ class DuctNetwork:
             return
 
         self._sync_in_progress = True
+        rebuild_all = bool(getattr(self, "_rebuild_all", False))
+        self._rebuild_all = False
+        force_recompute = force_recompute or rebuild_all
         try:
             if self._initial_sync:
                 # Do not run junction update on initial sync since edge tags will not be updated in segments
@@ -1946,7 +1979,7 @@ class DuctNetwork:
                 # Stage 2: Sync junctions/components, for creating ports; so
                 # that each component's execute() writes its own
                 # ConnectionLengthsJson
-                changed_junctions = self.syncJunctions(parser, initial_sync=False)
+                changed_junctions = self.syncJunctions(parser, initial_sync=False, rebuild_all=rebuild_all)
                 # Ducts drawn to equipment / custom fitting ports attach to them.
                 changed_junctions = self.autoAttach(parser) or changed_junctions
                 if changed_junctions or force_recompute:

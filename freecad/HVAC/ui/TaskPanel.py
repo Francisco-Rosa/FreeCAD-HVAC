@@ -2468,6 +2468,127 @@ def _length_spin_box(value=0.0):
     return box
 
 
+class TaskPanelAddEquipment:
+    """
+    Add a library equipment model (an air handling unit, a fan, ...) to the
+    document as HVAC equipment: pick the model, set its sizes and where it
+    goes; OK builds it with its ports (Equipment.create_from_model). The
+    fields are made from the model's own property list.
+    """
+
+    def __init__(self, doc, models):
+        self.doc = doc
+        self.models = list(models)
+        self.created = None
+        self._editors = {}
+
+        self.form = QtWidgets.QWidget()
+        self.form.setWindowTitle(translate("HVAC_AddEquipment", "Add Equipment"))
+        layout = QtWidgets.QVBoxLayout(self.form)
+
+        self.model_combo = QtWidgets.QComboBox()
+        for model in self.models:
+            self.model_combo.addItem("{}  [{}]".format(model.label, model.library_id))
+        layout.addWidget(self.model_combo)
+        self.description = QtWidgets.QLabel()
+        self.description.setWordWrap(True)
+        layout.addWidget(self.description)
+
+        self.fields_box = QtWidgets.QGroupBox(translate("HVAC_AddEquipment", "Sizes"))
+        self.fields_form = QtWidgets.QFormLayout(self.fields_box)
+        layout.addWidget(self.fields_box)
+
+        place_box = QtWidgets.QGroupBox(translate("HVAC_AddEquipment", "Position of the unit's centre"))
+        place_form = QtWidgets.QFormLayout(place_box)
+        self.position = []
+        for axis in ("X", "Y", "Z"):
+            spin = _length_spin_box()
+            spin.setSuffix(" mm")
+            place_form.addRow(axis + ":", spin)
+            self.position.append(spin)
+        layout.addWidget(place_box)
+
+        self.message = QtWidgets.QLabel()
+        self.message.setWordWrap(True)
+        layout.addWidget(self.message)
+        layout.addStretch(1)
+
+        self.model_combo.currentIndexChanged.connect(self._showModel)
+        self._showModel()
+
+    def _model(self):
+        index = self.model_combo.currentIndex()
+        return self.models[index] if 0 <= index < len(self.models) else None
+
+    def _showModel(self):
+        """Rebuild the size fields for the picked model."""
+        while self.fields_form.rowCount():
+            self.fields_form.removeRow(0)
+        self._editors = {}
+        model = self._model()
+        self.message.setText("")
+        if model is None:
+            self.description.setText(translate("HVAC_AddEquipment", "No equipment model in the loaded libraries."))
+            return
+        self.description.setText(model.description)
+        for prop in model.properties:
+            if prop.type == "bool":
+                editor = QtWidgets.QCheckBox()
+                editor.setChecked(bool(prop.default))
+            elif prop.type == "choice":
+                editor = QtWidgets.QComboBox()
+                editor.addItems(prop.options)
+                editor.setCurrentIndex(max(prop.options.index(str(prop.default)), 0))
+            else:
+                editor = QtWidgets.QDoubleSpinBox()
+                editor.setRange(prop.minimum, 1.0e6)
+                editor.setDecimals(1)
+                editor.setSingleStep(50.0 if prop.type == "length" else 10.0)
+                editor.setSuffix({"length": " mm", "pressure": " Pa"}.get(prop.type, ""))
+                editor.setValue(float(prop.default))
+            if prop.description:
+                editor.setToolTip(prop.description)
+            self.fields_form.addRow(prop.label + ":", editor)
+            self._editors[prop.name] = editor
+
+    def values(self):
+        """{property name: value} as set in the fields."""
+        values = {}
+        for name, editor in self._editors.items():
+            if isinstance(editor, QtWidgets.QCheckBox):
+                values[name] = editor.isChecked()
+            elif isinstance(editor, QtWidgets.QComboBox):
+                values[name] = editor.currentText()
+            else:
+                values[name] = editor.value()
+        return values
+
+    def accept(self):
+        from ..core import Equipment
+
+        model = self._model()
+        if model is None:
+            return True
+        self.doc.openTransaction("Add Equipment")
+        try:
+            position = tuple(spin.value() for spin in self.position)
+            self.created = Equipment.create_from_model(self.doc, model, self.values(), position)
+        except Exception as e:
+            self.doc.abortTransaction()
+            # Stay open, so the sizes can be corrected.
+            self.message.setText(translate("HVAC_AddEquipment", "Not added: {}").format(e))
+            return False
+        self.doc.commitTransaction()
+        self.doc.recompute()
+        Gui.Selection.clearSelection()
+        Gui.Selection.addSelection(self.doc.Name, self.created.Name)
+        FreeCAD.Console.PrintMessage("HVAC - Added equipment '{}'\n".format(self.created.Label))
+        return True
+
+    def reject(self):
+        return True
+
+
 class TaskPanelPortContainer:
     """
     Create and edit the ports of an App::Part: an HVAC equipment's ports

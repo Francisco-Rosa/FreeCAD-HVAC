@@ -514,6 +514,28 @@ def makeLineKey(obj_name, source_index):
 # Object data manipulation
 #------------------------------------------------------------------------------
 
+def label_matches(current, wanted):
+    """
+    True when an object's Label already is `wanted`, allowing for the digits
+    FreeCAD appends to keep labels unique ("Tee [Primary]" -> "Tee [Primary]015").
+    """
+    current, wanted = str(current), str(wanted)
+    return current == wanted or (current.startswith(wanted) and current[len(wanted) :].isdigit())
+
+
+def set_label(obj, wanted):
+    """
+    Give `obj` the label `wanted` unless it has it already (see
+    label_matches); returns True when it was written. A sync must not write
+    a label it already has: FreeCAD renames duplicates, so a plain
+    comparison never holds, and every write marks the object for recompute.
+    """
+    if label_matches(obj.Label, wanted):
+        return False
+    obj.Label = wanted
+    return True
+
+
 def vec_quant(p):
     """
     Collapse points by tolerance using quantization.

@@ -1,0 +1,126 @@
+{
+  "id": "ahu_generic",
+  "label": "Air handling unit",
+  "description": "A casing with a supply outlet on one end, a return inlet on the other and, optionally, an outdoor air inlet and an exhaust outlet on top.",
+  "geometry": {
+    "backend": "generator",
+    "module": "shared:equipment",
+    "function": "build_ahu"
+  },
+  "properties": [
+    {
+      "name": "CasingLength",
+      "label": "Casing length",
+      "type": "length",
+      "default": 2400.0,
+      "min": 1.0
+    },
+    {
+      "name": "CasingWidth",
+      "label": "Casing width",
+      "type": "length",
+      "default": 1200.0,
+      "min": 1.0
+    },
+    {
+      "name": "CasingHeight",
+      "label": "Casing height",
+      "type": "length",
+      "default": 1200.0,
+      "min": 1.0
+    },
+    {
+      "name": "CollarLength",
+      "label": "Collar length",
+      "type": "length",
+      "default": 150.0,
+      "min": 1.0
+    },
+    {
+      "name": "PortShape",
+      "label": "Port shape",
+      "type": "choice",
+      "options": [
+        "Rectangular",
+        "Round"
+      ],
+      "default": "Rectangular",
+      "description": "A round port takes its width as the diameter"
+    },
+    {
+      "name": "SupplyWidth",
+      "label": "Supply outlet width",
+      "type": "length",
+      "default": 800.0,
+      "min": 1.0
+    },
+    {
+      "name": "SupplyHeight",
+      "label": "Supply outlet height",
+      "type": "length",
+      "default": 600.0,
+      "min": 1.0
+    },
+    {
+      "name": "ReturnWidth",
+      "label": "Return inlet width",
+      "type": "length",
+      "default": 800.0,
+      "min": 1.0
+    },
+    {
+      "name": "ReturnHeight",
+      "label": "Return inlet height",
+      "type": "length",
+      "default": 600.0,
+      "min": 1.0
+    },
+    {
+      "name": "OutdoorAirPort",
+      "label": "Outdoor air inlet",
+      "type": "bool",
+      "default": true
+    },
+    {
+      "name": "OutdoorAirWidth",
+      "label": "Outdoor air inlet width",
+      "type": "length",
+      "default": 600.0,
+      "min": 1.0
+    },
+    {
+      "name": "OutdoorAirHeight",
+      "label": "Outdoor air inlet height",
+      "type": "length",
+      "default": 400.0,
+      "min": 1.0
+    },
+    {
+      "name": "ExhaustPort",
+      "label": "Exhaust outlet",
+      "type": "bool",
+      "default": false
+    },
+    {
+      "name": "ExhaustWidth",
+      "label": "Exhaust outlet width",
+      "type": "length",
+      "default": 600.0,
+      "min": 1.0
+    },
+    {
+      "name": "ExhaustHeight",
+      "label": "Exhaust outlet height",
+      "type": "length",
+      "default": 400.0,
+      "min": 1.0
+    },
+    {
+      "name": "InternalPressureDrop",
+      "label": "Internal pressure drop",
+      "type": "pressure",
+      "default": 250.0,
+      "description": "Coils, filters and casing, at design flow"
+    }
+  ]
+}

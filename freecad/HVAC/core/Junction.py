@@ -40,6 +40,12 @@ from ..utils import hvaclib
 from . import _custom_fitting, _terminal_function
 
 
+def _set_if_changed(obj, name, value):
+    """Write a property only when its value differs: every write marks the object for recompute."""
+    if getattr(obj, name, None) != value:
+        setattr(obj, name, value)
+
+
 def _json_safe_port(port):
     """
     Return a copy of a port dict safe to json.dumps: any FreeCAD.Vector
@@ -491,9 +497,10 @@ class DuctJunction:
         if primary is None or not ports:
             return
 
-        # Primary always gets every real port, unchanged.
-        primary.LocalPortsJson = json.dumps([_json_safe_port(p) for p in ports])
-        primary.Profile = hvaclib.HVACLibraryService.match_profile_from_ports(ports)
+        # Primary always gets every real port, unchanged. (Written only when
+        # different: writing a property marks the component for recompute.)
+        _set_if_changed(primary, "LocalPortsJson", json.dumps([_json_safe_port(p) for p in ports]))
+        _set_if_changed(primary, "Profile", hvaclib.HVACLibraryService.match_profile_from_ports(ports))
 
         chains = {
             edge_key: chain for edge_key, chain in self.getPortChains().items() if edge_key in ports_by_edge and chain
@@ -572,8 +579,8 @@ class DuctJunction:
                     HVACLibraryAPI.copy_port(inner_tpls[j], position=anchors[j]),
                     HVACLibraryAPI.copy_port(outer_tpls[j], position=anchors[j]),
                 ]
-                comp_obj.LocalPortsJson = json.dumps([_json_safe_port(p) for p in local_ports])
-                comp_obj.Profile = str(local_ports[1].get("profile", "") or "")
+                _set_if_changed(comp_obj, "LocalPortsJson", json.dumps([_json_safe_port(p) for p in local_ports]))
+                _set_if_changed(comp_obj, "Profile", str(local_ports[1].get("profile", "") or ""))
 
             last_face = anchors[-1] + dir_e * trims_out[-1]
             chained_lengths[edge_key] = max(0.0, (last_face - pos).dot(dir_e))
@@ -868,7 +875,7 @@ class DuctJunctionVirtual:
         try:
             keys = list(member_node_keys or [])
             if keys:
-                obj.Label = "Virtual Junction ({})".format(len(keys))
+                hvaclib.set_label(obj, "Virtual Junction ({})".format(len(keys)))
         except Exception:
             pass
 

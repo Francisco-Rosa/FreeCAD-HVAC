@@ -186,6 +186,43 @@ on its face (`boxes._grow_to_fit`; a size the user set still reports the
 overhang). Not done: saving a custom fitting as a library type (owner: not
 now).
 
+**A sync rebuilds only what changed (owner report, 15 November 2026: editing a
+property felt slow).** Measured on a network of 8 tees (17 ducts, 18 fittings):
+every sync rebuilt every fitting, 1.2 s, even with nothing changed. Causes:
+`syncJunctionComponents` touched every component of every junction; it also
+rewrote each Primary's label, which never compared equal because FreeCAD
+appends digits to keep labels unique (`hvaclib.set_label` / `label_matches`
+now allow for them; same for segments, junctions, virtual junctions and
+numbered labels); and `composeComponents` rewrote `LocalPortsJson` / `Profile`
+unchanged (every property write marks the object). Now a junction's
+components are touched only when the junction is new or its classification
+changed (`rebuild`), on the first sync of a loaded document, or on
+`requestSync(rebuild_all=True)` (Reload Libraries). After: a duct size edit
+rebuilds its two fittings (0.29 s), a fitting edit only that fitting (0.24 s,
+the build itself), a sync with nothing changed nothing. Checked that trims,
+duct sizes and moved base geometry still propagate. Reset to Defaults touched
+every selected object and rewrote every layer material; it now leaves an
+object already at its defaults alone. Left as is: a duct can execute two or
+three times in one edit (recompute, then the two segment stages), about 12 ms
+each.
+
+**Library equipment (owner, 15 November 2026).** `end_ahu_generic` was retired
+with 6.5 (equipment only as user models, answer (g)); the owner now wants
+ready-made units back, as equipment. A library keeps equipment models in
+`equipment/*.json` (`library/equipment_library.py`: id, label, generator,
+typed properties; unknown keys are errors); the shared generators
+(`fittings/equipment.py`, `build_ahu`, `build_fan`) return one solid (casing
+plus a solid collar per connection) and the ports. "Add Equipment from Library"
+(`HVAC_AddEquipment`, `TaskPanelAddEquipment`, `Equipment.create_from_model`)
+places one as an App::Part with a body, a port per collar end face (function,
+size read from the face, snap point, marker hidden) and its internal pressure
+drop. `builtin_basic`: `ahu_generic` (supply, return, optional outdoor air and
+exhaust; rectangular or round ports) and `fan_generic` (supply or exhaust
+service). The body is a plain solid: to change a size, add the model again.
+The VAV box was never an end type: `through_vav_generic` is an inline type.
+Checked in FreeCAD 1.1.4 offscreen, including a duct drawn to the supply port
+attaching by itself; not seen in the GUI.
+
 **Geometry is built once (owner, 14 November 2026):** "do not use slower
 geometry options and do not iterate geometry; use mathematical checks for
 failure for fast generation." A fitting builds each shape once, in one fixed
