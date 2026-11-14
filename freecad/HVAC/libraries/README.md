@@ -93,7 +93,8 @@ Only a plain module name may follow the prefix.
 
 The shared geometry modules are `segments`, `elbows`, `transitions`, `taps`,
 `offsets`, `tees`, `wyes`, `crosses`, `stars`, `terminals`, `inline`,
-`through` and `markers`. Every
+`through`, `markers` and `equipment` (equipment models, see
+`library/equipment_library.py`). Every
 fitting in them is built as an *envelope*: its air space grown outward by a
 wall offset. What comes out therefore depends only on what the type-def
 declares:
@@ -580,6 +581,29 @@ every other type-def property already is, in the same `"properties"` list
 described above. There is no separate parameter-definition mechanism for
 features (or for layers' `thickness_property`, which follows the same
 by-reference convention).
+
+**Shared feature generators.** Besides `shared:features` /
+`transverse_flange`:
+
+- `shared:dampers`: `damper_blades` (the blade(s) and shafts at the current
+  `DamperType` / `BladeAngle` / `BladeCount` / `GateOpening`) and
+  `damper_operator` (`Operator`: `Hand quadrant`, `Actuator` or `None`;
+  `OperatorSide`: `Right` / `Left` / `Top` / `Bottom`, the side the shaft
+  comes out of; `OperatorRotation`: `0` / `90` / `180` / `270` about the
+  shaft).
+- `shared:faces`: the face of an air terminal over its open end:
+  `square_diffuser_face`, `round_diffuser_face`, `generic_diffuser_face`
+  (`FacePattern` `Louvered`, `Plaque`, `Perforated`, `Swirl`),
+  `slot_diffuser_face` (`Slots with deflectors`, `Plain slots`),
+  `grille_face` and `register_face` (`Single deflection`,
+  `Double deflection`, `Egg crate`, `Perforated`; a register adds opposed
+  damper blades behind). Every size of a pattern is an optional property
+  (`FaceBorder`, `FaceThickness`, `RingCount`, `RingStep`, `PlaqueSize`,
+  `PlaqueGap`, `HoleDiameter`, `HolePitch`, `SlotCount`, `SlotWidth`,
+  `DividerWidth`, `BladeOrientation`, `BladeSpacing`, `BladeDepth`,
+  `BladeThickness`, `BladeAngle`, `DamperBladeAngle`): a type that does not
+  declare one gets a size worked out from the face. `builtin_basic` declares
+  `FacePattern` (and `BladeOrientation`) only; `smacna` declares them all.
 
 ## Loss coverage
 

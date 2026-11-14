@@ -186,6 +186,27 @@ on its face (`boxes._grow_to_fit`; a size the user set still reports the
 overhang). Not done: saving a custom fitting as a library type (owner: not
 now).
 
+**Damper detail and terminal faces (owner, 15 November 2026).** Both are
+construction features, so they never enter the wall booleans and follow
+`ShowFeatures`. Dampers (`through_damper_generic`, both libraries):
+`damper_blades` draws the blade(s) and shafts at the current position (a
+"Coefficient" damper as one blade; multi-blade and gate plates clipped to a
+round or oval section with one `common`), `damper_operator` a hand quadrant
+(quarter plate, lever at the blade angle, knob) or an actuator (bracket,
+clamp, body), with `Operator`, `OperatorSide` and `OperatorRotation`
+(`fittings/dampers.py`). The SMACNA tap dampers (`branch_tap_*_damper`) stay
+loss-only. Terminals: the diffusers, slot diffuser, grille and register had
+an open end; `terminal_face` (`fittings/faces.py`) draws a border plate over
+the body's wall and a pattern in the core, `FacePattern` per type;
+`builtin_basic` declares only the pattern (sizes worked out from the face),
+`smacna` every size. Blades are cut to a round or oval outline by arithmetic;
+booleans only for a ring's middle or a plate's holes (one cut each). Sweep in
+FreeCAD 1.1.4: every pattern, operator, side and blade type on every profile
+in both libraries, 360 builds, all valid, slowest 0.97 s (a perforated
+plate); positions checked by bounding box (blades inside the casing,
+operator outside the wall on the chosen side). Smoke run unchanged (587 /
+32 / 10). Not seen in the GUI.
+
 **A sync rebuilds only what changed (owner report, 15 November 2026: editing a
 property felt slow).** Measured on a network of 8 tees (17 ducts, 18 fittings):
 every sync rebuilt every fitting, 1.2 s, even with nothing changed. Causes:

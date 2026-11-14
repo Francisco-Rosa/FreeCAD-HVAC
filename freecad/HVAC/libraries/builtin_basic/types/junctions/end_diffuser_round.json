@@ -110,6 +110,21 @@
       "validation": {
         "minimum": 0.0
       }
+    },
+    {
+      "name": "FacePattern",
+      "prop_type": "App::PropertyEnumeration",
+      "group": "Face",
+      "description": "How the face is drawn: Louvered (concentric rings), Plaque (a plate in front of the core), Perforated (a plate with holes), Swirl (radial slots)",
+      "default": "Louvered",
+      "validation": {
+        "enum": [
+          "Louvered",
+          "Plaque",
+          "Perforated",
+          "Swirl"
+        ]
+      }
     }
   ],
   "geometry": {
@@ -124,5 +139,19 @@
   "loss": {
     "module": "shared:losses",
     "function": "loss_diffuser_generic"
+  },
+  "construction": {
+    "features": [
+      {
+        "id": "terminal_face",
+        "role": "terminal_face",
+        "host_layer": "shape",
+        "module": "shared:faces",
+        "generator": "round_diffuser_face",
+        "parameters": [
+          "FacePattern"
+        ]
+      }
+    ]
   }
 }

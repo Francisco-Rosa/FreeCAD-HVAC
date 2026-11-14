@@ -37,6 +37,11 @@ API versions: geometry 3, loss 1, PartScript 3.
   below.
 - Pressure balancing keeps sizing sections whole (a section shared with the critical path is reported, not
   shrunk) and keeps the reducer advice.
+- Dampers show their blades at the current position and an operator: a hand quadrant (its lever shows the blade
+  position) or an actuator, on the side of the duct and turned the way `OperatorSide` / `OperatorRotation` say.
+- Diffusers, grilles and registers have a face instead of an open end, in a pattern picked with `FacePattern`
+  (louvered, plaque, perforated, swirl; slots with or without deflectors; single or double deflection, egg crate,
+  perforated; a register adds damper blades). In `smacna` every size of the pattern is a property.
 - A sync rebuilds only what changed. It used to mark every fitting for recompute on every sync (and rewrote
   labels FreeCAD had made unique, and unchanged ports), so any property edit rebuilt the whole network.
   Reset to Defaults rebuilds only the objects it changes. Reload Libraries rebuilds everything.

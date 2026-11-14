@@ -98,6 +98,101 @@
       "group": "Options",
       "description": "Include the flange at the duct connection",
       "default": true
+    },
+    {
+      "name": "FacePattern",
+      "prop_type": "App::PropertyEnumeration",
+      "group": "Face",
+      "description": "How the face is drawn: Louvered (concentric rings), Plaque (a plate in front of the core), Perforated (a plate with holes), Swirl (radial slots)",
+      "default": "Perforated",
+      "validation": {
+        "enum": [
+          "Louvered",
+          "Plaque",
+          "Perforated",
+          "Swirl"
+        ]
+      }
+    },
+    {
+      "name": "FaceBorder",
+      "prop_type": "App::PropertyLength",
+      "group": "Face",
+      "description": "Width of the face border round the core (0 = worked out from the face size)",
+      "default": 0.0
+    },
+    {
+      "name": "FaceThickness",
+      "prop_type": "App::PropertyLength",
+      "group": "Face",
+      "description": "Thickness of the face sheet (0 = worked out from the face size)",
+      "default": 0.0
+    },
+    {
+      "name": "RingCount",
+      "prop_type": "App::PropertyInteger",
+      "group": "Face",
+      "description": "Louvered: number of rings",
+      "default": 3,
+      "validation": {
+        "minimum": 1
+      }
+    },
+    {
+      "name": "RingStep",
+      "prop_type": "App::PropertyLength",
+      "group": "Face",
+      "description": "Louvered: how much deeper each ring sits than the one outside it (0 = worked out from the face size)",
+      "default": 0.0
+    },
+    {
+      "name": "PlaqueSize",
+      "prop_type": "App::PropertyFloat",
+      "group": "Face",
+      "description": "Plaque: plaque size as a fraction of the core",
+      "default": 0.75,
+      "validation": {
+        "minimum": 0.1,
+        "maximum": 0.98
+      }
+    },
+    {
+      "name": "PlaqueGap",
+      "prop_type": "App::PropertyLength",
+      "group": "Face",
+      "description": "Plaque: gap between the plaque and the face (0 = worked out from the face size)",
+      "default": 0.0
+    },
+    {
+      "name": "HoleDiameter",
+      "prop_type": "App::PropertyLength",
+      "group": "Face",
+      "description": "Perforated: hole diameter (0 = worked out from the face size)",
+      "default": 0.0
+    },
+    {
+      "name": "HolePitch",
+      "prop_type": "App::PropertyLength",
+      "group": "Face",
+      "description": "Perforated: distance between hole centres (0 = worked out from the face size)",
+      "default": 0.0
+    },
+    {
+      "name": "SlotCount",
+      "prop_type": "App::PropertyInteger",
+      "group": "Face",
+      "description": "Swirl: number of slots",
+      "default": 24,
+      "validation": {
+        "minimum": 4
+      }
+    },
+    {
+      "name": "SlotWidth",
+      "prop_type": "App::PropertyLength",
+      "group": "Face",
+      "description": "Swirl: slot width (0 = worked out from the face size)",
+      "default": 0.0
     }
   ],
   "construction": {
@@ -131,6 +226,26 @@
           "FlangeHeight",
           "FlangeThickness",
           "ShowFlange1"
+        ]
+      },
+      {
+        "id": "terminal_face",
+        "role": "terminal_face",
+        "host_layer": "casing",
+        "module": "shared:faces",
+        "generator": "generic_diffuser_face",
+        "parameters": [
+          "FacePattern",
+          "FaceBorder",
+          "FaceThickness",
+          "RingCount",
+          "RingStep",
+          "PlaqueSize",
+          "PlaqueGap",
+          "HoleDiameter",
+          "HolePitch",
+          "SlotCount",
+          "SlotWidth"
         ]
       }
     ]

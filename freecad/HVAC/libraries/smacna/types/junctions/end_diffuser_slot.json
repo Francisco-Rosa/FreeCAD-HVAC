@@ -157,6 +157,68 @@
       "group": "Options",
       "description": "Include the flange at the duct connection",
       "default": true
+    },
+    {
+      "name": "FacePattern",
+      "prop_type": "App::PropertyEnumeration",
+      "group": "Face",
+      "description": "How the face is drawn: slots with a deflector blade each, or plain slots",
+      "default": "Slots with deflectors",
+      "validation": {
+        "enum": [
+          "Slots with deflectors",
+          "Plain slots"
+        ]
+      }
+    },
+    {
+      "name": "FaceBorder",
+      "prop_type": "App::PropertyLength",
+      "group": "Face",
+      "description": "Width of the face border round the slots (0 = worked out from the face size)",
+      "default": 0.0
+    },
+    {
+      "name": "FaceThickness",
+      "prop_type": "App::PropertyLength",
+      "group": "Face",
+      "description": "Thickness of the face sheet (0 = worked out from the face size)",
+      "default": 0.0
+    },
+    {
+      "name": "SlotCount",
+      "prop_type": "App::PropertyInteger",
+      "group": "Face",
+      "description": "Number of slots across the face",
+      "default": 2,
+      "validation": {
+        "minimum": 1
+      }
+    },
+    {
+      "name": "DividerWidth",
+      "prop_type": "App::PropertyLength",
+      "group": "Face",
+      "description": "Width of the bars between slots (0 = worked out from the face size)",
+      "default": 0.0
+    },
+    {
+      "name": "BladeDepth",
+      "prop_type": "App::PropertyLength",
+      "group": "Face",
+      "description": "Depth of the bars and deflectors (0 = worked out from the face size)",
+      "default": 0.0
+    },
+    {
+      "name": "BladeAngle",
+      "prop_type": "App::PropertyAngle",
+      "group": "Face",
+      "description": "Slots with deflectors: deflector angle from straight through",
+      "default": 30.0,
+      "validation": {
+        "minimum": -60.0,
+        "maximum": 60.0
+      }
     }
   ],
   "construction": {
@@ -190,6 +252,22 @@
           "FlangeHeight",
           "FlangeThickness",
           "ShowFlange1"
+        ]
+      },
+      {
+        "id": "terminal_face",
+        "role": "terminal_face",
+        "host_layer": "casing",
+        "module": "shared:faces",
+        "generator": "slot_diffuser_face",
+        "parameters": [
+          "FacePattern",
+          "FaceBorder",
+          "FaceThickness",
+          "SlotCount",
+          "DividerWidth",
+          "BladeDepth",
+          "BladeAngle"
         ]
       }
     ]

@@ -120,6 +120,19 @@
       "validation": {
         "minimum": 0.0
       }
+    },
+    {
+      "name": "FacePattern",
+      "prop_type": "App::PropertyEnumeration",
+      "group": "Face",
+      "description": "How the face is drawn: slots with a deflector blade each, or plain slots",
+      "default": "Slots with deflectors",
+      "validation": {
+        "enum": [
+          "Slots with deflectors",
+          "Plain slots"
+        ]
+      }
     }
   ],
   "geometry": {
@@ -134,5 +147,19 @@
   "loss": {
     "module": "shared:losses",
     "function": "loss_diffuser_generic"
+  },
+  "construction": {
+    "features": [
+      {
+        "id": "terminal_face",
+        "role": "terminal_face",
+        "host_layer": "shape",
+        "module": "shared:faces",
+        "generator": "slot_diffuser_face",
+        "parameters": [
+          "FacePattern"
+        ]
+      }
+    ]
   }
 }

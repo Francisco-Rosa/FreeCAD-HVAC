@@ -120,6 +120,34 @@
       "validation": {
         "minimum": 0.0
       }
+    },
+    {
+      "name": "FacePattern",
+      "prop_type": "App::PropertyEnumeration",
+      "group": "Face",
+      "description": "How the face is drawn: single deflection (one row of blades), double deflection (two rows, square to each other), egg crate (a grid) or a perforated plate",
+      "default": "Double deflection",
+      "validation": {
+        "enum": [
+          "Single deflection",
+          "Double deflection",
+          "Egg crate",
+          "Perforated"
+        ]
+      }
+    },
+    {
+      "name": "BladeOrientation",
+      "prop_type": "App::PropertyEnumeration",
+      "group": "Face",
+      "description": "Direction of the front blades: horizontal (along the face width) or vertical",
+      "default": "Horizontal",
+      "validation": {
+        "enum": [
+          "Horizontal",
+          "Vertical"
+        ]
+      }
     }
   ],
   "geometry": {
@@ -134,5 +162,20 @@
   "loss": {
     "module": "shared:losses",
     "function": "loss_register_generic"
+  },
+  "construction": {
+    "features": [
+      {
+        "id": "terminal_face",
+        "role": "terminal_face",
+        "host_layer": "shape",
+        "module": "shared:faces",
+        "generator": "register_face",
+        "parameters": [
+          "FacePattern",
+          "BladeOrientation"
+        ]
+      }
+    ]
   }
 }

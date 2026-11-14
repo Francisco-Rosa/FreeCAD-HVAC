@@ -147,6 +147,87 @@
       "group": "Options",
       "description": "Include the flange at the duct connection",
       "default": true
+    },
+    {
+      "name": "FacePattern",
+      "prop_type": "App::PropertyEnumeration",
+      "group": "Face",
+      "description": "How the face is drawn: single deflection (one row of blades), double deflection (two rows, square to each other), egg crate (a grid) or a perforated plate",
+      "default": "Single deflection",
+      "validation": {
+        "enum": [
+          "Single deflection",
+          "Double deflection",
+          "Egg crate",
+          "Perforated"
+        ]
+      }
+    },
+    {
+      "name": "BladeOrientation",
+      "prop_type": "App::PropertyEnumeration",
+      "group": "Face",
+      "description": "Direction of the front blades: horizontal (along the face width) or vertical",
+      "default": "Horizontal",
+      "validation": {
+        "enum": [
+          "Horizontal",
+          "Vertical"
+        ]
+      }
+    },
+    {
+      "name": "FaceThickness",
+      "prop_type": "App::PropertyLength",
+      "group": "Face",
+      "description": "Thickness of the face frame (0 = worked out from the face size)",
+      "default": 0.0
+    },
+    {
+      "name": "BladeSpacing",
+      "prop_type": "App::PropertyLength",
+      "group": "Face",
+      "description": "Distance between blades (0 = worked out from the face size)",
+      "default": 0.0
+    },
+    {
+      "name": "BladeDepth",
+      "prop_type": "App::PropertyLength",
+      "group": "Face",
+      "description": "Blade depth, front to back (0 = worked out from the face size)",
+      "default": 0.0
+    },
+    {
+      "name": "BladeThickness",
+      "prop_type": "App::PropertyLength",
+      "group": "Face",
+      "description": "Blade thickness (0 = worked out from the face size)",
+      "default": 0.0
+    },
+    {
+      "name": "BladeAngle",
+      "prop_type": "App::PropertyAngle",
+      "group": "Face",
+      "description": "Deflection of the front blades from straight through",
+      "default": 0.0,
+      "validation": {
+        "minimum": -60.0,
+        "maximum": 60.0
+      }
+    },
+    {
+      "name": "HoleDiameter",
+      "prop_type": "App::PropertyLength",
+      "group": "Face",
+      "description": "Perforated: hole diameter (0 = worked out from the face size)",
+      "default": 0.0
+    },
+    {
+      "name": "HolePitch",
+      "prop_type": "App::PropertyLength",
+      "group": "Face",
+      "description": "Perforated: distance between hole centres (0 = worked out from the face size)",
+      "default": 0.0
     }
   ],
   "construction": {
@@ -180,6 +261,24 @@
           "FlangeHeight",
           "FlangeThickness",
           "ShowFlange1"
+        ]
+      },
+      {
+        "id": "terminal_face",
+        "role": "terminal_face",
+        "host_layer": "casing",
+        "module": "shared:faces",
+        "generator": "grille_face",
+        "parameters": [
+          "FacePattern",
+          "BladeOrientation",
+          "FaceThickness",
+          "BladeSpacing",
+          "BladeDepth",
+          "BladeThickness",
+          "BladeAngle",
+          "HoleDiameter",
+          "HolePitch"
         ]
       }
     ]

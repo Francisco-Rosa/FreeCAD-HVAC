@@ -91,6 +91,50 @@
       "validation": {
         "minimum": 1
       }
+    },
+    {
+      "name": "Operator",
+      "prop_type": "App::PropertyEnumeration",
+      "group": "Operator",
+      "description": "What turns the blades, drawn outside the duct: a hand quadrant with a lever showing the blade position, an actuator, or nothing",
+      "default": "Hand quadrant",
+      "validation": {
+        "enum": [
+          "Hand quadrant",
+          "Actuator",
+          "None"
+        ]
+      }
+    },
+    {
+      "name": "OperatorSide",
+      "prop_type": "App::PropertyEnumeration",
+      "group": "Operator",
+      "description": "Side of the duct the shaft comes out of (Right / Left along the section width, Top / Bottom along its height); the blades turn about that axis",
+      "default": "Right",
+      "validation": {
+        "enum": [
+          "Right",
+          "Left",
+          "Top",
+          "Bottom"
+        ]
+      }
+    },
+    {
+      "name": "OperatorRotation",
+      "prop_type": "App::PropertyEnumeration",
+      "group": "Operator",
+      "description": "Turns the quadrant or actuator about the shaft, in degrees",
+      "default": "0",
+      "validation": {
+        "enum": [
+          "0",
+          "90",
+          "180",
+          "270"
+        ]
+      }
     }
   ],
   "geometry": {
@@ -105,5 +149,39 @@
   "loss": {
     "module": "shared:losses",
     "function": "loss_damper_generic"
+  },
+  "construction": {
+    "features": [
+      {
+        "id": "damper_blades",
+        "role": "damper_blade",
+        "host_layer": "shape",
+        "module": "shared:dampers",
+        "generator": "damper_blades",
+        "parameters": [
+          "DamperType",
+          "BladeAngle",
+          "BladeCount",
+          "GateOpening",
+          "OperatorSide"
+        ]
+      },
+      {
+        "id": "damper_operator",
+        "role": "damper_operator",
+        "host_layer": "shape",
+        "module": "shared:dampers",
+        "generator": "damper_operator",
+        "parameters": [
+          "DamperType",
+          "BladeAngle",
+          "BladeCount",
+          "GateOpening",
+          "OperatorSide",
+          "Operator",
+          "OperatorRotation"
+        ]
+      }
+    ]
   }
 }
