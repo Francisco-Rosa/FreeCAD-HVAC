@@ -153,11 +153,77 @@ def set_port_offset(lcs, offset_x, offset_y):
     lcs.PortOffsetY = float(offset_y)
 
 
+def hide_port(lcs):
+    """Hide a marker again (the port panel shows them only while it is open)."""
+    view = getattr(lcs, "ViewObject", None)
+    if view is not None:
+        try:
+            view.Visibility = False
+        except Exception:
+            pass
+
+
+SNAP_POINT_PROPERTY = "SnapPointName"
+SNAP_POINT_COLOR = (1.0, 0.5, 0.0)
+
+
+def snap_point(lcs):
+    """The snap point object of a port marker, or None."""
+    name = str(getattr(lcs, SNAP_POINT_PROPERTY, "") or "")
+    doc = getattr(lcs, "Document", None)
+    return doc.getObject(name) if name and doc is not None else None
+
+
+def ensure_snap_point(lcs):
+    """
+    A Part::Vertex at the port's centre, in the same App::Part as the marker
+    and attached to it (so it follows the marker when the port is moved), so
+    Draft can snap a duct end onto the port: a marker has no geometry of its
+    own to snap to. It stays visible when the marker is hidden. Idempotent.
+    """
+    point = snap_point(lcs)
+    if point is None:
+        doc = lcs.Document
+        point = doc.addObject("Part::Vertex", "HVACPortPoint")
+        container = lcs.getParentGeoFeatureGroup() if hasattr(lcs, "getParentGeoFeatureGroup") else None
+        if container is not None:
+            container.addObject(point)
+        if SNAP_POINT_PROPERTY not in lcs.PropertiesList:
+            lcs.addProperty("App::PropertyString", SNAP_POINT_PROPERTY, PORT_GROUP, "Internal: this port's snap point")
+            lcs.setEditorMode(SNAP_POINT_PROPERTY, 2)
+        setattr(lcs, SNAP_POINT_PROPERTY, point.Name)
+        support = "AttachmentSupport" if "AttachmentSupport" in point.PropertiesList else "Support"
+        setattr(point, support, [(lcs, "")])
+        point.MapMode = "ObjectXY"
+        view = getattr(point, "ViewObject", None)
+        if view is not None:
+            try:
+                view.PointSize = 8.0
+                view.PointColor = SNAP_POINT_COLOR
+            except Exception:
+                pass
+    label = "{} point".format(str(getattr(lcs, "PortName", "") or lcs.Label))
+    if point.Label != label:
+        point.Label = label
+    return point
+
+
+def port_of_snap_point(obj, ports):
+    """The marker among `ports` whose snap point is `obj`, or None."""
+    for lcs in ports:
+        if str(getattr(lcs, SNAP_POINT_PROPERTY, "") or "") == getattr(obj, "Name", None):
+            return lcs
+    return None
+
+
 def remove_port(lcs):
-    """Delete a port marker."""
+    """Delete a port marker (and its snap point)."""
     doc = getattr(lcs, "Document", None)
     if doc is not None:
+        point = snap_point(lcs)
         doc.removeObject(lcs.Name)
+        if point is not None:
+            doc.removeObject(point.Name)
 
 
 def port_size_text(lcs):

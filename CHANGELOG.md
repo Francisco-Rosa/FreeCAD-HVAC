@@ -51,7 +51,9 @@ API versions: geometry 3, loss 1, PartScript 3.
   it is put in a new App::Part first. Both commands appear in the Tasks pane when such a model is selected.
 - Equipment and custom fitting panel: one Port box that follows the 3D selection (a face: new port; a marker or list
   row: edit it; nothing: a hint); the junctions a custom fitting fits (port count and directions, end nodes for a
-  one-port fitting) are a list synced with the 3D selection both ways and drawn in orange like a selection.
+  one-port fitting) are a list synced with the 3D selection both ways and coloured orange while the panel is open
+  (pre-selection and selection still highlight them). Port markers are hidden when the panel closes; every
+  equipment port has a snap point (a `Part::Vertex` attached to its marker) so a duct can be drawn onto it.
 - Sizing changes duct size only at straight-through junctions by default (`SizeChangePolicy`
   `AtStraightJunctions`, `AtInlineNodesOnly`, `EverySegment`); pluggable friction models.
 - Automatic fitting selection prefers mitered and straight types; bend radii clamp to half the duct plus the wall.

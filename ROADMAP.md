@@ -169,11 +169,14 @@ yet tried in the GUI.**
   "Use in a network" lists only the junctions the fitting fits (`_custom_fitting.fit_problem`: the same fit
   the component runs, so port count and directions; any junction order, an end node for a one-port
   fitting), in a list synced with the 3D selection both ways (a row selects the junction's fittings). While
-  the panel is open each listed junction's fittings are drawn in orange like a selection (a copy of their
-  faces with an overriding colour, in front, not pickable; a junction whose fitting draws nothing shows its
-  duct openings as port planes); the selected one shows FreeCAD's own selection colour instead. Checked
-  offscreen in FreeCAD 1.1.4 (tee, one-port terminal on an end node, a fitting that fits nowhere); the colour
-  itself not seen. Open: snapping a drawn duct to a port (proposal pending).
+  the panel is open each listed junction's fittings are coloured orange (their own `ShapeAppearance`,
+  `LineColor`, `PointColor`, a link's override material; saved and put back on close), so pre-selection and
+  selection highlight them as usual and an end marker's cross turns orange too. Port markers show while the
+  panel is open and are hidden on close. Snapping (owner, 15 November 2026): custom junctions keep "Use This
+  Fitting There"; every equipment port gets a snap point, a `Part::Vertex` in the same App::Part attached to
+  its marker (`_custom_fitting.ensure_snap_point`), visible when the marker is hidden, deleted with the port,
+  made for older ports when the panel opens; picking it picks its port. Checked offscreen in FreeCAD 1.1.4
+  (rotated, moved App::Part; offset change; colours set and restored); Draft snapping onto it not tried.
 
 **Done 14 November 2026 (owner's picks):** layer visibility toolbar
 dropdown (Stage 9), face-mounted lateral tees and bullhead wye losses

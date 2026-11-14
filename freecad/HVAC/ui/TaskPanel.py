@@ -2483,11 +2483,15 @@ class TaskPanelPortContainer:
       group header in the tree picks the function of the next new port.
     - Equipment: its internal pressure drop. Custom fitting: the junctions
       it fits (same number of ducts as ports, and the ports line up with the
-      ducts; an end node counts for a one-port fitting), listed and drawn in
-      orange in the 3D view like a selection; picking one in the list
-      selects its fittings in the 3D view and the other way round (the
-      selected one shows the normal selection colour). "Use This Fitting
-      There" moves the fitting onto it.
+      ducts; an end node counts for a one-port fitting), listed and coloured
+      orange in the 3D view while the panel is open (their own colours come
+      back on close; pre-selection and selection highlight them as usual);
+      picking one in the list selects its fittings in the 3D view and the
+      other way round. "Use This Fitting There" moves the fitting onto it.
+    - Port markers are shown while the panel is open and hidden when it
+      closes. Each equipment port also gets a snap point at its centre
+      (_custom_fitting.ensure_snap_point), which stays visible, so a duct
+      can be drawn to end exactly on the port.
 
     Ducts drawn to end on the ports attach without any further step: an
     equipment port is connected to its duct end, and the ends on a custom
@@ -2515,8 +2519,7 @@ class TaskPanelPortContainer:
         self._mode = self.MODE_NONE
         self._marker = None
         self._face = None
-        self._highlight_root = None
-        self._highlight_switches = {}
+        self._highlight_saved = {}
         self.junction_list = None
 
         self.form = QtWidgets.QWidget()
@@ -2610,6 +2613,12 @@ class TaskPanelPortContainer:
             options_layout.addWidget(self.use_button)
             layout.addWidget(options)
 
+        # Markers are shown while the panel is open (hidden again on close);
+        # equipment ports get their snap points (ports made before had none).
+        for marker in self._ports():
+            self._custom_fitting.show_port(marker)
+            if kind == "equipment":
+                self._custom_fitting.ensure_snap_point(marker)
         self._refresh()
         self._syncFromSelection()
         Gui.Selection.addObserver(self)
@@ -2663,6 +2672,9 @@ class TaskPanelPortContainer:
         for obj in self._selectedObjects():
             if obj.Name in ports:
                 return ports[obj.Name]
+            by_point = self._custom_fitting.port_of_snap_point(obj, ports.values())
+            if by_point is not None:
+                return by_point
             # A marker's own axis, plane or origin: the marker lists it in OriginFeatures. (Not any InList
             # entry: the body a marker is attached to has the marker in its InList too.)
             for candidate in getattr(obj, "InList", []) or []:
@@ -2853,7 +2865,6 @@ class TaskPanelPortContainer:
         finally:
             self.junction_list.blockSignals(False)
         self.use_button.setEnabled(bool(self.junction_list.selectedItems()))
-        self._showHighlights(junction)
 
     def _listedJunction(self):
         items = self.junction_list.selectedItems() if self.junction_list is not None else []
@@ -2877,112 +2888,75 @@ class TaskPanelPortContainer:
                 Gui.Selection.addSelection(self.doc.Name, obj.Name)
             self._selectTreeMarker(None)
             self._setMode(self.MODE_NONE)
-            self._showHighlights(junction)
         finally:
             self._syncing = False
 
     def _drawHighlights(self, candidates):
         """
-        Draw every candidate junction's fittings in orange over the model, the
-        way FreeCAD draws a selection: a copy of their shapes with one
-        overriding colour, pulled in front of the originals, not pickable (a
-        click still reaches the real fitting). One switch per junction, so the
-        selected one can show the normal selection colour instead.
+        Colour every candidate junction's fittings orange: faces, lines and
+        points of the fitting itself (a custom fitting's link through its
+        override material), so FreeCAD's own pre-selection and selection
+        highlight still show on them. The colours they had are kept and put
+        back by _clearHighlights().
         """
         self._clearHighlights()
-        try:
-            from pivy import coin
+        for junction in candidates:
+            try:
+                components = list(junction.Proxy.getComponents() or [])
+            except Exception:
+                components = []
+            for obj in components:
+                target = obj
+                shape = getattr(obj, "Shape", None)
+                if shape is None or shape.isNull():
+                    target = self._custom_fitting.owned_link(obj) or obj
+                self._paint(target)
 
-            view = Gui.ActiveDocument.ActiveView if Gui.ActiveDocument else None
-            if view is None or not hasattr(view, "getSceneGraph") or not candidates:
-                return
-            root = coin.SoSeparator()
-            pick = coin.SoPickStyle()
-            pick.style = coin.SoPickStyle.UNPICKABLE
-            root.addChild(pick)
-            offset = coin.SoPolygonOffset()
-            offset.factor = -1.0
-            offset.units = -1.0
-            root.addChild(offset)
-            material = coin.SoMaterial()
-            material.diffuseColor = self.COLOR_CANDIDATE
-            material.emissiveColor = tuple(0.35 * c for c in self.COLOR_CANDIDATE)
-            material.setOverride(True)
-            root.addChild(material)
-            binding = coin.SoMaterialBinding()
-            binding.value = coin.SoMaterialBinding.OVERALL
-            binding.setOverride(True)
-            root.addChild(binding)
-            for junction in candidates:
-                node = self._shapeNode(junction)
-                if node is None:
-                    continue
-                switch = coin.SoSwitch()
-                switch.addChild(node)
-                switch.whichChild = 0
-                root.addChild(switch)
-                self._highlight_switches[junction.Name] = switch
-            view.getSceneGraph().addChild(root)
-            self._highlight_root = (view, root)
+    def _orangeMaterial(self):
+        material = FreeCAD.Material()
+        material.DiffuseColor = self.COLOR_CANDIDATE
+        material.AmbientColor = tuple(0.5 * c for c in self.COLOR_CANDIDATE)
+        material.EmissiveColor = tuple(0.25 * c for c in self.COLOR_CANDIDATE)
+        return material
+
+    def _paint(self, obj):
+        """Colour one object's view orange, keeping what it had in self._highlight_saved."""
+        view = getattr(obj, "ViewObject", None)
+        if view is None or obj.Name in self._highlight_saved:
+            return
+        saved = {}
+        try:
+            properties = view.PropertiesList
+            if "ShapeAppearance" in properties:
+                saved["ShapeAppearance"] = view.ShapeAppearance
+                view.ShapeAppearance = [self._orangeMaterial()] * max(1, len(view.ShapeAppearance))
+            elif "OverrideMaterial" in properties and "ShapeMaterial" in properties:  # App::Link
+                saved["OverrideMaterial"] = view.OverrideMaterial
+                saved["ShapeMaterial"] = view.ShapeMaterial
+                view.ShapeMaterial = self._orangeMaterial()
+                view.OverrideMaterial = True
+            for name in ("LineColor", "PointColor"):
+                if name in properties:
+                    saved[name] = getattr(view, name)
+                    setattr(view, name, self.COLOR_CANDIDATE)
         except Exception as e:
-            FreeCAD.Console.PrintWarning("HVAC - junction highlights not drawn: {}\n".format(e))
-
-    def _shapeNode(self, junction):
-        """A Coin node with the faces of a junction's fittings (a custom fitting's link included), or None."""
-        import Part
-        from pivy import coin
-
-        shapes = []
-        try:
-            components = list(junction.Proxy.getComponents() or [])
-        except Exception:
-            components = []
-        for obj in components:
-            shape = getattr(obj, "Shape", None)
-            if shape is None or shape.isNull():
-                link = self._custom_fitting.owned_link(obj)
-                shape = Part.getShape(link) if link is not None else None
-            if shape is not None and not shape.isNull() and shape.Faces:
-                shapes.append(shape)
-        if not shapes:
-            return self._portPlanesNode(junction)
-        text = Part.makeCompound(shapes).writeInventor()
-        source = coin.SoInput()
-        source.setBuffer(text)
-        return coin.SoDB.readAll(source)
-
-    def _portPlanesNode(self, junction):
-        """For a junction whose fittings draw nothing (an end marker): its duct openings as port planes, or None."""
-        from pivy import coin
-
-        try:
-            primary = junction.Proxy.getPrimaryComponent()
-            ports = json.loads(getattr(primary, "LocalPortsJson", "") or "[]") if primary is not None else []
-        except Exception:
-            ports = []
-        if not ports:
-            return None
-        node = coin.SoSeparator()
-        for port in ports:
-            node.addChild(buildPortHighlightCoinNode(port, color=self.COLOR_CANDIDATE, transparency=0.0, scale=1.0))
-        return node
-
-    def _showHighlights(self, selected_junction):
-        """Hide the highlight of the selected junction, so FreeCAD's own selection colour shows on it."""
-        name = selected_junction.Name if selected_junction is not None else None
-        for junction_name, switch in self._highlight_switches.items():
-            switch.whichChild = -1 if junction_name == name else 0
+            FreeCAD.Console.PrintWarning("HVAC - could not highlight '{}': {}\n".format(obj.Label, e))
+        self._highlight_saved[obj.Name] = saved
 
     def _clearHighlights(self):
-        if self._highlight_root is None:
-            return
-        view, root = self._highlight_root
-        self._highlight_root = None
-        self._highlight_switches = {}
-        try:
-            view.getSceneGraph().removeChild(root)
-        except Exception:
-            pass
+        """Put back the colours the highlighted fittings had."""
+        saved_all, self._highlight_saved = self._highlight_saved, {}
+        for name, saved in saved_all.items():
+            obj = self.doc.getObject(name)
+            view = getattr(obj, "ViewObject", None) if obj is not None else None
+            if view is None:
+                continue
+            # The override flag last, so a link never shows its override material unset.
+            for prop in sorted(saved, key=lambda key: key == "OverrideMaterial"):
+                try:
+                    setattr(view, prop, saved[prop])
+                except Exception:
+                    pass
 
     # -- selection observer (FreeCAD calls these) ------------------------------
 
@@ -3032,6 +3006,7 @@ class TaskPanelPortContainer:
             )
             if self.kind == "equipment":
                 self._equipment.ensure_equipment_port(marker, self.function_combo.currentData())
+                self._custom_fitting.ensure_snap_point(marker)
         except Exception as e:
             self.doc.abortTransaction()
             FreeCAD.Console.PrintWarning("HVAC - Add port on {}.{}: {}\n".format(body.Label, face_name, e))
@@ -3052,6 +3027,8 @@ class TaskPanelPortContainer:
             if self.function_combo is not None:
                 self._equipment.ensure_equipment_port(marker, self.function_combo.currentData())
             self._custom_fitting.set_port_offset(marker, self.x_spin.value(), self.y_spin.value())
+            if self.kind == "equipment":
+                self._custom_fitting.ensure_snap_point(marker)
         finally:
             self.doc.commitTransaction()
         self.doc.recompute()
@@ -3110,6 +3087,8 @@ class TaskPanelPortContainer:
         except Exception:
             pass
         self._clearHighlights()
+        for marker in self._ports():
+            self._custom_fitting.hide_port(marker)
 
     def accept(self):
         self._stop()
