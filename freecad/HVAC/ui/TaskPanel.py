@@ -2471,9 +2471,11 @@ def _length_spin_box(value=0.0):
 class TaskPanelAddEquipment:
     """
     Add a library equipment model (an air handling unit, a fan, ...) to the
-    document as HVAC equipment: pick the model, set its sizes and where it
-    goes; OK builds it with its ports (Equipment.create_from_model). The
-    fields are made from the model's own property list.
+    document as HVAC equipment: pick the library, then the model, set its
+    sizes and where it goes; OK builds it with its ports
+    (Equipment.create_from_model). The fields are made from the model's own
+    property list. Only libraries with at least one equipment model are
+    offered; the active network's default library is picked first.
     """
 
     def __init__(self, doc, models):
@@ -2481,14 +2483,17 @@ class TaskPanelAddEquipment:
         self.models = list(models)
         self.created = None
         self._editors = {}
+        self._shown = []
 
         self.form = QtWidgets.QWidget()
         self.form.setWindowTitle(translate("HVAC_AddEquipment", "Add Equipment"))
         layout = QtWidgets.QVBoxLayout(self.form)
 
+        layout.addWidget(QtWidgets.QLabel(translate("HVAC_AddEquipment", "Library:")))
+        self.library_combo = QtWidgets.QComboBox()
+        layout.addWidget(self.library_combo)
+        layout.addWidget(QtWidgets.QLabel(translate("HVAC_AddEquipment", "Model:")))
         self.model_combo = QtWidgets.QComboBox()
-        for model in self.models:
-            self.model_combo.addItem("{}  [{}]".format(model.label, model.library_id))
         layout.addWidget(self.model_combo)
         self.description = QtWidgets.QLabel()
         self.description.setWordWrap(True)
@@ -2513,12 +2518,50 @@ class TaskPanelAddEquipment:
         layout.addWidget(self.message)
         layout.addStretch(1)
 
+        self._populateLibraries()
+        self.library_combo.currentIndexChanged.connect(self._refreshModels)
         self.model_combo.currentIndexChanged.connect(self._showModel)
+        self._refreshModels()
+
+    def _populateLibraries(self):
+        """The libraries that have equipment models, in registry order, starting on the active network's default."""
+        with_models = {model.library_id for model in self.models}
+        labels = {}
+        try:
+            for lib in hvaclib.HVACLibraryService.get_hvac_library_registry().list_libraries():
+                labels[lib.id] = lib.label
+        except Exception:
+            pass
+        ordered = [lib_id for lib_id in labels if lib_id in with_models]
+        ordered += sorted(with_models - set(ordered))
+        self.library_combo.clear()
+        for lib_id in ordered:
+            self.library_combo.addItem(labels.get(lib_id) or lib_id, lib_id)
+        try:
+            net = hvaclib.activeHVACNetwork()
+        except Exception:
+            net = None
+        index = self.library_combo.findData(getattr(net, "DefaultLibraryId", "") if net is not None else "")
+        if index >= 0:
+            self.library_combo.setCurrentIndex(index)
+
+    def _refreshModels(self):
+        """List the picked library's models, keeping the picked model's id when the new library has it too."""
+        current = self._model()
+        library_id = self.library_combo.currentData()
+        self._shown = [model for model in self.models if model.library_id == library_id]
+        self.model_combo.blockSignals(True)
+        self.model_combo.clear()
+        for model in self._shown:
+            self.model_combo.addItem(model.label, model.id)
+        index = self.model_combo.findData(current.id) if current is not None else -1
+        self.model_combo.setCurrentIndex(max(index, 0) if self._shown else -1)
+        self.model_combo.blockSignals(False)
         self._showModel()
 
     def _model(self):
         index = self.model_combo.currentIndex()
-        return self.models[index] if 0 <= index < len(self.models) else None
+        return self._shown[index] if 0 <= index < len(self._shown) else None
 
     def _showModel(self):
         """Rebuild the size fields for the picked model."""
