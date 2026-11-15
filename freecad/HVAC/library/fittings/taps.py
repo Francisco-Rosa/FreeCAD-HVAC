@@ -6,6 +6,9 @@ Taps: a branch collar attached to the surface of a continuous run
 (straight, saddle and shoe taps).
 """
 
+import functools
+import math
+
 from ._common import (
     _clip_branch_at_trunk_center,
     _extra_trim,
@@ -19,6 +22,7 @@ from ._common import (
     _size,
     _trimmed,
     _wall_thickness,
+    jog_records,
 )
 
 
@@ -321,11 +325,11 @@ def attachment_mode(requested, offsets, tolerance=1.0e-6):
     offsets:   the dict from _attachment_offsets(), or None when the branch
                axis meets the run axis.
 
-    "Auto" picks Side while the whole branch section lies within the run's
-    depth, and Face once the whole branch section is clear of the run
-    surface. In between, the branch would cut through the run's edge, which
-    neither fitting can build, so that is reported as an error saying how
-    far to move the branch either way.
+    "Auto" picks Face once the whole branch section is clear of the run
+    surface, and Side otherwise. A side branch that does not lie wholly
+    within the run's depth (it crosses the run's edge) is built on a copy
+    of the branch moved in until it fits, plus an offset piece back to the
+    real branch (branch_jog).
     """
     requested = str(requested or ATTACHMENT_AUTO)
     if requested not in (ATTACHMENT_AUTO, ATTACHMENT_SIDE, ATTACHMENT_FACE):
@@ -349,20 +353,120 @@ def attachment_mode(requested, offsets, tolerance=1.0e-6):
                 -clearance
             )
         )
-    inside = run_half - (offset + branch_half)  # how far the branch's far side is inside the run surface
-    if inside >= -tolerance:
-        return ATTACHMENT_SIDE
-    raise ValueError(
-        "The branch crosses the edge of the run: move it {:.1f} mm further away for a face-mounted tap, "
-        "or {:.1f} mm closer for a side tap".format(-clearance, -inside)
-    )
+    return ATTACHMENT_SIDE
 
 
-def face_tap_layout(context, run_factor=0.3, branch_factor=0.5):
+# The offset piece of a jogged branch is never steeper than this, from the branch axis.
+_JOG_MAX_SLOPE_DEG = 30.0
+
+
+def branch_jog(context, centred=False):
+    """
+    For a side tap or tee whose branch crosses the edge of the run (only
+    part of its section lies within the run's depth): the branch moved in,
+    towards the run axis, just far enough to lie within the run (or onto
+    the run axis, for a branch larger than the run), and the length of the
+    straight offset piece that carries it back to its own axis at no more
+    than _JOG_MAX_SLOPE_DEG. None when no move is needed (the branch fits,
+    meets the run axis, or is face-mounted). `centred`: always move the
+    branch onto the run axis (fittings that sweep the branch in the run's
+    own plane, the radius tees).
+
+    {"branch": the real branch port, "moved": the moved copy,
+     "shift": distance moved, "length": the offset piece's length}
+    """
+    api = context["hvac_api"]
+    try:
+        run_a, run_b, branch = api.run_branch_ports(context)
+    except Exception:
+        return None
+    offsets = _attachment_offsets(api, run_a, run_b, branch)
+    if offsets is None or attachment_mode(_props(context).get("Attachment"), offsets) != ATTACHMENT_SIDE:
+        return None
+    inside = offsets["run_half"] - (offsets["offset"] + offsets["branch_half"])
+    if centred:
+        shift = offsets["offset"]
+    elif inside >= -1.0e-6:
+        return None
+    else:
+        shift = min(-inside, offsets["offset"])
+    moved = api.copy_port(branch, position=api.port_position(branch) - offsets["up"] * shift)
+    length = shift / math.tan(math.radians(_JOG_MAX_SLOPE_DEG))
+    return {"branch": branch, "moved": moved, "shift": shift, "length": length}
+
+
+def with_branch_jog(function=None, centred=False):
+    """
+    Decorate a tap or tee type's build or measure function: when its branch
+    crosses the run's edge (branch_jog), run it on the moved branch. A build
+    gets the offset piece from _common._finish (it reads "branch_jog" from
+    the context); a measure gets the branch trim extended here. Used as
+    @with_branch_jog, or @with_branch_jog(centred=True) (see branch_jog).
+    """
+    if function is None:
+        return functools.partial(with_branch_jog, centred=centred)
+
+    @functools.wraps(function)
+    def wrapper(context, *args, **kwargs):
+        jog = branch_jog(context, centred)
+        if jog is None:
+            return function(context, *args, **kwargs)
+        key = jog["branch"].get("edge_key")
+        moved = dict(context)
+        moved["connected_ports"] = [
+            jog["moved"] if port.get("edge_key") == key else port for port in context.get("connected_ports") or []
+        ]
+        moved["branch_jog"] = jog
+        result = function(moved, *args, **kwargs)
+        if isinstance(result, list):
+            return jog_records(result, jog)[0]
+        return result
+
+    return wrapper
+
+
+def _rolled_collar(api, context, run_a, run_b, branch, offsets, roll):
+    """
+    (collar direction, collar foot on the run axis, corner, run half along the
+    collar) for a collar rolled `roll` radians about a round run's axis, from
+    straight up (the common perpendicular) towards the branch direction, so
+    the elbow turns less (SMACNA 14-14 D, F to L: "rolled 45 deg"). The foot
+    is where the rolled collar's line, square to the run, meets the branch axis.
+    """
+    if api.port_profile(run_a) != "Circular" or api.port_profile(run_b) != "Circular":
+        raise ValueError("A rolled collar (CollarRoll) needs a round run")
+    run_dir = api.unit(api.port_direction(run_a))
+    branch_dir = api.unit(api.port_direction(branch))
+    up = offsets["up"]
+    side = api.unit(run_dir.cross(up))
+    if side.dot(branch_dir) < 0.0:
+        side = side * -1.0
+    collar_dir = up * math.cos(roll) + side * math.sin(roll)
+    # Solve foot + s * collar_dir = branch point + t * branch_dir, foot = run point + u * run_dir.
+    back = branch_dir * -1.0
+    det = run_dir.dot(collar_dir.cross(back))
+    if abs(det) < 1.0e-9:
+        raise ValueError("The collar cannot be rolled towards this branch (it would run along the branch)")
+    gap = api.port_position(branch) - api.port_position(run_a)
+    u = gap.dot(collar_dir.cross(back)) / det
+    rise = run_dir.dot(gap.cross(back)) / det
+    foot = api.port_position(run_a) + run_dir * u
+    run_half = 0.5 * max(api.port_diameter(run_a), api.port_diameter(run_b))
+    if rise <= run_half:
+        raise ValueError("Rolled by CollarRoll, the collar would not reach the branch: use a smaller roll")
+    return collar_dir, foot, foot + collar_dir * rise, run_half
+
+
+def face_tap_layout(context, run_factor=0.3, branch_factor=0.5, collar="plain"):
     """
     Layout of a face-mounted tap, or None when this node is an ordinary
     side tap (see attachment_mode). Shared by every tap and tee type, since
-    once the branch passes over the run they all become the same fitting.
+    once the branch passes over the run they all become the same fitting,
+    except for the collar on the run face: `collar` "plain" (a straight
+    collar), "conical" (flared at the run face, a saddle / conical tap) or
+    "shoe" (a 45 degree toe at the run face). CollarRoll rolls the collar
+    about a round run towards the branch (SMACNA "rolled 45 deg"); the
+    elbow then turns by what is left.
     """
     api = context["hvac_api"]
     run_a, run_b, branch = api.run_branch_ports(context)
@@ -371,20 +475,29 @@ def face_tap_layout(context, run_factor=0.3, branch_factor=0.5):
     if attachment_mode(p.get("Attachment"), offsets) != ATTACHMENT_FACE:
         return None
 
-    up, q_run, q_branch = offsets["up"], offsets["q_run"], offsets["q_branch"]
     branch_dir = api.unit(api.port_direction(branch))
     size = _size(api, branch)
+    roll = math.radians(float(p.get("CollarRoll", 0.0) or 0.0))
+    if abs(roll) > 1.0e-9:
+        up, q_run, corner, run_half = _rolled_collar(api, context, run_a, run_b, branch, offsets, roll)
+    else:
+        up, q_run, corner, run_half = offsets["up"], offsets["q_run"], offsets["q_branch"], offsets["run_half"]
+    turn = api.angle_between(up, branch_dir)
+    tangent_factor = math.tan(turn / 2.0)
+    if tangent_factor <= 1.0e-6:
+        raise ValueError("The collar runs straight into the branch: no elbow to build")
 
-    # Step 1: the elbow radius. It can't be larger than the height the
-    # collar has to rise, and not smaller than the bend minimum (half the
-    # branch size plus the wall; below it the inside of the bend folds over).
-    rise = offsets["offset"] - offsets["run_half"]
+    # Step 1: the elbow radius. Its tangent can't be longer than the height
+    # the collar has to rise, and the radius not smaller than the bend
+    # minimum (half the branch size plus the wall; below it the inside of
+    # the bend folds over).
+    rise = (corner - q_run).Length - run_half
     minimum = _min_bend_radius(size, _wall_thickness(context))
-    radius = min(max(_positive(p.get("ElbowRadius"), size), minimum), rise)
+    radius = min(max(_positive(p.get("ElbowRadius"), size), minimum), rise / tangent_factor)
     if radius < minimum - 1.0e-6:
         raise ValueError(
             "The branch is too close to the run surface for its elbow: move it {:.1f} mm further away".format(
-                minimum - radius
+                (minimum - radius) * tangent_factor
             )
         )
 
@@ -394,14 +507,42 @@ def face_tap_layout(context, run_factor=0.3, branch_factor=0.5):
     if x_axis is None:
         _placement, x_axis, _y_axis, _z_axis = api.make_profile_frame(branch_dir)
     bend_axis = api.unit(branch_dir.cross(up))
-    collar_x = api.rotate_vector(x_axis, bend_axis, api.angle_between(branch_dir, up))
-    collar = api.copy_port(branch, position=q_branch, direction=up * -1.0, profile_x_axis=collar_x)
-    route = api.make_elbow_path(collar, api.copy_port(branch, position=q_branch), radius)
+    collar_x = api.rotate_vector(x_axis, bend_axis, turn)
+    collar_port = api.copy_port(branch, position=corner, direction=up * -1.0, profile_x_axis=collar_x)
+    route = api.make_elbow_path(collar_port, api.copy_port(branch, position=corner), radius)
 
-    # Step 3: trims. The run has to clear the collar's footprint on its
+    # Step 3: the collar's shape at the run face, within its straight part.
+    surface_point = q_run + up * run_half
+    straight = max(0.0, (api.port_position(route["ports"][0]) - surface_point).dot(up))
+    footprint = api.profile_from_port(api.copy_port(collar_port, position=surface_point))
+    flare = min(_positive(p.get("TapHeight"), 0.5 * size), straight)
+    growth, toe = 0.0, None
+    if collar != "plain" and flare <= 1.0:
+        collar = "plain"
+    if collar == "conical":
+        # The flare may not spread wider than the run face across the run.
+        across = api.unit(api.port_direction(run_a).cross(up))
+        run_section = api.profile_from_port(api.copy_port(run_a, position=q_run))
+        run_low, run_high = api.profile_projection_bounds(run_section, across)
+        foot_low, foot_high = api.profile_projection_bounds(footprint, across)
+        room = min(foot_low - run_low, run_high - foot_high)
+        growth = min(_positive(p.get("SaddleGrowth"), 0.6 * size), room)
+        if growth <= 1.0:
+            collar, growth = "plain", 0.0
+        else:
+            footprint = api.offset_profile(footprint, growth)
+    elif collar == "shoe":
+        lean_dir = api.unit(api.port_direction(_lean_port(api, run_a, run_b, branch)))
+        toe = lean_dir - up * lean_dir.dot(up)
+        if toe.Length <= api.EPS:
+            collar = "plain"
+        else:
+            toe = api.unit(toe)
+            footprint = api.stretch_profile_one_sided(footprint, toe, flare)
+
+    # Step 4: trims. The run has to clear the collar's footprint on its
     # face; the branch starts where the elbow ends.
-    surface = api.copy_port(collar, position=q_run + up * offsets["run_half"])
-    min_a, min_b = _tap_run_minimums(api, q_run, run_a, run_b, api.profile_from_port(surface))
+    min_a, min_b = _tap_run_minimums(api, api.center_from_context(context), run_a, run_b, footprint)
     elbow_end = api.port_position(route["ports"][1])
     branch_min = max(0.0, (elbow_end - api.port_position(branch)).dot(branch_dir))
     return {
@@ -411,6 +552,12 @@ def face_tap_layout(context, run_factor=0.3, branch_factor=0.5):
         "q_run": q_run,
         "up": up,
         "route": route,
+        "collar": collar,
+        "surface_point": surface_point,
+        "run_half": run_half,
+        "flare": flare,
+        "growth": growth,
+        "toe": toe,
         "trim_a": min_a + _extra_trim(p.get("TrimRunA"), run_factor * _size(api, run_a)),
         "trim_b": min_b + _extra_trim(p.get("TrimRunB"), run_factor * _size(api, run_b)),
         "trim_branch": branch_min + _extra_trim(p.get("TrimBranch"), branch_factor * size),
@@ -442,10 +589,38 @@ def build_face_tap(context, layout):
     # mid-plane (a little past it, then cut back, for a clean cut face).
     collar_reach = (api.port_position(collar_top) - q_run).dot(up) + max(0.01 * _size(api, branch), 2.0)
 
+    kind, flare = layout["collar"], layout["flare"]
+    surface_point = layout["surface_point"]
+
+    def flared_collar(offset):
+        # A conical or shoe collar: straight down to TapHeight above the run
+        # face, then flared (conical) or stretched to the toe (shoe) at the
+        # face and on down to the run axis, with every section grown by the wall offset.
+        def section(point, extra):
+            profile = api.profile_from_port(api.copy_port(collar_top, position=point), offset)
+            if extra <= 0.0:
+                return profile
+            if kind == "conical":
+                return api.offset_profile(profile, extra)
+            return api.stretch_profile_one_sided(profile, layout["toe"], extra)
+
+        scale = layout["growth"] if kind == "conical" else flare
+        top = surface_point + up * flare
+        # Below the run face the collar keeps its footprint down to the run axis (it is inside the run).
+        # Lofted upwards, against the collar port's direction, the same sense as the side taps'
+        # lofts (the other way round the stretched shoe sections give an inside-out solid).
+        profiles = [section(q_run, scale), section(surface_point, scale), section(top, 0.0)]
+        if (api.port_position(collar_top) - top).Length > api.EPS:
+            profiles.append(api.profile_from_port(collar_top, offset))
+        return api.loft(profiles, solid=True, ruled=True)
+
     def envelope(offset):
         trunk = _loft(api, [_trimmed(api, run_a, trim_a), _trimmed(api, run_b, trim_b)], offset)
 
-        collar = api.extrude(api.profile_from_port(collar_top, offset), up * -collar_reach, solid=True)
+        if kind == "plain":
+            collar = api.extrude(api.profile_from_port(collar_top, offset), up * -collar_reach, solid=True)
+        else:
+            collar = flared_collar(offset)
         collar = api.clip_plane(collar, (q_run, up), side="positive")
         collar = _clip_tap_to_run_body(api, collar, q_run, run_a, run_b, trim_a, trim_b)
 
@@ -458,6 +633,7 @@ def build_face_tap(context, layout):
     return _finish(context, envelope, measure_face_tap(context, layout))
 
 
+@with_branch_jog
 def measure_tap_straight(context):
     face = face_tap_layout(context)
     if face is not None:
@@ -465,6 +641,7 @@ def measure_tap_straight(context):
     return measure_straight_tap(context, 0.3, 0.5)
 
 
+@with_branch_jog
 def build_tap_straight(context):
     face = face_tap_layout(context)
     if face is not None:
@@ -472,15 +649,17 @@ def build_tap_straight(context):
     return _straight_tap(context, 0.3, 0.5)
 
 
+@with_branch_jog
 def measure_tap_saddle(context):
-    face = face_tap_layout(context)
+    face = face_tap_layout(context, collar="conical")
     if face is not None:
         return measure_face_tap(context, face)
     return measure_saddle_tap(context, 0.3, 0.5)
 
 
+@with_branch_jog
 def build_tap_saddle(context):
-    face = face_tap_layout(context)
+    face = face_tap_layout(context, collar="conical")
     if face is not None:
         return build_face_tap(context, face)
     return _saddle_tap(context, 0.3, 0.5)
@@ -523,9 +702,10 @@ def _tap_shoe_layout(context):
     }
 
 
+@with_branch_jog
 def measure_tap_shoe(context):
     # A branch passing over or under the run is face-mounted instead (see taps.face_tap_layout).
-    face = face_tap_layout(context)
+    face = face_tap_layout(context, collar="shoe")
     if face is not None:
         return measure_face_tap(context, face)
     api = context["hvac_api"]
@@ -539,12 +719,13 @@ def measure_tap_shoe(context):
     )
 
 
+@with_branch_jog
 def build_tap_shoe(context):
     """45-degree shoe tap with profile-independent geometry. TapHeight
     defines both the vertical shoe height and, at 45 degrees, the toe
     extension at the run surface."""
     # A branch passing over or under the run is face-mounted instead (see taps.face_tap_layout).
-    face = face_tap_layout(context)
+    face = face_tap_layout(context, collar="shoe")
     if face is not None:
         return build_face_tap(context, face)
     api = context["hvac_api"]

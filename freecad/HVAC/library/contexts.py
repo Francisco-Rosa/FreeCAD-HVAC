@@ -45,8 +45,15 @@ GEOMETRY_CONTEXT_KEYS = frozenset(
         "path_edge",
         # Set by a PartScript for its flange feature (fittings/features.py).
         "flange_ports",
+        # Set by fittings/taps.with_branch_jog for fittings/_common._finish: a side
+        # branch moved in to fit the run, and its offset piece back to its own axis.
+        "branch_jog",
         # Read only as an optional fallback by the markers.
         "position",
+        # An end connected to an equipment port: that port's opening, as a
+        # port-like dict {"profile", "section_params", "profile_x_axis"}
+        # (core/Equipment.port_context). Absent otherwise.
+        "equipment_port",
     }
 )
 
@@ -71,6 +78,8 @@ LOSS_CONTEXT_KEYS = frozenset(
         "library_id",
         "air_density",
         "air_kinematic_viscosity",
+        # As for geometry: the equipment port an end is connected to, when it is.
+        "equipment_port",
     }
 )
 

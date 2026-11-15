@@ -471,6 +471,47 @@ def is_connected(equipment, port_marker, net, junction):
     )
 
 
+def connected_port(junction):
+    """
+    The equipment port marker an open duct end (a DuctJunction) is
+    connected to, or None.
+    """
+    from .Network import DuctNetwork
+
+    net = DuctNetwork.getOwnerNetwork(junction)
+    doc = getattr(junction, "Document", None)
+    if net is None or doc is None:
+        return None
+    node_key = str(getattr(junction, "NodeKey", "") or "")
+    for equipment in equipment_for_network(net):
+        for c in _parse_connections(equipment):
+            if c["network"] == net.Name and c["node_key"] == node_key:
+                return doc.getObject(c["port"])
+    return None
+
+
+def port_context(component):
+    """
+    The equipment port a Primary component's end is connected to, as the
+    library's context key "equipment_port": a port-like dict ({"profile",
+    "section_params", "profile_x_axis"}, read off the port marker, which
+    takes them from the equipment's collar face), or None when the
+    component is not on an end connected to an equipment port.
+    """
+    if getattr(component, "ComponentRole", "") != "Primary":
+        return None
+    doc = getattr(component, "Document", None)
+    junction = doc.getObject(getattr(component, "ParentJunctionName", "") or "") if doc is not None else None
+    if junction is None or getattr(junction, "Topology", "") != "end":
+        return None
+    marker = connected_port(junction)
+    if marker is None or not _custom_fitting.is_port(marker):
+        return None
+    profile, section = _custom_fitting.port_section(marker)
+    x_axis = marker.getGlobalPlacement().Rotation.multVec(FreeCAD.Vector(1, 0, 0))
+    return {"profile": profile, "section_params": section, "profile_x_axis": (x_axis.x, x_axis.y, x_axis.z)}
+
+
 def prune_connections(equipment, network_name, live_node_keys):
     """
     Drop `equipment`'s connections to nodes of network `network_name` that

@@ -37,7 +37,18 @@ translate = FreeCAD.Qt.translate
 
 from ..library.library_api import HVACLibraryAPI
 from ..utils import hvaclib
-from . import _custom_fitting, _terminal_function
+from . import Equipment, _custom_fitting, _terminal_function
+
+
+def _fallback_trims(ports):
+    """{(edge_key, segment_end): trim} of the fallback drawn for a fitting that fails (markers.fallback_trims)."""
+    from ..library.fittings import markers
+
+    try:
+        trims = markers.fallback_trims(HVACLibraryAPI, list(ports or []))
+    except Exception:
+        return {}
+    return {(port.get("edge_key"), port.get("segment_end")): trim for port, trim in zip(ports, trims)}
 
 
 def _set_if_changed(obj, name, value):
@@ -633,7 +644,7 @@ class DuctJunction:
             try:
                 return _custom_fitting.measure(comp_obj, local_ports)
             except Exception:
-                return {}
+                return _fallback_trims(local_ports)
 
         library_id = getattr(comp_obj, "LibraryId", "")
         type_id = getattr(comp_obj, "TypeId", "")
@@ -662,6 +673,9 @@ class DuctJunction:
                 "type_id": type_id,
                 "library_id": library_id,
             }
+            equipment_port = Equipment.port_context(comp_obj)
+            if equipment_port is not None:
+                context["equipment_port"] = equipment_port
             records = reg.measure_connection_lengths(library_id, type_def, context)
             if records is None:
                 # Migration fallback (see TODO above) -- no independent
@@ -670,7 +684,8 @@ class DuctJunction:
                 result = reg.build_geometry(library_id, type_def, context)
                 records = reg.normalize_connection_lengths(result.connection_lengths, type_id)
         except Exception:
-            return {}
+            # The fitting cannot be laid out: execute() will draw the fallback, with these trims.
+            return _fallback_trims(local_ports)
 
         return {(item["edge_key"], item.get("segment_end")): item["length"] for item in records}
 

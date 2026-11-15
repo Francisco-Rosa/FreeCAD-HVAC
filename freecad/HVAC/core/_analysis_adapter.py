@@ -448,6 +448,12 @@ def build_loss_evaluator(
 
     local_ports = json.loads(getattr(comp_obj, "LocalPortsJson", "") or "[]")
     local_ports = custom_port_sections(comp_obj, local_ports)
+    try:
+        from . import Equipment
+
+        equipment_port = Equipment.port_context(comp_obj)
+    except Exception:
+        equipment_port = None
     center_point = (
         HVACLibraryAPI.average_point([p["position"] for p in local_ports]) if local_ports else (0.0, 0.0, 0.0)
     )
@@ -478,6 +484,8 @@ def build_loss_evaluator(
             "air_density": air.density_kg_m3,
             "air_kinematic_viscosity": air.kinematic_viscosity_m2_s,
         }
+        if equipment_port is not None:
+            context["equipment_port"] = equipment_port
         return reg.call_loss(library_id, type_def, context)
 
     return evaluate

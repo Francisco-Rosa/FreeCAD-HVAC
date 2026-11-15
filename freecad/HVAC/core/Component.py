@@ -44,11 +44,12 @@ translate = FreeCAD.Qt.translate
 from ..library.library_api import HVACLibraryAPI
 from ..utils import hvaclib
 from . import Construction as _construction
-from . import _custom_fitting
 from . import (
+    Equipment,
     _component_appearance,
     _component_results,
     _construction_schema,
+    _custom_fitting,
     _custom_loss,
     _geometry_apply,
     _port_properties,
@@ -194,6 +195,10 @@ class DuctComponent:
                 "type_id": type_id,
                 "library_id": library_id,
             }
+            # An end on an equipment port: the port's own opening (the connection reaches it).
+            equipment_port = Equipment.port_context(obj) if is_primary else None
+            if equipment_port is not None:
+                context["equipment_port"] = equipment_port
 
             result = reg.build_geometry(library_id, type_def, context)
             _geometry_apply.apply_geometry_result(obj, result)
@@ -219,6 +224,39 @@ class DuctComponent:
                 "HVAC - DuctComponent - Execute Error generating component '{}': {}\n".format(obj.Label, message)
             )
             FreeCAD.Console.PrintMessage(traceback.format_exc())
+            self._applyFallback(obj, ports)
+
+    @staticmethod
+    def _applyFallback(obj, ports):
+        """
+        Draw the fallback (library/fittings/markers.build_fallback: end-marker
+        crosses, the ducts pulled back slightly) in place of a fitting whose
+        geometry failed, and report its trims, so the ducts and the network
+        stay whole instead of keeping a stale shape. GeometryError keeps why.
+        """
+        from types import SimpleNamespace
+
+        from ..library import geometry_result
+        from ..library.fittings import markers
+
+        try:
+            layer_ids = list(getattr(obj, "ConstructionLayerIds", []) or [])
+            context = {
+                "hvac_api": HVACLibraryAPI,
+                "connected_ports": list(ports or []),
+                "construction_layers": [SimpleNamespace(id=layer_ids[0])] if layer_ids else [],
+                "properties": {},
+            }
+            result = geometry_result.normalize(markers.build_fallback(context))
+            if layer_ids:
+                _geometry_apply.apply_geometry_result(obj, result)
+            else:
+                obj.Shape = next(iter(result.layers.values())).shape
+            lengths_json = json.dumps(result.connection_lengths or [])
+            if getattr(obj, "ConnectionLengthsJson", "") != lengths_json:
+                obj.ConnectionLengthsJson = lengths_json
+        except Exception as e:
+            FreeCAD.Console.PrintError("HVAC - Fallback for '{}' failed too: {}\n".format(obj.Label, e))
 
     def _executeCustom(self, obj, ports):
         """Place this component's custom fitting on the node; its own shape stays empty (the link is the geometry)."""
@@ -235,6 +273,10 @@ class DuctComponent:
             FreeCAD.Console.PrintError(
                 "HVAC - DuctComponent - Custom fitting '{}': {}\n".format(obj.Label, message)
             )
+            # The custom shape no longer fits: show the fallback, not the link left where it was.
+            if getattr(obj, "CustomLinkName", ""):
+                _custom_fitting.remove_link(obj)
+            self._applyFallback(obj, ports)
 
     @staticmethod
     def _parentAttr(obj, name, default=""):

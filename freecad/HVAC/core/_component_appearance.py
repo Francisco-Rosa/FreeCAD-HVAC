@@ -144,11 +144,11 @@ def displayed_parts(obj, hidden=None):
     parts = []
     for layer_id in getattr(obj, "ConstructionLayerIds", []) or []:
         shape = getattr(obj, _construction_schema.shape_property_name(layer_id), None)
-        if layer_id not in hidden_layers and _face_count(shape) and not shape.isNull():
+        if layer_id not in hidden_layers and _has_geometry(shape):
             parts.append(("layer", layer_id, shape))
     for feature_id in getattr(obj, "ConstructionFeatureIds", []) or []:
         shape = getattr(obj, _construction_schema.feature_shape_property_name(feature_id), None)
-        if feature_id not in hidden_features and _face_count(shape) and not shape.isNull():
+        if feature_id not in hidden_features and _has_geometry(shape):
             parts.append(("feature", feature_id, shape))
     return parts
 
@@ -162,7 +162,7 @@ def display_shape_is_current(obj, parts=None):
     """True when obj.Shape already holds exactly the parts displayed_parts() gives."""
     parts = displayed_parts(obj) if parts is None else parts
     key = (getattr(getattr(obj, "Document", None), "Name", ""), getattr(obj, "Name", ""))
-    signature = tuple((kind, part_id, _face_count(shape)) for kind, part_id, shape in parts)
+    signature = _signature(parts)
     return _display_keys.get(key) == signature and _face_count(getattr(obj, "Shape", None)) == sum(
         sig[2] for sig in signature
     )
@@ -179,7 +179,7 @@ def refresh_display_shape(obj, force=False):
 
     parts = displayed_parts(obj)
     key = (getattr(getattr(obj, "Document", None), "Name", ""), getattr(obj, "Name", ""))
-    signature = tuple((kind, part_id, _face_count(shape)) for kind, part_id, shape in parts)
+    signature = _signature(parts)
     current = getattr(obj, "Shape", None)
     if force or _display_keys.get(key) != signature or _face_count(current) != sum(sig[2] for sig in signature):
         # Only the display changed: don't leave the object marked for a (costly) geometry rebuild.
@@ -229,6 +229,26 @@ def is_trigger_property(obj, prop):
 # object's id() -- one re-render per object may be genuinely in flight at
 # any time, but never nested inside itself.
 _rendering = set()
+
+
+def _signature(parts):
+    return tuple((kind, part_id, _face_count(shape), _edge_count(shape)) for kind, part_id, shape in parts)
+
+
+def _has_geometry(shape):
+    """True for a shape with faces or, like a marker or a failed fitting's fallback, only lines."""
+    return bool(_face_count(shape) or _edge_count(shape))
+
+
+def _edge_count(shape):
+    if shape is None:
+        return 0
+    try:
+        if shape.isNull():
+            return 0
+        return len(shape.Edges)
+    except Exception:
+        return 0
 
 
 def _face_count(shape):
@@ -306,7 +326,8 @@ def apply_component_appearance(vobj, from_view_update=False):
                 feature_def = feature_defs_by_id.get(part_id)
                 appearance = layer_appearances.get(feature_def.host_layer) if feature_def is not None else None
             per_part.append((appearance, _face_count(shape)))
-        if all(appearance is None for appearance, _count in per_part):
+        # Lines only (a marker, a failed fitting's fallback): no faces to colour.
+        if not any(count for _appearance, count in per_part) or all(a is None for a, _count in per_part):
             return
         # A part with no usable appearance still needs an entry per face, so later entries stay aligned.
         default_appearance = FreeCAD.Material() if any(a is None for a, _count in per_part) else None

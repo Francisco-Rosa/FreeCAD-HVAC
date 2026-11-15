@@ -106,16 +106,18 @@ def test_auto_is_face_mounted_once_the_branch_is_clear_of_the_run_surface():
     assert taps.attachment_mode("Auto", _offsets(-400.0)) == "Face"
 
 
-def test_auto_rejects_a_branch_crossing_the_run_edge_and_says_how_far_to_move_it():
+def test_auto_builds_a_branch_crossing_the_run_edge_as_a_side_tap():
+    # Moved in to fit and jogged back to its own axis (taps.branch_jog), not refused.
+    assert taps.attachment_mode("Auto", _offsets(120.0)) == "Side"
+
+
+def test_face_cannot_be_forced_while_the_branch_crosses_the_run_edge():
     with pytest.raises(ValueError) as excinfo:
-        taps.attachment_mode("Auto", _offsets(120.0))
-    message = str(excinfo.value)
-    assert "130.0 mm further away" in message
-    assert "70.0 mm closer" in message
+        taps.attachment_mode("Face", _offsets(120.0))
+    assert "130.0 mm further away" in str(excinfo.value)
 
 
 def test_side_can_be_forced_while_the_branch_still_touches_the_run():
-    # Crossing the run edge is refused by Auto, but allowed when the user asks for it.
     assert taps.attachment_mode("Side", _offsets(120.0)) == "Side"
 
 

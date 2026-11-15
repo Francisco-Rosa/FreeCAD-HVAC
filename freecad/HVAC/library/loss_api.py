@@ -1270,7 +1270,9 @@ class HVACLossAPI:
         - "Discharge into casing": the fan blows freely into the unit's own
           casing (a plenum) and the duct leaves that, 14-16 I, by FanWheel.
 
-        The fan outlet is FanOutletWidth x FanOutletHeight. The tables are
+        The fan outlet is FanOutletWidth x FanOutletHeight, or when those
+        are 0 the equipment port the end is connected to (context
+        "equipment_port"). The tables are
         printed against the fan outlet's velocity; the result is referenced
         to the duct's, K = C (A_duct / A_outlet)^2. Only for air leaving the
         unit into the duct. "None" or no FanConnection: UNSUPPORTED (no fan
@@ -1288,9 +1290,15 @@ class HVACLossAPI:
             width = float(properties.get("FanOutletWidth", 0.0) or 0.0)
             height = float(properties.get("FanOutletHeight", 0.0) or 0.0)
             a_duct = HVACLibraryAPI.port_area(port)
-            if width <= 0.0 or height <= 0.0 or a_duct <= 0.0:
-                return HVACLossAPI._unsupported("FanOutletWidth / FanOutletHeight not set")
-            a_outlet = width * height / 1.0e6
+            if width > 0.0 and height > 0.0:
+                a_outlet = width * height / 1.0e6
+            else:
+                equipment_port = context.get("equipment_port")
+                a_outlet = HVACLibraryAPI.port_area(equipment_port) if equipment_port else 0.0
+            if a_outlet <= 0.0 or a_duct <= 0.0:
+                return HVACLossAPI._unsupported(
+                    "no fan outlet size: connect an equipment port or set FanOutletWidth / FanOutletHeight"
+                )
             to_duct = (a_duct / a_outlet) ** 2
 
             if choice in HVACLossAPI._FAN_TRANSITIONS:

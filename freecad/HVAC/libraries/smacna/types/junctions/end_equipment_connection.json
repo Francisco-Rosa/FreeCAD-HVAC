@@ -50,7 +50,7 @@
       "name": "TrimNeck",
       "prop_type": "App::PropertyLength",
       "group": "Dimensions",
-      "description": "Length of the collar from the duct end to the equipment face. 0 uses a quarter of the duct size",
+      "description": "Length of the collar between the duct and the equipment port (or the transition from it). 0 uses a quarter of the duct",
       "default": 0.0,
       "validation": {
         "minimum": 0.0
@@ -60,7 +60,7 @@
       "name": "FanConnection",
       "prop_type": "App::PropertyEnumeration",
       "group": "Parameters",
-      "description": "How the duct leaves the unit's fan, for its system-effect loss (supply connections only). None adds nothing",
+      "description": "How the duct leaves the unit's fan, for its system-effect loss (supply connections only). None adds nothing. The transition choices also shape the transition drawn from the fan outlet to the duct",
       "default": "None",
       "validation": {
         "enum": [
@@ -78,7 +78,7 @@
       "name": "FanOutletWidth",
       "prop_type": "App::PropertyLength",
       "group": "Parameters",
-      "description": "Width of the fan outlet",
+      "description": "Width of the fan outlet. 0 uses the equipment port the duct end is connected to",
       "default": 0.0,
       "validation": {
         "minimum": 0.0
@@ -88,7 +88,7 @@
       "name": "FanOutletHeight",
       "prop_type": "App::PropertyLength",
       "group": "Parameters",
-      "description": "Height of the fan outlet",
+      "description": "Height of the fan outlet. 0 uses the equipment port the duct end is connected to",
       "default": 0.0,
       "validation": {
         "minimum": 0.0
@@ -98,7 +98,7 @@
       "name": "TransitionAngle",
       "prop_type": "App::PropertyAngle",
       "group": "Parameters",
-      "description": "Included angle of the transition from the fan outlet to the duct",
+      "description": "Included angle of the transition from the equipment port (or fan outlet) to the duct",
       "default": 20.0,
       "validation": {
         "minimum": 0.0,
@@ -185,11 +185,11 @@
   "geometry": {
     "backend": "generator",
     "module": "shared:terminals",
-    "function": "build_terminal_plain"
+    "function": "build_terminal_fan"
   },
   "connection_lengths": {
     "module": "shared:terminals",
-    "function": "measure_terminal_plain"
+    "function": "measure_terminal_fan"
   },
   "loss": {
     "module": "shared:losses",

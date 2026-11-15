@@ -91,6 +91,17 @@
       "validation": {
         "minimum": 0.0
       }
+    },
+    {
+      "name": "CollarRoll",
+      "prop_type": "App::PropertyAngle",
+      "group": "Options",
+      "description": "Face-mounted branch on a round run only: rolls the collar about the run towards the branch (SMACNA 'rolled 45 deg'); the elbow then turns that much less. 0 = collar straight up",
+      "default": 0.0,
+      "validation": {
+        "minimum": 0.0,
+        "maximum": 75.0
+      }
     }
   ],
   "geometry": {

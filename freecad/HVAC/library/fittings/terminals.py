@@ -95,6 +95,7 @@ def _terminal_layout(context, kind):
     layout = {"port": port, "neck": _neck_length(props), "body": 0.0, "lip": 0.0, "face": None, "curved": False}
     layout["cap"] = None
     layout["wall_flange"] = None
+    layout["face_shift"] = (0.0, 0.0)
 
     if kind == "generic":
         # A plain length of the duct's own section, BodyLength long (plus the neck).
@@ -180,9 +181,112 @@ def _terminal_layout(context, kind):
         if frame > _EPS and depth > _EPS:
             layout.update(lip=depth, face=_grown_section(profile, params, frame))
 
+    elif kind == "fan":
+        # Where a duct meets its equipment: a collar, and a transition from
+        # the opening at the node (the equipment port, or the fan outlet a
+        # fan outlet transition names) to the duct, shaped as SMACNA 14-11
+        # F to J draw it.
+        layout["neck"] = _neck_length(props, 0.25 * size)
+        shape = _fan_transition(context, props, port, profile, params)
+        if shape is not None:
+            length, outlet, shift = shape
+            layout.update(body=length, face=outlet, face_shift=(0.0, shift))
+
     else:
         raise ValueError("Unknown terminal kind '{}'".format(kind))
     return layout
+
+
+# FanConnection choices that are a fan outlet transition, with the slope of
+# the transition's top side (degrees, rising towards the duct); None =
+# symmetric (top and bottom open equally, half the included angle each).
+_FAN_TRANSITION_TOP = {
+    "transition symmetric": None,
+    "transition pyramidal": None,
+    "transition asymmetric top level": 0.0,
+    "transition asymmetric top 10 down": -10.0,
+    "transition asymmetric top 10 up": 10.0,
+}
+
+
+def _fan_outlet(context, props, choice, duct_x_axis):
+    """
+    (profile, params) of the opening the connection starts from at the
+    node, laid out on the duct's own axes, or None for the duct's own
+    section: for a fan outlet transition with FanOutletWidth and
+    FanOutletHeight both set, that fan outlet; else the equipment port the
+    end is connected to (context "equipment_port"), as its marker gives it.
+    """
+    api = context["hvac_api"]
+    width, height = _number(props, "FanOutletWidth"), _number(props, "FanOutletHeight")
+    if choice in _FAN_TRANSITION_TOP and width > _EPS and height > _EPS:
+        return "Rectangular", {"Width": width, "Height": height}
+    equipment_port = context.get("equipment_port")
+    if not equipment_port:
+        return None
+    profile, params = _section(api, equipment_port)
+    if profile == "Circular":
+        return (profile, params) if float(params.get("Diameter", 0.0) or 0.0) > _EPS else None
+    if float(params.get("Width", 0.0) or 0.0) <= _EPS or float(params.get("Height", 0.0) or 0.0) <= _EPS:
+        return None
+    # The port's width runs along its marker's X axis: turned across the duct's, swap them.
+    port_x_axis = api.port_profile_x_axis(equipment_port)
+    if port_x_axis is not None and abs(api.unit(port_x_axis).dot(duct_x_axis)) < 0.5:
+        params = dict(params, Width=params["Height"], Height=params["Width"])
+    return profile, params
+
+
+def _fan_transition(context, props, port, profile, params):
+    """
+    (length, opening section (profile, params), the opening centre's shift
+    along the section's height axis) of the transition from the opening at
+    the node (_fan_outlet) to the duct, or None when there is none to draw
+    (no opening known, or it is the duct's own section).
+
+    The transition opens at the included TransitionAngle. A fan outlet
+    transition that is asymmetric (FanConnection) keeps its top side level,
+    or sloping 10 degrees down or up towards the duct, and opens the whole
+    angle at the bottom; every other one stays centred, top and bottom each
+    opening half the angle. Width always changes symmetrically. A change of
+    profile alone (a round port on a rectangular duct) is given half the
+    duct's larger side, so the loft has room to turn.
+    """
+    api = context["hvac_api"]
+    choice = str(props.get("FanConnection", "") or "").strip().lower()
+    axis = api.unit(api.port_direction(port))
+    _placement, duct_x_axis, _y, _z = api.make_profile_frame(axis, api.port_profile_x_axis(port))
+    outlet = _fan_outlet(context, props, choice, duct_x_axis)
+    if outlet is None:
+        return None
+    outlet_profile, outlet_params = outlet
+
+    def extents(section_profile, section):
+        if section_profile == "Circular":
+            return float(section["Diameter"]), float(section["Diameter"])
+        return float(section["Width"]), float(section["Height"])
+
+    duct_width, duct_height = extents(profile, params)
+    outlet_width, outlet_height = extents(outlet_profile, outlet_params)
+    angle = math.radians(min(max(_number(props, "TransitionAngle", 20.0), 5.0), 150.0))
+    rise_h = duct_height - outlet_height
+    length_w = abs(duct_width - outlet_width) / (2.0 * math.tan(angle / 2.0))
+    top = _FAN_TRANSITION_TOP.get(choice)
+    if top is None:
+        # Centred: top and bottom each open half the angle.
+        length = max(abs(rise_h) / (2.0 * math.tan(angle / 2.0)), length_w)
+        shift = 0.0
+    else:
+        # The top side keeps its slope; the bottom opens (or closes) the whole angle against it.
+        top = math.radians(top)
+        bottom = top - angle if rise_h >= 0.0 else top + angle
+        length = max(abs(rise_h) / abs(math.tan(top) - math.tan(bottom)), length_w)
+        # The outlet's top edge, from the duct axis: the duct's top less what the top side rises over the length.
+        shift = duct_height / 2.0 - length * math.tan(top) - outlet_height / 2.0
+    if outlet_profile != profile:
+        length = max(length, 0.5 * max(duct_width, duct_height))
+    if length <= _EPS:
+        return None
+    return length, (outlet_profile, outlet_params), shift
 
 
 def _terminal_trim(layout):
@@ -222,10 +326,13 @@ def _build_terminal(context, kind):
                 return api.make_circular_wire(centre, axis, diameter)
         return api.make_split_circular_wire(centre, x_axis, y_axis, diameter, width, height)
 
+    shift_x, shift_y = layout["face_shift"]
+
     def face_at(distance, offset, for_loft=False):
-        # The face section, `distance` from the node, grown by the wall offset.
+        # The face section, `distance` from the node, grown by the wall offset
+        # (and moved off the duct axis where the layout says, e.g. a fan outlet).
         _profile, grown = _grown_section(face_profile, face_params, offset)
-        centre = api.port_position(port) + axis * distance
+        centre = api.port_position(port) + axis * distance + x_axis * shift_x + y_axis * shift_y
         if for_loft and face_profile == "Circular" and duct_profile in ("Rectangular", "Oval"):
             return round_to_match(centre, grown["Diameter"], duct_profile, duct_params)
         return api.make_profile(face_profile, grown, center=centre, direction=axis, profile_x_axis=x_axis)
@@ -319,6 +426,9 @@ def _pair(kind):
 # a plain extrusion of the connected port's own section. A NeckSize such a
 # type declares feeds its loss formula only, it is not a second profile.
 build_terminal_body_generic, measure_terminal_body_generic = _pair("generic")
+
+# Where a duct meets its equipment: a collar, with the fan outlet transition FanConnection asks for.
+build_terminal_fan, measure_terminal_fan = _pair("fan")
 
 # Entries and exits (SMACNA Tables 14-15 and 14-16).
 build_terminal_plain, measure_terminal_plain = _pair("plain")

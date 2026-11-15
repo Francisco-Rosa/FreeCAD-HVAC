@@ -376,6 +376,19 @@ def test_fan_connection_none_or_missing_outlet_or_return_duct_is_unsupported():
     assert api.fan_connection_loss(ret).status == api.UNSUPPORTED
 
 
+def test_fan_outlet_comes_from_the_connected_equipment_port_when_not_set():
+    # No FanOutletWidth / FanOutletHeight: the equipment port the end sits on is the outlet.
+    context = _supply({"FanConnection": "Transition symmetric", "TransitionAngle": 20.0})
+    context["properties"].update(FanOutletWidth=0.0, FanOutletHeight=0.0)
+    context["equipment_port"] = {"profile": "Rectangular", "section_params": {"Width": 400.0, "Height": 300.0}}
+    result = api.fan_connection_loss(context)
+    assert result.status == api.EXACT
+    assert _k(result) == pytest.approx(0.10 * 4.0)
+    # Set by hand, they win over the port.
+    context["properties"].update(FanOutletWidth=600.0, FanOutletHeight=400.0)
+    assert _k(api.fan_connection_loss(context)) != pytest.approx(0.10 * 4.0)
+
+
 def test_fan_transition_outside_the_table_is_an_approximation():
     result = api.fan_connection_loss(_supply({"FanConnection": "Transition symmetric", "TransitionAngle": 60.0}))
     assert result.status == api.APPROXIMATION

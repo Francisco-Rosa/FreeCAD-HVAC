@@ -26,7 +26,7 @@ from ._common import (
     _wall_thickness,
 )
 from .stars import _star_body
-from .taps import build_face_tap, face_tap_layout, measure_face_tap
+from .taps import build_face_tap, face_tap_layout, measure_face_tap, with_branch_jog
 
 
 def _star_tee_layout(context, run_factor, branch_factor):
@@ -318,6 +318,7 @@ def _radius_tee_center(context, run_factor, branch_factor):
     return _radius_tee(context, run_factor, branch_factor, "center")
 
 
+@with_branch_jog(centred=True)
 def measure_tee_radius_edge(context):
     # A branch passing over or under the run is face-mounted instead (see taps.face_tap_layout).
     face = face_tap_layout(context)
@@ -326,6 +327,7 @@ def measure_tee_radius_edge(context):
     return measure_radius_tee_edge(context, 0.4, 0.6)
 
 
+@with_branch_jog(centred=True)
 def build_tee_radius_edge(context):
     # A branch passing over or under the run is face-mounted instead (see taps.face_tap_layout).
     face = face_tap_layout(context)
@@ -334,6 +336,7 @@ def build_tee_radius_edge(context):
     return _radius_tee_edge(context, 0.4, 0.6)
 
 
+@with_branch_jog(centred=True)
 def measure_tee_radius_center(context):
     # A branch passing over or under the run is face-mounted instead (see taps.face_tap_layout).
     face = face_tap_layout(context)
@@ -342,6 +345,7 @@ def measure_tee_radius_center(context):
     return measure_radius_tee_center(context, 0.4, 0.6)
 
 
+@with_branch_jog(centred=True)
 def build_tee_radius_center(context):
     # A branch passing over or under the run is face-mounted instead (see taps.face_tap_layout).
     face = face_tap_layout(context)
@@ -350,6 +354,7 @@ def build_tee_radius_center(context):
     return _radius_tee_center(context, 0.4, 0.6)
 
 
+@with_branch_jog
 def measure_tee_straight(context):
     # A branch passing over or under the run is face-mounted instead (see taps.face_tap_layout).
     face = face_tap_layout(context)
@@ -358,6 +363,7 @@ def measure_tee_straight(context):
     return measure_star_tee(context, 0.60, 0.60)
 
 
+@with_branch_jog
 def build_tee_straight(context):
     # A branch passing over or under the run is face-mounted instead (see taps.face_tap_layout).
     face = face_tap_layout(context)
@@ -438,9 +444,10 @@ def _tee_mitered_shoe_layout(context):
     }
 
 
+@with_branch_jog
 def measure_tee_mitered_shoe(context):
     # A branch passing over or under the run is face-mounted instead (see taps.face_tap_layout).
-    face = face_tap_layout(context)
+    face = face_tap_layout(context, collar="shoe")
     if face is not None:
         return measure_face_tap(context, face)
     api = context["hvac_api"]
@@ -455,9 +462,10 @@ def measure_tee_mitered_shoe(context):
     )
 
 
+@with_branch_jog
 def build_tee_mitered_shoe(context):
     # A branch passing over or under the run is face-mounted instead (see taps.face_tap_layout).
-    face = face_tap_layout(context)
+    face = face_tap_layout(context, collar="shoe")
     if face is not None:
         return build_face_tap(context, face)
     api = context["hvac_api"]
@@ -552,6 +560,7 @@ def _lateral_tee_layout(context):
     }
 
 
+@with_branch_jog
 def measure_lateral_tee(context):
     # A branch passing over or under the run is face-mounted instead (see taps.face_tap_layout):
     # the collar rises square to the run, and its elbow turns into the inclined branch.
@@ -569,6 +578,7 @@ def measure_lateral_tee(context):
     )
 
 
+@with_branch_jog
 def build_lateral_tee(context):
     """Straight lateral tee with a continuous run trunk and branch stub.
 
@@ -663,6 +673,7 @@ def _lateral_bend_layout(context, mitered):
     }
 
 
+@with_branch_jog
 def _measure_lateral_bend(context, mitered):
     # A branch passing over or under the run is face-mounted instead (see taps.face_tap_layout):
     # the collar rises square to the run, and its elbow turns into the inclined branch.
@@ -674,6 +685,7 @@ def _measure_lateral_bend(context, mitered):
     return api.build_trim_rec_from_port_lengths(list(zip(layout["ports"], layout["trims"])))
 
 
+@with_branch_jog
 def _build_lateral_bend(context, mitered):
     from .crosses import _double_wye_bend
 

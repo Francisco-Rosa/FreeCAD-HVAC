@@ -186,6 +186,44 @@ on its face (`boxes._grow_to_fit`; a size the user set still reports the
 overhang). Not done: saving a custom fitting as a library type (owner: not
 now).
 
+**Fallback geometry, tee and tap parity, fan transitions (owner, 15 November
+2026).**
+- *Fallback.* A component whose build raises keeps its GeometryError and is
+  drawn as `markers.build_fallback`: an end-marker cross on every duct end,
+  pulled back by a quarter of the duct size (at least 25 mm) when the node has
+  two or more ducts, and lines from the node to them; its trims are reported,
+  so the ducts and the network stay whole. The trim peek
+  (`DuctJunction._peekConnectionLengths`) reports the same trims when the
+  measurement fails, and a custom fitting that no longer fits gets it too
+  (its link is removed). Checked in FreeCAD by forcing a failing Attachment.
+- *SMACNA parity, tees and taps (14-14 A to Z, read from the scanned
+  reference).* Side taps in any direction round the run (top, bottom: 14-14
+  V's conical tap below a rectangular main) were already there. New: a branch
+  crossing the run's edge is built (`taps.branch_jog`, `with_branch_jog`, the
+  `_common._finish` hook): moved in until it lies within the run (onto the run
+  axis for the radius tees, which sweep in the run's plane), with an offset
+  piece of at most 30 degrees back to its own axis; Auto no longer refuses it
+  (Face still does). Face-mounted saddle (conical) and shoe taps keep their
+  collar (`face_tap_layout(collar=...)`, flare kept within the run face), and
+  `CollarRoll` rolls the collar round a round run towards the branch, the
+  elbow turning the rest (14-14 D, F to L "rolled 45 deg"; 0 is E). Run trims
+  of a face mount are now measured from the node (a rolled lateral's collar
+  foot moves along the run). Not covered: a conical *lateral* (14-14 C, J, L:
+  the conical tap is offered on square tees only, its loss reads 14-14 B), and
+  14-14 M's conical main.
+- *Fan connection.* `end_equipment_connection` builds `terminals.build_terminal_fan`:
+  the collar, and for a FanConnection transition a loft from the fan outlet
+  (FanOutletWidth x FanOutletHeight at the node) to the duct at the included
+  TransitionAngle: symmetric / pyramidal centred, the asymmetric ones keeping
+  the top level or sloping 10 degrees down or up (14-11 F to J). "Discharge
+  into casing" and "None" stay a collar.
+- Sweep in FreeCAD 1.1.4: every tap and tee type with the branch centred on
+  the run surface (56 builds), face-mounted (56) and rolled 45 degrees on round
+  runs (18), and every fan connection on round and rectangular ducts; all one
+  valid solid, trims equal to the measure functions'. Smoke run unchanged in
+  status (587 / 32 / 10); only the 19 face-mounted saddle and shoe builds
+  changed volume (they now have their collars).
+
 **Damper detail and terminal faces (owner, 15 November 2026).** Both are
 construction features, so they never enter the wall booleans and follow
 `ShowFeatures`. Dampers (`through_damper_generic`, both libraries):

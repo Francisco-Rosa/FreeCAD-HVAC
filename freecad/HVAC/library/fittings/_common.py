@@ -110,6 +110,40 @@ def _is_union_of(api, shape, pieces):
     return max(volumes) - slack <= total <= sum(volumes) + slack and total >= _UNION_MIN_SHARE * sum(volumes)
 
 
+def jog_records(records, jog):
+    """
+    (records, branch trim before the jog): the trim records with the branch's
+    length extended by the jog's own length (see taps.branch_jog).
+    """
+    key = jog["branch"].get("edge_key")
+    out, base = [], None
+    for record in records or []:
+        record = dict(record)
+        if record.get("edge_key") == key:
+            base = float(record["length"])
+            record["length"] = base + jog["length"]
+        out.append(record)
+    return out, base
+
+
+def _add_branch_jog(api, envelope, connection_lengths, jog):
+    """
+    Wrap a side fitting's envelope (built on the moved branch) with the jog:
+    a straight offset piece from the moved branch's end to the real branch,
+    jog["length"] further out. Returns (envelope, connection lengths).
+    """
+    records, base = jog_records(connection_lengths, jog)
+    if base is None:
+        return envelope, connection_lengths
+    start = _trimmed(api, jog["moved"], base)
+    end = _trimmed(api, jog["branch"], base + jog["length"])
+
+    def jogged(offset):
+        return api.fuse(envelope(offset), _loft(api, [start, end], offset))
+
+    return jogged, records
+
+
 def _finish(context, envelope, connection_lengths, port_suffixes=None):
     """
     Turn a fitting's envelope builder into the result dict a generator returns.
@@ -133,6 +167,12 @@ def _finish(context, envelope, connection_lengths, port_suffixes=None):
     api = context["hvac_api"]
     params = _props(context)
     layer_defs = list(context.get("construction_layers") or [])
+
+    # A side tap or tee built on a branch moved in to fit the run (taps.branch_jog)
+    # gets the offset piece back to the branch's own axis, inside the same envelope.
+    jog = context.get("branch_jog")
+    if jog:
+        envelope, connection_lengths = _add_branch_jog(api, envelope, connection_lengths, jog)
 
     if any(_layer_thickness(layer_def, params) > _EPS for layer_def in layer_defs):
         result = api.build_layered_geometry(envelope, layer_defs, params)

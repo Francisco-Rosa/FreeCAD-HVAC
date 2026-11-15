@@ -241,7 +241,8 @@ def container_ports(container):
     return sorted(ports, key=lambda obj: (str(obj.Label), obj.Name))
 
 
-def _section(lcs):
+def port_section(lcs):
+    """(profile, section params) of a port marker's opening."""
     profile = str(lcs.PortProfile)
     if profile == "Circular":
         return profile, {"Diameter": float(lcs.PortDiameter)}
@@ -254,7 +255,7 @@ def read_ports(container, world=False):
     ports = []
     for lcs in container_ports(container):
         placement = to_local.multiply(lcs.getGlobalPlacement())
-        profile, section = _section(lcs)
+        profile, section = port_section(lcs)
         ports.append(
             fit_math.CustomPort(
                 name=str(getattr(lcs, "PortName", "") or lcs.Label),

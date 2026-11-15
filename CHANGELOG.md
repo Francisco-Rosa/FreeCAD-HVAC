@@ -37,6 +37,17 @@ API versions: geometry 3, loss 1, PartScript 3.
   below.
 - Pressure balancing keeps sizing sections whole (a section shared with the critical path is reported, not
   shrunk) and keeps the reducer advice.
+- A fitting whose geometry fails is drawn as a fallback (end-marker crosses on its duct ends, pulled back slightly
+  when the node has two or more ducts) instead of keeping a stale shape; its GeometryError says why. Line-only
+  shapes (the fallback, end markers) stay in the displayed shape, so they show and can be picked.
+- Taps and tees whose branch crosses the edge of the run are built: the branch is moved in until it fits (onto the
+  run axis for the radius tees) and an offset piece, at most 30 degrees, carries it back to its own axis.
+- Face-mounted saddle and shoe taps keep their conical or shoe collar. `CollarRoll` rolls a face-mounted collar
+  round a round run towards the branch (SMACNA 14-14 D, F to L, "rolled 45 deg"), with a shorter elbow.
+- The equipment connection reaches the equipment port it is connected to: a transition at TransitionAngle from the
+  port's own profile and size (read off the port marker, i.e. the equipment's collar face) to the duct, shaped as
+  its FanConnection names (SMACNA 14-11 F to J: symmetric, top level, top 10 degrees down or up, pyramidal).
+  FanOutletWidth / FanOutletHeight now default to that port (0) for the transition and the system-effect loss.
 - Dampers show their blades at the current position and an operator: a hand quadrant (its lever shows the blade
   position) or an actuator, on the side of the duct and turned the way `OperatorSide` / `OperatorRotation` say.
 - Diffusers, grilles and registers have a face instead of an open end, in a pattern picked with `FacePattern`
