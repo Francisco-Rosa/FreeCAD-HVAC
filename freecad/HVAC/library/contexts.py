@@ -51,7 +51,7 @@ GEOMETRY_CONTEXT_KEYS = frozenset(
         # Read only as an optional fallback by the markers.
         "position",
         # An end connected to an equipment port: that port's opening, as a
-        # port-like dict {"profile", "section_params", "profile_x_axis"}
+        # port-like dict {"profile", "section_params", "profile_x_axis", "position"}
         # (core/Equipment.port_context). Absent otherwise.
         "equipment_port",
     }

@@ -70,9 +70,12 @@ API versions: geometry 3, loss 1, PartScript 3.
 - Layer visibility has its own command: the toolbar button drops down the switches, the menu and Tasks entry open a
   Layer Visibility panel; the switches are no longer in Network Defaults. Toolbar regrouped: Renumber with the network
   commands, Layer Visibility with the select-all commands.
-- The equipment connection offers only the FanConnection choices that suit it: "None" alone until the duct end is
-  on an equipment port that discharges into it; a transition only where the port and the duct differ (sides
-  straight or asymmetric when one side changes, pyramidal when both do or the shape changes). FanOutletWidth /
+- The equipment connection's transition runs from the port where it really is to the duct where its Attachment /
+  Offset put it, and only the FanConnection choices that describe it are offered: "None" alone until the duct end
+  is on an equipment port that discharges into it; then the one SMACNA 14-11 transition that matches (symmetric
+  sides straight; asymmetric top level / 10 down / 10 up by the slope of the side that moves least; pyramidal for
+  anything else), none when the port is the duct's section in line. FanConnection no longer shapes the transition,
+  only the loss table. FanOutletWidth /
   FanOutletHeight are read-only and show the port's size; the loss uses the port's own area. A geometry backend
   may return `"property_choices": {name: [choices]}` to narrow any drop-down this way.
 - Editing a duct's or a fitting's size or type parameter in the property editor re-syncs the network, so the

@@ -494,7 +494,7 @@ def port_context(component):
     """
     The equipment port a Primary component's end is connected to, as the
     library's context key "equipment_port": a port-like dict ({"profile",
-    "section_params", "profile_x_axis"}, read off the port marker, which
+    "section_params", "profile_x_axis", "position"}, read off the port marker, which
     takes them from the equipment's collar face), or None when the
     component is not on an end connected to an equipment port.
     """
@@ -508,8 +508,17 @@ def port_context(component):
     if marker is None or not _custom_fitting.is_port(marker):
         return None
     profile, section = _custom_fitting.port_section(marker)
-    x_axis = marker.getGlobalPlacement().Rotation.multVec(FreeCAD.Vector(1, 0, 0))
-    return {"profile": profile, "section_params": section, "profile_x_axis": (x_axis.x, x_axis.y, x_axis.z)}
+    placement = marker.getGlobalPlacement()
+    x_axis = placement.Rotation.multVec(FreeCAD.Vector(1, 0, 0))
+    # The marker's centre: where the duct actually meets the port, which an
+    # Attachment / Offset on the duct can move off the duct's own axis.
+    centre = placement.Base
+    return {
+        "profile": profile,
+        "section_params": section,
+        "profile_x_axis": (x_axis.x, x_axis.y, x_axis.z),
+        "position": (centre.x, centre.y, centre.z),
+    }
 
 
 def prune_connections(equipment, network_name, live_node_keys):

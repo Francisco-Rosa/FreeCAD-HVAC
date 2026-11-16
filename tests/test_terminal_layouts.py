@@ -231,8 +231,9 @@ def test_measured_trim_is_lip_plus_body_plus_neck(kind):
 
 
 # ----------------------------------------------------------------------------
-# Equipment connection: the fan outlet is the equipment port, and only the
-# FanConnection choices that suit the connection are offered
+# Equipment connection: the fan outlet is the equipment port, where it really
+# is; the transition follows the duct's placement, and only the FanConnection
+# choice that describes it is offered
 # ----------------------------------------------------------------------------
 
 _ALL_FAN_CHOICES = [
@@ -245,26 +246,31 @@ _ALL_FAN_CHOICES = [
     "Discharge into casing",
 ]
 
-
-def _fan_layout(duct, outlet, flow_into_junction=False, choice="None"):
-    port = dict(_port(**duct), flow_into_junction=flow_into_junction)
-    context = _ctx({"FanConnection": choice, "TransitionAngle": 20.0}, port)
-    if outlet is not None:
-        profile, section = outlet
-        context["equipment_port"] = {"profile": profile, "section_params": section, "profile_x_axis": None}
-    return terminals._terminal_layout(context, "fan")
-
-
-def _offered(duct, outlet, flow_into_junction=False):
-    return _fan_layout(duct, outlet, flow_into_junction)["choices"]["FanConnection"]
-
-
+# The duct end port sits at the origin, pointing along +X; its frame's width
+# axis is the port's profile X axis (+Y) and its height axis is +Z.
 _RECT_DUCT = {"profile": "Rectangular", "Width": 600.0, "Height": 400.0}
 
 
-def test_fan_choices_follow_the_type_def_order():
-    offered = _offered(_RECT_DUCT, ("Rectangular", {"Width": 600.0, "Height": 300.0}))
-    assert offered == [choice for choice in _ALL_FAN_CHOICES if choice in offered]
+def _fan_layout(duct, outlet, offset=(0.0, 0.0), flow_into_junction=False, angle=20.0):
+    port = dict(_port(**duct), flow_into_junction=flow_into_junction, profile_x_axis=[0.0, 1.0, 0.0])
+    context = _ctx({"FanConnection": "None", "TransitionAngle": angle}, port)
+    if outlet is not None:
+        profile, section = outlet
+        context["equipment_port"] = {
+            "profile": profile,
+            "section_params": section,
+            "profile_x_axis": (0.0, 1.0, 0.0),
+            "position": (0.0, offset[0], offset[1]),
+        }
+    return terminals._terminal_layout(context, "fan")
+
+
+def _offered(duct, outlet, offset=(0.0, 0.0), flow_into_junction=False, angle=20.0):
+    return _fan_layout(duct, outlet, offset, flow_into_junction, angle)["choices"]["FanConnection"]
+
+
+def _with_transition(name):
+    return ["None", name, "Discharge into casing"]
 
 
 def test_no_equipment_port_offers_none_only_and_reports_no_outlet():
@@ -274,39 +280,63 @@ def test_no_equipment_port_offers_none_only_and_reports_no_outlet():
 
 
 def test_air_flowing_into_the_unit_offers_none_only():
-    assert _offered(_RECT_DUCT, ("Rectangular", {"Width": 400.0, "Height": 300.0}), flow_into_junction=True) == ["None"]
+    outlet = ("Rectangular", {"Width": 400.0, "Height": 300.0})
+    assert _offered(_RECT_DUCT, outlet, flow_into_junction=True) == ["None"]
 
 
-def test_outlet_the_size_of_the_duct_offers_no_transition():
-    assert _offered(_RECT_DUCT, ("Rectangular", {"Width": 600.0, "Height": 400.0})) == ["None", "Discharge into casing"]
+def test_outlet_the_size_of_the_duct_and_in_line_offers_no_transition():
+    layout = _fan_layout(_RECT_DUCT, ("Rectangular", {"Width": 600.0, "Height": 400.0}))
+    assert layout["choices"]["FanConnection"] == ["None", "Discharge into casing"]
+    assert layout["body"] == 0.0
 
 
-def test_only_the_height_changing_offers_sides_straight_and_asymmetric():
-    assert _offered(_RECT_DUCT, ("Rectangular", {"Width": 600.0, "Height": 300.0})) == [
-        "None",
-        "Transition symmetric",
-        "Transition asymmetric top level",
-        "Transition asymmetric top 10 down",
-        "Transition asymmetric top 10 up",
-        "Discharge into casing",
-    ]
+def test_centred_height_change_is_symmetric_sides_straight():
+    assert _offered(_RECT_DUCT, ("Rectangular", {"Width": 600.0, "Height": 300.0})) == _with_transition(
+        "Transition symmetric"
+    )
 
 
-def test_only_the_width_changing_offers_sides_straight():
-    assert _offered(_RECT_DUCT, ("Rectangular", {"Width": 400.0, "Height": 400.0})) == [
-        "None",
-        "Transition symmetric",
-        "Discharge into casing",
-    ]
+def test_centred_width_change_is_symmetric_sides_straight():
+    assert _offered(_RECT_DUCT, ("Rectangular", {"Width": 400.0, "Height": 400.0})) == _with_transition(
+        "Transition symmetric"
+    )
+
+
+def test_duct_flush_with_the_outlet_top_is_asymmetric_top_level():
+    # A 300 high outlet whose top is level with the 400 high duct's: its centre 50 above the duct's.
+    outlet = ("Rectangular", {"Width": 600.0, "Height": 300.0})
+    layout = _fan_layout(_RECT_DUCT, outlet, offset=(0.0, 50.0))
+    assert layout["choices"]["FanConnection"] == _with_transition("Transition asymmetric top level")
+    # The whole included angle opens at the bottom: 100 over the length.
+    assert layout["body"] == pytest.approx(100.0 / math.tan(math.radians(20.0)))
+    assert layout["face_shift"] == pytest.approx((0.0, 50.0))
+
+
+@pytest.mark.parametrize("slope, name", [(-10.0, "down"), (10.0, "up")])
+def test_top_sloping_ten_degrees_is_asymmetric_top_10(slope, name):
+    # The top slopes `slope`, the bottom opens the whole 30 degrees against it, over the 100 mm height change:
+    # the outlet is placed where that puts it.
+    angle = 30.0
+    rise = 100.0
+    top, bottom = math.radians(slope), math.radians(slope) - math.radians(angle)
+    length = rise / (math.tan(top) - math.tan(bottom))
+    shift = 200.0 - length * math.tan(top) - 150.0
+    outlet = ("Rectangular", {"Width": 600.0, "Height": 300.0})
+    offered = _offered(_RECT_DUCT, outlet, offset=(0.0, shift), angle=angle)
+    assert offered == _with_transition("Transition asymmetric top 10 {}".format(name))
 
 
 @pytest.mark.parametrize(
-    "outlet",
-    [("Rectangular", {"Width": 400.0, "Height": 300.0}), ("Circular", {"Diameter": 400.0})],
-    ids=["both sides", "round to rectangular"],
+    "outlet, offset",
+    [
+        (("Rectangular", {"Width": 400.0, "Height": 300.0}), (0.0, 0.0)),
+        (("Circular", {"Diameter": 400.0}), (0.0, 0.0)),
+        (("Rectangular", {"Width": 600.0, "Height": 300.0}), (60.0, 0.0)),
+    ],
+    ids=["both sides", "round to rectangular", "height change but off to the side"],
 )
-def test_both_sides_or_the_shape_changing_offers_pyramidal(outlet):
-    assert _offered(_RECT_DUCT, outlet) == ["None", "Transition pyramidal", "Discharge into casing"]
+def test_other_transitions_are_pyramidal(outlet, offset):
+    assert _offered(_RECT_DUCT, outlet, offset) == _with_transition("Transition pyramidal")
 
 
 def test_fan_outlet_size_is_reported_from_the_port():
@@ -316,10 +346,15 @@ def test_fan_outlet_size_is_reported_from_the_port():
     assert round_layout["computed"] == {"FanOutletWidth": 350.0, "FanOutletHeight": 350.0}
 
 
-def test_a_choice_that_no_longer_suits_builds_as_none():
-    # Air flowing into the unit: no transition is offered, so the asymmetric choice builds centred.
-    outlet = ("Rectangular", {"Width": 600.0, "Height": 300.0})
-    asymmetric = _fan_layout(_RECT_DUCT, outlet, choice="Transition asymmetric top level")
-    assert asymmetric["face_shift"][1] != pytest.approx(0.0)
-    unsuited = _fan_layout(_RECT_DUCT, outlet, flow_into_junction=True, choice="Transition asymmetric top level")
-    assert unsuited["face_shift"][1] == pytest.approx(0.0)
+def test_centred_transition_length_opens_half_the_angle_each_side():
+    layout = _fan_layout(_RECT_DUCT, ("Rectangular", {"Width": 600.0, "Height": 300.0}))
+    assert layout["body"] == pytest.approx(50.0 / math.tan(math.radians(10.0)), rel=1e-6)
+
+
+def test_fan_choices_follow_the_type_def_order():
+    for outlet, offset in (
+        (("Rectangular", {"Width": 600.0, "Height": 300.0}), (0.0, 50.0)),
+        (("Rectangular", {"Width": 400.0, "Height": 300.0}), (0.0, 0.0)),
+    ):
+        offered = _offered(_RECT_DUCT, outlet, offset)
+        assert offered == [choice for choice in _ALL_FAN_CHOICES if choice in offered]
