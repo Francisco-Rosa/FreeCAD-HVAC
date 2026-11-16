@@ -70,6 +70,17 @@ API versions: geometry 3, loss 1, PartScript 3.
 - Layer visibility has its own command: the toolbar button drops down the switches, the menu and Tasks entry open a
   Layer Visibility panel; the switches are no longer in Network Defaults. Toolbar regrouped: Renumber with the network
   commands, Layer Visibility with the select-all commands.
+- The equipment connection offers only the FanConnection choices that suit it: "None" alone until the duct end is
+  on an equipment port that discharges into it; a transition only where the port and the duct differ (sides
+  straight or asymmetric when one side changes, pyramidal when both do or the shape changes). FanOutletWidth /
+  FanOutletHeight are read-only and show the port's size; the loss uses the port's own area. A geometry backend
+  may return `"property_choices": {name: [choices]}` to narrow any drop-down this way.
+- Editing a duct's or a fitting's size or type parameter in the property editor re-syncs the network, so the
+  fittings at the duct's ends and the ducts at the fitting's ports follow (they used to keep stale geometry until
+  the next sync).
+- "Connect to Equipment" is gone: routing a duct to end on a port connects it. Equipment and custom fittings are
+  made with "Create Custom Equipment" / "Create Custom Fitting"; "Edit Ports" (with the edit tools) opens the
+  port panel that suits the selected one. New icons for these and for Add Equipment and Layer Visibility.
 - Create / Edit Equipment and Custom Fitting also take a plain solid (a Part cube, a body) that sits in no App::Part:
   it is put in a new App::Part first. Both commands appear in the Tasks pane when such a model is selected.
 - Equipment and custom fitting panel: one Port box that follows the 3D selection (a face: new port; a marker or list

@@ -420,6 +420,9 @@ GeometryResult
                type with no construction block at all).
    connection_lengths / computed_properties / start_trim_plane_json / ...
                -- the same non-shape outputs generators have always returned
+   property_choices: dict[str, list[str]] -- drop-downs narrowed to the
+               choices that suit this geometry (core/_geometry_apply.
+               apply_property_choices); unnamed drop-downs offer every choice
 ```
 
 Generator/PartScript/static-descriptor authors never import

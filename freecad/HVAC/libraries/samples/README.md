@@ -20,7 +20,11 @@ and must return the one result form:
   returned layer's semantic roles on from there.
 
 Either form may also include `"connection_lengths"` for junctions that trim
-the connected segments, exactly as before. See
+the connected segments, exactly as before, `"computed_properties"`
+(`{name: value}` for declared, usually read-only, properties), and
+`"property_choices"` (`{name: [choices]}`: a drop-down offers only these of
+its declared `validation.enum`, e.g. only the fan connections that suit the
+outlet; a value no longer offered falls back to the default). See
 `freecad/HVAC/library/geometry_result.py` for the full `GeometryResult`/
 `LayerGeometry` contract every backend's return value is normalized into,
 `freecad/HVAC/library/Library.py:build_geometry` for the exact dispatch,

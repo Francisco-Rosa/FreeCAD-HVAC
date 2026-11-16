@@ -50,7 +50,7 @@
       "name": "FanConnection",
       "prop_type": "App::PropertyEnumeration",
       "group": "Parameters",
-      "description": "How the duct leaves the unit's fan, for its system-effect loss (supply connections only). None adds nothing. The transition choices also shape the transition drawn from the fan outlet to the duct",
+      "description": "How the duct leaves the unit's fan, for its system-effect loss. Only the choices that suit the connection are offered: None alone until the end is on an equipment port that discharges into the duct; a transition only where the outlet and the duct differ (sides straight or asymmetric when one side changes, pyramidal when both do or the shape changes). The transition choices also shape the transition drawn from the fan outlet to the duct",
       "default": "None",
       "validation": {
         "enum": [
@@ -68,8 +68,9 @@
       "name": "FanOutletWidth",
       "prop_type": "App::PropertyLength",
       "group": "Parameters",
-      "description": "Width of the fan outlet. 0 uses the equipment port the duct end is connected to",
+      "description": "Width of the fan outlet, read from the equipment port the duct end is connected to (a round port gives its diameter). 0 while the end is on no equipment port",
       "default": 0.0,
+      "editor_mode": 1,
       "validation": {
         "minimum": 0.0
       }
@@ -78,8 +79,9 @@
       "name": "FanOutletHeight",
       "prop_type": "App::PropertyLength",
       "group": "Parameters",
-      "description": "Height of the fan outlet. 0 uses the equipment port the duct end is connected to",
+      "description": "Height of the fan outlet, read from the equipment port the duct end is connected to (a round port gives its diameter). 0 while the end is on no equipment port",
       "default": 0.0,
+      "editor_mode": 1,
       "validation": {
         "minimum": 0.0
       }

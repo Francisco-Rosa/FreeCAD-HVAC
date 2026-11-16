@@ -96,6 +96,10 @@ def _terminal_layout(context, kind):
     layout["cap"] = None
     layout["wall_flange"] = None
     layout["face_shift"] = (0.0, 0.0)
+    # Extra outputs a kind may report: drop-down choices that suit the
+    # geometry (GeometryResult.property_choices) and read-only values.
+    layout["choices"] = None
+    layout["computed"] = None
 
     if kind == "generic":
         # A plain length of the duct's own section, BodyLength long (plus the neck).
@@ -183,14 +187,26 @@ def _terminal_layout(context, kind):
 
     elif kind == "fan":
         # Where a duct meets its equipment: a collar, and a transition from
-        # the opening at the node (the equipment port, or the fan outlet a
-        # fan outlet transition names) to the duct, shaped as SMACNA 14-11
-        # F to J draw it.
+        # the fan outlet (the equipment port the end sits on) to the duct,
+        # shaped as SMACNA 14-11 F to J draw it.
         layout["neck"] = _neck_length(props, 0.25 * size)
-        shape = _fan_transition(context, props, port, profile, params)
+        # Step 1: the fan outlet, and the FanConnection choices that suit it.
+        outlet = _fan_outlet(context, port)
+        choices = _fan_connection_choices(port, profile, params, outlet)
+        choice = str(props.get("FanConnection", "") or "None")
+        if choice not in choices:
+            # A choice that no longer suits the geometry builds as "None";
+            # the property itself is set back to an offered one afterwards.
+            choice = "None"
+        layout["choices"] = {"FanConnection": choices}
+        if outlet is not None:
+            width, height = _extents(*outlet)
+            layout["computed"] = {"FanOutletWidth": width, "FanOutletHeight": height}
+        # Step 2: the transition from the outlet to the duct.
+        shape = _fan_transition(context, props, choice.lower(), port, profile, params, outlet)
         if shape is not None:
-            length, outlet, shift = shape
-            layout.update(body=length, face=outlet, face_shift=(0.0, shift))
+            length, outlet_section, shift = shape
+            layout.update(body=length, face=outlet_section, face_shift=(0.0, shift))
 
     else:
         raise ValueError("Unknown terminal kind '{}'".format(kind))
@@ -209,18 +225,41 @@ _FAN_TRANSITION_TOP = {
 }
 
 
-def _fan_outlet(context, props, choice, duct_x_axis):
+# Every FanConnection choice, in the type-def's order.
+_FAN_NONE = "None"
+_FAN_CASING = "Discharge into casing"
+_FAN_SYMMETRIC = "Transition symmetric"
+_FAN_ASYMMETRIC = (
+    "Transition asymmetric top level",
+    "Transition asymmetric top 10 down",
+    "Transition asymmetric top 10 up",
+)
+_FAN_PYRAMIDAL = "Transition pyramidal"
+
+# Two sizes closer than this (mm, or this share of the larger) count as equal.
+_SAME_SIZE_MM = 1.0
+_SAME_SIZE_SHARE = 0.01
+
+
+def _extents(profile, params):
+    """(width, height) of a section; a round one is its diameter both ways."""
+    if profile == "Circular":
+        return float(params["Diameter"]), float(params["Diameter"])
+    return float(params["Width"]), float(params["Height"])
+
+
+def _same_size(a, b):
+    return abs(a - b) <= max(_SAME_SIZE_MM, _SAME_SIZE_SHARE * max(a, b))
+
+
+def _fan_outlet(context, port):
     """
-    (profile, params) of the opening the connection starts from at the
-    node, laid out on the duct's own axes, or None for the duct's own
-    section: for a fan outlet transition with FanOutletWidth and
-    FanOutletHeight both set, that fan outlet; else the equipment port the
-    end is connected to (context "equipment_port"), as its marker gives it.
+    (profile, params) of the fan outlet: the equipment port the end is
+    connected to (context "equipment_port"), as its marker gives it, laid
+    out on the duct's own axes. None when the end is on no equipment port
+    (or the port has no size).
     """
     api = context["hvac_api"]
-    width, height = _number(props, "FanOutletWidth"), _number(props, "FanOutletHeight")
-    if choice in _FAN_TRANSITION_TOP and width > _EPS and height > _EPS:
-        return "Rectangular", {"Width": width, "Height": height}
     equipment_port = context.get("equipment_port")
     if not equipment_port:
         return None
@@ -230,43 +269,75 @@ def _fan_outlet(context, props, choice, duct_x_axis):
     if float(params.get("Width", 0.0) or 0.0) <= _EPS or float(params.get("Height", 0.0) or 0.0) <= _EPS:
         return None
     # The port's width runs along its marker's X axis: turned across the duct's, swap them.
+    axis = api.unit(api.port_direction(port))
+    _placement, duct_x_axis, _y, _z = api.make_profile_frame(axis, api.port_profile_x_axis(port))
     port_x_axis = api.port_profile_x_axis(equipment_port)
     if port_x_axis is not None and abs(api.unit(port_x_axis).dot(duct_x_axis)) < 0.5:
         params = dict(params, Width=params["Height"], Height=params["Width"])
     return profile, params
 
 
-def _fan_transition(context, props, port, profile, params):
+def _fan_connection_choices(port, duct_profile, duct_params, outlet):
+    """
+    The FanConnection choices that suit this connection, in the type-def's
+    order:
+
+    - no fan outlet (the end is on no equipment port), or air flowing into
+      the unit here (a fan connection is costed on the discharge only):
+      "None" only;
+    - otherwise "None" and "Discharge into casing", plus the transitions
+      that fit the change from the outlet to the duct (SMACNA 14-11):
+      * same size: no transition;
+      * only the height changes: symmetric (sides straight) and the three
+        asymmetric ones (their top side is set on the height);
+      * only the width changes: symmetric (sides straight);
+      * both change, or round to rectangular / oval: pyramidal.
+    """
+    if outlet is None:
+        return [_FAN_NONE]
+    # Air leaving the unit enters the duct system here: it flows out of this end node.
+    if port.get("flow_into_junction") is True:
+        return [_FAN_NONE]
+    duct_width, duct_height = _extents(duct_profile, duct_params)
+    outlet_width, outlet_height = _extents(*outlet)
+    same_width = _same_size(duct_width, outlet_width)
+    same_height = _same_size(duct_height, outlet_height)
+
+    transitions = []
+    if outlet[0] != duct_profile or (not same_width and not same_height):
+        transitions = [_FAN_PYRAMIDAL]
+    elif duct_profile != "Circular" and same_width and not same_height:
+        transitions = [_FAN_SYMMETRIC] + list(_FAN_ASYMMETRIC)
+    elif duct_profile != "Circular" and same_height and not same_width:
+        transitions = [_FAN_SYMMETRIC]
+    elif duct_profile == "Circular" and not same_width:
+        transitions = [_FAN_PYRAMIDAL]
+    offered = set([_FAN_NONE, _FAN_CASING] + transitions)
+    order = [_FAN_NONE, _FAN_SYMMETRIC] + list(_FAN_ASYMMETRIC) + [_FAN_PYRAMIDAL, _FAN_CASING]
+    return [choice for choice in order if choice in offered]
+
+
+def _fan_transition(context, props, choice, port, profile, params, outlet):
     """
     (length, opening section (profile, params), the opening centre's shift
-    along the section's height axis) of the transition from the opening at
-    the node (_fan_outlet) to the duct, or None when there is none to draw
-    (no opening known, or it is the duct's own section).
+    along the section's height axis) of the transition from the fan outlet
+    (_fan_outlet) to the duct, or None when there is none to draw (no
+    outlet known, or it is the duct's own section). `choice` is the
+    FanConnection choice in force, lower case.
 
     The transition opens at the included TransitionAngle. A fan outlet
-    transition that is asymmetric (FanConnection) keeps its top side level,
-    or sloping 10 degrees down or up towards the duct, and opens the whole
-    angle at the bottom; every other one stays centred, top and bottom each
-    opening half the angle. Width always changes symmetrically. A change of
-    profile alone (a round port on a rectangular duct) is given half the
-    duct's larger side, so the loft has room to turn.
+    transition that is asymmetric keeps its top side level, or sloping 10
+    degrees down or up towards the duct, and opens the whole angle at the
+    bottom; every other one stays centred, top and bottom each opening half
+    the angle. Width always changes symmetrically. A change of profile alone
+    (a round port on a rectangular duct) is given half the duct's larger
+    side, so the loft has room to turn.
     """
-    api = context["hvac_api"]
-    choice = str(props.get("FanConnection", "") or "").strip().lower()
-    axis = api.unit(api.port_direction(port))
-    _placement, duct_x_axis, _y, _z = api.make_profile_frame(axis, api.port_profile_x_axis(port))
-    outlet = _fan_outlet(context, props, choice, duct_x_axis)
     if outlet is None:
         return None
     outlet_profile, outlet_params = outlet
-
-    def extents(section_profile, section):
-        if section_profile == "Circular":
-            return float(section["Diameter"]), float(section["Diameter"])
-        return float(section["Width"]), float(section["Height"])
-
-    duct_width, duct_height = extents(profile, params)
-    outlet_width, outlet_height = extents(outlet_profile, outlet_params)
+    duct_width, duct_height = _extents(profile, params)
+    outlet_width, outlet_height = _extents(outlet_profile, outlet_params)
     angle = math.radians(min(max(_number(props, "TransitionAngle", 20.0), 5.0), 150.0))
     rise_h = duct_height - outlet_height
     length_w = abs(duct_width - outlet_width) / (2.0 * math.tan(angle / 2.0))
@@ -376,6 +447,10 @@ def _build_terminal(context, kind):
 
     lengths = api.build_trim_rec_from_port_lengths([(port, _terminal_trim(layout))])
     result = _finish(context, envelope, lengths)
+    if layout["choices"]:
+        result["property_choices"] = layout["choices"]
+    if layout["computed"]:
+        result["computed_properties"] = dict(result.get("computed_properties") or {}, **layout["computed"])
 
     # Step 3: a weather hood's plate, standing clear of the opening on the far side of the node.
     wall_flange = layout["wall_flange"]

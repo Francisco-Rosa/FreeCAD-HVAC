@@ -8,14 +8,14 @@ supply outlet and a return inlet, a fan with an intake and a discharge.
 The equipment is the user's model itself: an App::Part holding the modelled
 unit and one port marker per connection (the same
 `Part::LocalCoordinateSystem` markers custom fittings use, see
-core/_custom_fitting.py), each with an `EquipmentPortFunction`. "Create
+core/_custom_fitting.py), each with an `EquipmentPortFunction`. "Create Custom
 Equipment" adds the equipment properties to that App::Part, so selecting
 the equipment selects its geometry and markers, and the ports sit directly
 in it. (Documents from before keep a separate equipment object that links
 its App::Part through `Model`; model_of() reads both.) A port is connected to one terminal of one
-network: automatically when the network's base geometry has a duct end on
-the port (DuctNetwork.autoAttach, core/_auto_attach.py), or by hand with
-"Connect to Equipment". That terminal becomes the network's
+network, automatically, when the network's base geometry has a duct end on
+the port (DuctNetwork.autoAttach, core/_auto_attach.py): routing the duct to
+the port is the connection. That terminal becomes the network's
 balancing terminal (its Source) and gets the `end_equipment_connection`
 type, a collar carrying the fan-connection loss.
 

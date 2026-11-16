@@ -1467,24 +1467,34 @@ def _container_for(obj, name):
     return part
 
 
+def _is_port_container(part):
+    """True when `part` is already HVAC equipment or a custom fitting (its ports are edited with Edit Ports)."""
+    from ..core import Equipment, _custom_fitting
+
+    return Equipment.is_equipment(part) or _custom_fitting.is_custom_fitting(part)
+
+
 class CommandCreateEquipment:
-    """Make (or edit) HVAC equipment from a modelled unit, an App::Part (ROADMAP 6.5)."""
+    """Make HVAC equipment from a modelled unit, an App::Part or a plain solid (ROADMAP 6.5)."""
 
     def GetResources(self):
         return {
-            'Pixmap': hvaclib.get_icon_path("CreateDuctsIcon.svg"),
-            'MenuText': QT_TRANSLATE_NOOP('HVAC_CreateEquipment', 'Create / Edit Equipment'),
+            'Pixmap': hvaclib.get_icon_path("CreateEquipment.svg"),
+            'MenuText': QT_TRANSLATE_NOOP('HVAC_CreateEquipment', 'Create Custom Equipment'),
             'ToolTip': QT_TRANSLATE_NOOP(
                 'HVAC_CreateEquipment',
-                'Make the selected App::Part or solid (a modelled AHU, fan, ...) an HVAC equipment, or edit one: a panel '
-                'lists its ports by kind (supply, return, outdoor air, exhaust) and adds new ones on a picked face '
-                'at an X/Y offset from its centre. A duct drawn to end on a port is connected to it automatically',
+                'Make the selected App::Part or solid (a modelled AHU, fan, ...) an HVAC equipment, then add its ports '
+                '(supply, return, outdoor air, exhaust) on picked faces. A duct drawn to end on a port is connected to '
+                'it automatically. Use Edit Ports to change the ports later',
             ),
             'CmdType': 'ForEdit',
         }
 
     def IsActive(self):
-        return Gui.ActiveDocument is not None and _selected_part() is not None and not Gui.Control.activeDialog()
+        if Gui.ActiveDocument is None or Gui.Control.activeDialog():
+            return False
+        part = _selected_part()
+        return part is not None and not _is_port_container(part)
 
     def Activated(self):
         from ..core import Equipment
@@ -1492,15 +1502,14 @@ class CommandCreateEquipment:
 
         selected = _selected_part()
         doc = selected.Document
-        part = selected
-        if selected.TypeId != "App::Part" or not Equipment.is_equipment(selected):
-            doc.openTransaction("Create Equipment")
-            try:
-                part = _container_for(selected, "Equipment")
-                Equipment.make_equipment(part)
-            finally:
-                doc.commitTransaction()
-            FreeCAD.Console.PrintMessage("HVAC - '{}' is now HVAC equipment\n".format(part.Label))
+        doc.openTransaction("Create Equipment")
+        try:
+            part = _container_for(selected, "Equipment")
+            Equipment.make_equipment(part)
+        finally:
+            doc.commitTransaction()
+        FreeCAD.Console.PrintMessage("HVAC - '{}' is now HVAC equipment\n".format(part.Label))
+        # Straight on to adding its ports.
         self.task_panel = TaskPanelPortContainer(part, kind="equipment")
         Gui.Control.showDialog(self.task_panel)
 
@@ -1513,7 +1522,7 @@ class CommandAddEquipment:
 
     def GetResources(self):
         return {
-            'Pixmap': hvaclib.get_icon_path("CreateDuctsIcon.svg"),
+            'Pixmap': hvaclib.get_icon_path("AddEquipment.svg"),
             'MenuText': QT_TRANSLATE_NOOP('HVAC_AddEquipment', 'Add Equipment from Library'),
             'ToolTip': QT_TRANSLATE_NOOP(
                 'HVAC_AddEquipment',
@@ -1536,31 +1545,26 @@ class CommandAddEquipment:
 
 
 class CommandCreateCustomFitting:
-    """Make (or edit) a custom fitting from a modelled App::Part (ROADMAP 6.3)."""
+    """Make a custom fitting from a modelled App::Part or a plain solid (ROADMAP 6.3)."""
 
     def GetResources(self):
         return {
-            'Pixmap': hvaclib.get_icon_path("EditPlacement.svg"),
-            'MenuText': QT_TRANSLATE_NOOP('HVAC_CreateCustomFitting', 'Create / Edit Custom Fitting'),
+            'Pixmap': hvaclib.get_icon_path("CreateCustomFitting.svg"),
+            'MenuText': QT_TRANSLATE_NOOP('HVAC_CreateCustomFitting', 'Create Custom Fitting'),
             'ToolTip': QT_TRANSLATE_NOOP(
                 'HVAC_CreateCustomFitting',
-                'Use the selected App::Part or solid (a modelled fitting) as a custom junction fitting: a panel lists its '
-                'ports and adds new ones on a picked face at an X/Y offset from its centre. Ducts drawn to end on '
-                'its ports become one junction that uses the fitting where it is modelled',
+                'Use the selected App::Part or solid (a modelled fitting) as a custom junction fitting, then add its '
+                'ports on picked faces. Ducts drawn to end on its ports become one junction that uses the fitting '
+                'where it is modelled. Use Edit Ports to change the ports later',
             ),
             'CmdType': 'ForEdit',
         }
 
     def IsActive(self):
-        from ..core import Equipment
-
+        if Gui.ActiveDocument is None or Gui.Control.activeDialog():
+            return False
         part = _selected_part()
-        return (
-            Gui.ActiveDocument is not None
-            and part is not None
-            and not Equipment.is_equipment(part)
-            and not Gui.Control.activeDialog()
-        )
+        return part is not None and not _is_port_container(part)
 
     def Activated(self):
         from ..core import _custom_fitting
@@ -1568,81 +1572,76 @@ class CommandCreateCustomFitting:
 
         selected = _selected_part()
         doc = selected.Document
-        part = selected
         # Mark the part, so ducts drawn to its ports attach to it (a bare solid is first put in an App::Part).
-        if selected.TypeId != "App::Part" or not _custom_fitting.is_custom_fitting(selected):
-            doc.openTransaction("Create Custom Fitting")
-            try:
-                part = _container_for(selected, "CustomFitting")
-                _custom_fitting.make_custom_fitting(part)
-            finally:
-                doc.commitTransaction()
-            FreeCAD.Console.PrintMessage("HVAC - '{}' is now an HVAC custom fitting\n".format(part.Label))
+        doc.openTransaction("Create Custom Fitting")
+        try:
+            part = _container_for(selected, "CustomFitting")
+            _custom_fitting.make_custom_fitting(part)
+        finally:
+            doc.commitTransaction()
+        FreeCAD.Console.PrintMessage("HVAC - '{}' is now an HVAC custom fitting\n".format(part.Label))
+        # Straight on to adding its ports.
         self.task_panel = TaskPanelPortContainer(part, kind="fitting")
         Gui.Control.showDialog(self.task_panel)
 
 
-class CommandConnectEquipment:
-    """Connect an equipment port marker to a network terminal (ROADMAP 6.5)."""
+def _selected_port_container():
+    """
+    The HVAC equipment or custom fitting the selection points at, with the
+    port panel kind it needs: (part, "equipment" or "fitting"), or (None,
+    None). Picking the part, a face of it, one of its port markers, or the
+    duct fitting a custom fitting stands in for all count.
+    """
+    from ..core import Equipment, _custom_fitting
+
+    part = _selected_part()
+    if part is None:
+        # A junction fitting that uses a custom fitting points at its model.
+        for obj in Gui.Selection.getSelection() or []:
+            if hvaclib.isDuctComponent(obj) and _custom_fitting.is_custom(obj):
+                part = getattr(obj, "CustomFitting", None)
+                break
+    if part is None or getattr(part, "TypeId", "") != "App::Part":
+        return None, None
+    if Equipment.is_equipment(part):
+        return part, "equipment"
+    if _custom_fitting.is_custom_fitting(part):
+        return part, "fitting"
+    return None, None
+
+
+class CommandEditPorts:
+    """Edit the ports of the selected HVAC equipment or custom fitting, in the panel that suits it."""
+
+    def __init__(self):
+        self.task_panel = None
 
     def GetResources(self):
         return {
-            'Pixmap': hvaclib.get_icon_path("ModifyDuctsIcon.svg"),
-            'MenuText': QT_TRANSLATE_NOOP('HVAC_ConnectEquipment', 'Connect to Equipment'),
+            'Pixmap': hvaclib.get_icon_path("EditPorts.svg"),
+            'MenuText': QT_TRANSLATE_NOOP('HVAC_EditPorts', 'Edit Ports'),
             'ToolTip': QT_TRANSLATE_NOOP(
-                'HVAC_ConnectEquipment',
-                'Select an equipment port marker and a duct end (its terminal node or fitting): the duct end '
-                'becomes its network\'s source, fed by (or feeding) that port',
+                'HVAC_EditPorts',
+                'Edit the ports of the selected equipment (by kind: supply, return, outdoor air, exhaust; and its '
+                'internal pressure drop) or custom fitting (and the junctions it fits): add a port on a picked face, '
+                'move, rename or remove one',
             ),
             'CmdType': 'ForEdit',
         }
 
-    @staticmethod
-    def _pieces():
-        from ..core import Equipment, _custom_fitting
-
-        marker = junction = None
-        for obj in Gui.Selection.getSelection() or []:
-            if _custom_fitting.is_port(obj) or obj.TypeId == "Part::LocalCoordinateSystem":
-                marker = obj
-            elif hvaclib.isDuctJunction(obj):
-                junction = obj
-            elif hvaclib.isDuctComponent(obj):
-                parent = obj.Document.getObject(getattr(obj, "ParentJunctionName", "") or "")
-                junction = parent or junction
-        equipment = Equipment.equipment_of_marker(marker) if marker is not None else None
-        return equipment, marker, junction
-
     def IsActive(self):
-        if Gui.ActiveDocument is None:
+        if Gui.ActiveDocument is None or Gui.Control.activeDialog():
             return False
-        _equipment, marker, junction = self._pieces()
-        return marker is not None and junction is not None
+        return _selected_port_container()[0] is not None
 
     def Activated(self):
-        from ..core import Equipment
+        from ..ui.TaskPanel import TaskPanelPortContainer
 
-        equipment, marker, junction = self._pieces()
-        if equipment is None:
-            FreeCAD.Console.PrintWarning(
-                "HVAC - Connect to Equipment: '{}' belongs to no equipment; use Create / Edit Equipment on its "
-                "App::Part first\n".format(marker.Label)
-            )
+        part, kind = _selected_port_container()
+        if part is None:
             return
-        doc = junction.Document
-        doc.openTransaction("Connect to Equipment")
-        try:
-            warnings = Equipment.connect(equipment, marker, junction)
-        except ValueError as e:
-            doc.abortTransaction()
-            FreeCAD.Console.PrintWarning("HVAC - Connect to Equipment: {}\n".format(e))
-            return
-        doc.commitTransaction()
-        for warning in warnings:
-            FreeCAD.Console.PrintWarning("HVAC - Connect to Equipment: {}\n".format(warning))
-        FreeCAD.Console.PrintMessage(
-            "HVAC - Connected '{}' to {} port '{}'\n".format(junction.Label, equipment.Label, marker.Label)
-        )
+        self.task_panel = TaskPanelPortContainer(part, kind=kind)
+        Gui.Control.showDialog(self.task_panel)
 
 
 class CommandLayerVisibility:
@@ -1660,7 +1659,7 @@ class CommandLayerVisibility:
 
     def GetResources(self):
         return {
-            'Pixmap': hvaclib.get_icon_path("EditMaterial.svg"),
+            'Pixmap': hvaclib.get_icon_path("LayerVisibility.svg"),
             'MenuText': QT_TRANSLATE_NOOP('HVAC_LayerVisibility', 'Layer Visibility'),
             'ToolTip': QT_TRANSLATE_NOOP(
                 'HVAC_LayerVisibility',
@@ -1746,5 +1745,5 @@ if FreeCAD.GuiUp:
     FreeCAD.Gui.addCommand('HVAC_AddEquipment', CommandAddEquipment())
     FreeCAD.Gui.addCommand('HVAC_LayerVisibility', CommandLayerVisibility())
     FreeCAD.Gui.addCommand('HVAC_CreateCustomFitting', CommandCreateCustomFitting())
-    FreeCAD.Gui.addCommand('HVAC_ConnectEquipment', CommandConnectEquipment())
+    FreeCAD.Gui.addCommand('HVAC_EditPorts', CommandEditPorts())
     FreeCAD.Gui.addCommand('HVAC_ReloadLibraries', CommandReloadHVACLibraries())  # Debug method

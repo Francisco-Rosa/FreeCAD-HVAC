@@ -71,20 +71,21 @@ class HVAC(Gui.Workbench):
                     'HVAC_CreateLine',
                     'HVAC_CreateSpline',
                     'HVAC_CreateVirtualJunction',
+                    'HVAC_AddEquipment',
                     "Separator",
                     'HVAC_EditBaseObject',
                     'HVAC_EditDuctDirections',
                     # 'HVAC_ReverseGeometryDirection',
                     "Separator",
+                    'HVAC_CreateEquipment',
+                    'HVAC_CreateCustomFitting',
+                    "Separator",
                     'HVAC_EditType',
                     'HVAC_EditPlacement',
                     'HVAC_EditInlineComponents',
+                    'HVAC_EditPorts',
                     'HVAC_EditMaterial',
                     'HVAC_ResetTypesToDefaults',
-                    'HVAC_CreateCustomFitting',
-                    'HVAC_AddEquipment',
-                    'HVAC_CreateEquipment',
-                    'HVAC_ConnectEquipment',
                     "Separator",
                     'HVAC_LayerVisibility',
                     'HVAC_SelectAllSegments',
@@ -232,8 +233,9 @@ class HVAC(Gui.Workbench):
             def __init__(self):
                 super().__init__()
                 self.commands = ['HVAC_EditType',
-                                 'HVAC_EditInlineComponents',
                                  'HVAC_EditPlacement',
+                                 'HVAC_EditInlineComponents',
+                                 'HVAC_EditPorts',
                                  'HVAC_EditMaterial',
                                  'HVAC_ResetTypesToDefaults']
                 self.title = translate("HVAC", "Edit Tools")
@@ -244,17 +246,23 @@ class HVAC(Gui.Workbench):
                 
 
         class HVACModelWatcher:
-            """Shows the equipment / custom fitting commands when a modelled part or solid is selected."""
+            """
+            Shows Create Custom Equipment / Custom Fitting when a modelled part
+            or solid that is neither yet is selected (the ports of one that is
+            are edited with Edit Ports, among the Edit Tools).
+            """
 
             def __init__(self):
-                self.commands = ['HVAC_CreateCustomFitting',
-                                 'HVAC_CreateEquipment',
-                                 'HVAC_ConnectEquipment']
+                self.commands = ['HVAC_CreateEquipment',
+                                 'HVAC_CreateCustomFitting']
                 self.title = translate("HVAC", "Equipment and Custom Fittings")
 
             def shouldShow(self):
-                from .ui.Command import _selected_part
-                return FreeCAD.ActiveDocument is not None and _selected_part() is not None
+                from .ui.Command import _is_port_container, _selected_part
+                if FreeCAD.ActiveDocument is None:
+                    return False
+                part = _selected_part()
+                return part is not None and not _is_port_container(part)
 
         self.watchers = [
             HVACCreateWatcher(),

@@ -106,3 +106,10 @@ def test_normalize_rejects_unsupported_raw_type():
         pass
     else:
         raise AssertionError("Expected TypeError for a non-dict/GeometryResult raw value")
+
+
+def test_normalize_keeps_property_choices_as_lists_of_strings():
+    result = gr.normalize({"layers": {"shape": {"shape": _Shape()}}, "property_choices": {"Mode": ("A", "B")}})
+    assert result.property_choices == {"Mode": ["A", "B"]}
+    assert "property_choices" not in result.extra
+    assert gr.normalize({"layers": {"shape": {"shape": _Shape()}}}).property_choices == {}

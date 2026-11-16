@@ -103,6 +103,15 @@ class DuctComponent:
         pass
 
     def execute(self, obj):
+        # Values this rebuild writes back (computed sizes, narrowed choices)
+        # are not user edits: onChanged must not re-sync the network for them.
+        self._executing = True
+        try:
+            self._execute(obj)
+        finally:
+            self._executing = False
+
+    def _execute(self, obj):
         # The junction composer (DuctJunction.composeComponents) is
         # responsible for working out this component's local inlet/outlet
         # ports and writing them into LocalPortsJson each sync -- execute()
@@ -212,6 +221,8 @@ class DuctComponent:
             # may report alongside its shape -- same convention as
             # DuctSegment.execute().
             _geometry_apply.apply_computed_properties(obj, type_def, result)
+            # Drop-downs offer only the choices that suit this geometry.
+            _geometry_apply.apply_property_choices(obj, type_def, result)
 
             if getattr(obj, "GeometryError", ""):
                 obj.GeometryError = ""
@@ -458,7 +469,15 @@ class DuctComponent:
             except Exception:
                 pass
 
+    # Component properties outside the type schema that still change the
+    # geometry, and so the neighbouring ducts' trims (see onChanged).
+    _SYNC_ON_EDIT = ("GeometrySource", "CustomPlacement", "CustomFitting", "PortSequence")
+
     def onChanged(self, obj, prop):
+        # A geometry input edited in the property editor: the network re-syncs
+        # so the neighbouring ducts are re-trimmed to this fitting.
+        _type_schema.request_sync_after_edit(obj, prop, self._SYNC_ON_EDIT)
+
         if prop == "LossCoefficientSource":
             self._syncLossCoefficientEditorMode(obj)
             return
@@ -608,7 +627,7 @@ class DuctComponent:
             "CustomFitting",
             "HVAC Custom Geometry",
             "App::Part holding the modelled fitting and one HVAC port marker per opening "
-            "(see Create / Edit Custom Fitting)",
+            "(see Create Custom Fitting and Edit Ports)",
         )
         # Fit to node: a link to the fitting is moved onto the node. In place:
         # the fitting stays where it was modelled and the ducts end on its

@@ -68,7 +68,24 @@ class DuctSegment:
     def loads(self, state):
         pass
 
+    # Segment properties outside the type schema that change its size or
+    # position, and so the fittings at its ends (see onChanged).
+    _SYNC_ON_EDIT = ("Diameter", "Width", "Height", "Attachment", "Offset", "ProfileXAxis")
+
+    def onChanged(self, obj, prop):
+        # A size or type parameter edited in the property editor: the network
+        # re-syncs so the fittings at both ends follow the new duct.
+        _type_schema.request_sync_after_edit(obj, prop, self._SYNC_ON_EDIT)
+
     def execute(self, obj):
+        # Values this rebuild writes back are not user edits (see onChanged).
+        self._executing = True
+        try:
+            self._execute(obj)
+        finally:
+            self._executing = False
+
+    def _execute(self, obj):
         edge = self.resolveSourceEdge()
 
         start_point = getattr(obj, "EffectiveStartPoint", None) or getattr(obj, "StartPoint", None)
@@ -176,6 +193,8 @@ class DuctSegment:
             result = reg.build_geometry(library_id, type_def, context)
             _geometry_apply.apply_geometry_result(obj, result)
             _geometry_apply.apply_computed_properties(obj, type_def, result)
+            # Drop-downs offer only the choices that suit this geometry.
+            _geometry_apply.apply_property_choices(obj, type_def, result)
 
             # Optional trim plane overrides from generator
             if result.start_trim_plane_json is not None:

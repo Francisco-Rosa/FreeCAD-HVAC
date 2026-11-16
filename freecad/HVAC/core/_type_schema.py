@@ -32,23 +32,27 @@ from ..library import validation
 from ..utils import hvaclib
 
 
-def _sync_enumeration_choices(obj, pdef):
-    """
-    Give an enumeration property the choices its type-def declares
-    (`validation.enum`), keeping the current choice when it is still one of
-    them and falling back to the default otherwise. Returns True if the
-    choices had to be (re)set.
-    """
-    choices = [str(choice) for choice in (getattr(pdef, "validation", {}) or {}).get("enum", [])]
-    if not choices:
-        return False
-    try:
-        existing = list(obj.getEnumerationsOfProperty(pdef.name) or [])
-    except Exception:
-        existing = []
-    if existing == choices:
-        return False
+def _declared_choices(pdef):
+    """The choices a drop-down's type-def declares (`validation.enum`), as strings."""
+    return [str(choice) for choice in (getattr(pdef, "validation", {}) or {}).get("enum", [])]
 
+
+def _current_choices(obj, name):
+    try:
+        return list(obj.getEnumerationsOfProperty(name) or [])
+    except Exception:
+        return []
+
+
+def set_enumeration_choices(obj, pdef, choices):
+    """
+    Give drop-down `pdef.name` exactly `choices`, keeping the current choice
+    when it is still one of them, else the type-def default, else the first.
+    Returns True if the choices had to be (re)set.
+    """
+    choices = [str(choice) for choice in choices]
+    if not choices or _current_choices(obj, pdef.name) == choices:
+        return False
     try:
         previous = str(getattr(obj, pdef.name))
     except Exception:
@@ -61,6 +65,27 @@ def _sync_enumeration_choices(obj, pdef):
             setattr(obj, pdef.name, candidate)
             break
     return True
+
+
+def _sync_enumeration_choices(obj, pdef):
+    """
+    Give an enumeration property the choices its type-def declares
+    (`validation.enum`), keeping the current choice when it is still one of
+    them and falling back to the default otherwise. Returns True if the
+    choices had to be (re)set.
+
+    A drop-down already narrowed to some of those choices (in their declared
+    order) is left as it is: the geometry backend narrows it on each build
+    to what suits the fitting (core/_geometry_apply.apply_property_choices).
+    Widening it here on every sync would mark the object changed each time.
+    """
+    choices = _declared_choices(pdef)
+    if not choices:
+        return False
+    existing = _current_choices(obj, pdef.name)
+    if existing and [choice for choice in choices if choice in existing] == existing:
+        return False
+    return set_enumeration_choices(obj, pdef, choices)
 
 
 def _add_per_port_property(obj, pdef):
@@ -193,3 +218,50 @@ def apply_type_schema(obj, library_id, type_id, *, protected_names=()):
             pass
 
     return changed
+
+
+def _is_user_editable(obj, prop):
+    """True when the property editor lets the user change `prop` (not read-only, not hidden)."""
+    try:
+        mode = obj.getEditorMode(prop) or []
+    except Exception:
+        return True
+    return "ReadOnly" not in mode and "Hidden" not in mode
+
+
+def request_sync_after_edit(obj, prop, extra_names=()):
+    """
+    Ask `obj`'s owner network to sync after the user edits one of its
+    geometry inputs straight in the property editor: a type-schema property
+    (TypeSchemaPropertyNames) or one of `extra_names`. Returns True when a
+    sync was requested.
+
+    Why: a recompute rebuilds only the edited object. Its neighbours read it
+    through the network sync, not through FreeCAD links: a fitting's ports
+    come from its ducts' sizes, and a duct's trims come from its fittings'
+    lengths. Without a sync those stay stale (a duct still trimmed to the
+    old fitting length, a fitting still sized for the old duct).
+
+    Edits made while the network itself is syncing, while the document is
+    loading, or by the object's own execute() (computed values) are left
+    alone: they are part of a rebuild already under way.
+    """
+    if prop not in extra_names and prop not in (getattr(obj, "TypeSchemaPropertyNames", None) or []):
+        return False
+    proxy = getattr(obj, "Proxy", None)
+    if getattr(proxy, "_executing", False):
+        return False
+    doc = getattr(obj, "Document", None)
+    if doc is None or getattr(doc, "Restoring", False):
+        return False
+    if not _is_user_editable(obj, prop):
+        return False
+    owner = hvaclib.getOwnerNetwork(obj)
+    owner_proxy = getattr(owner, "Proxy", None) if owner is not None else None
+    if owner_proxy is None or getattr(owner_proxy, "_sync_in_progress", False):
+        return False
+    try:
+        owner_proxy.requestSync(force_recompute=True)
+    except Exception:
+        return False
+    return True

@@ -30,6 +30,7 @@ _KNOWN_RAW_KEYS = {
     "layers",
     "connection_lengths",
     "computed_properties",
+    "property_choices",
     "start_trim_plane_json",
     "end_trim_plane_json",
 }
@@ -65,6 +66,10 @@ class GeometryResult:
     features: dict = field(default_factory=dict)
     connection_lengths: list = field(default_factory=list)
     computed_properties: dict = field(default_factory=dict)
+    # Drop-down property name -> the choices that make sense for this
+    # geometry (a subset of the type-def's own enum); a property not named
+    # here offers every choice. See core/_geometry_apply.apply_property_choices.
+    property_choices: dict = field(default_factory=dict)
     start_trim_plane_json: "str | None" = None
     end_trim_plane_json: "str | None" = None
     # Any other top-level key a backend returned that normalize() doesn't
@@ -110,6 +115,10 @@ def normalize(raw) -> GeometryResult:
             layers=layers,
             connection_lengths=list(raw.get("connection_lengths", []) or []),
             computed_properties=dict(raw.get("computed_properties", {}) or {}),
+            property_choices={
+                str(name): [str(choice) for choice in choices or []]
+                for name, choices in dict(raw.get("property_choices", {}) or {}).items()
+            },
             start_trim_plane_json=raw.get("start_trim_plane_json"),
             end_trim_plane_json=raw.get("end_trim_plane_json"),
             extra={k: v for k, v in raw.items() if k not in _KNOWN_RAW_KEYS},

@@ -131,6 +131,34 @@ def apply_computed_properties(obj, type_def, result):
     return changed
 
 
+def apply_property_choices(obj, type_def, result):
+    """
+    Narrow each drop-down property of `obj` to the choices
+    result.property_choices gives for it (kept in the type-def's own order),
+    and give a drop-down the backend did not name all of its type-def
+    choices back. A current value that is no longer offered falls back to
+    the type-def default, else the first choice. Returns True if anything
+    changed.
+
+    Used where a choice only makes sense for some geometries (e.g. a fan
+    outlet transition only where the outlet and the duct differ), so the
+    user is never offered a choice the fitting cannot build.
+    """
+    from . import _type_schema
+
+    offered = result.property_choices or {}
+    changed = False
+    for pdef in getattr(type_def, "properties", []) or []:
+        if pdef.prop_type != "App::PropertyEnumeration" or pdef.name not in obj.PropertiesList:
+            continue
+        declared = [str(choice) for choice in (getattr(pdef, "validation", {}) or {}).get("enum", [])]
+        allowed = offered.get(pdef.name)
+        choices = [choice for choice in declared if allowed is None or choice in allowed] or declared
+        if _type_schema.set_enumeration_choices(obj, pdef, choices):
+            changed = True
+    return changed
+
+
 def _entry_shape(geometry):
     """A LayerGeometry's/FeatureGeometry's own shape, or None if absent/null."""
     if geometry is None:
