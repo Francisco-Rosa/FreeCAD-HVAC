@@ -53,7 +53,7 @@ only to `HVACLibraryAPI` / `HVACLossAPI`.
 - Charts: Fig. 14-4 (flex duct compression) was already in `analysis/friction.flex_compression_factor` and on `circular_flex`; Fig. 14-3 (roughness) and 14-5 (density) are what Darcy-Weisbach with the duct's roughness and the network's air properties computes directly; the nominal-size tables 14-2 to 14-5 are the equivalent-diameter equation, which is implemented. Nothing more to digitise.
 
 *Still open: geometry*
-- Radius wye with a wall on a round duct (the wall fuse drops one bend) and on a tall oval (wall and bullhead). The mitered wye is the automatic choice there.
+- Branch geometry robustness, design 6.6 (for review): the radius wye fails on about half of a size and wall sweep on every profile (the pending-items pass overstated its round bullhead fix: the owner's GUI check failed it); the mitered wye, lateral tees, double wyes and mitered shoe fail when the branch is as large as the run, or with thick walls or insulation.
 - A radiussed offset with a user-set length too short for its arcs is refused (says how long it must be).
 
 *Still open: loss coverage*
@@ -1534,3 +1534,142 @@ Tests: `tests/test_equipment.py`.
 - (g) Equipment geometry first as library types (an AHU with supply and
   return collars on chosen faces), or only user models with port
   markers to start with?
+
+### 6.6 Robust branch geometry: plane-split wyes, inset branch bends
+
+Written 18 November 2026 after the owner's GUI check found the round
+bullhead radius wye failing (and called the radius tee and wye "finicky").
+**For the owner's review; nothing implemented.**
+
+**Evidence: a size and wall sweep.** The smoke run builds one node per
+family; it hid the problem (the pending-items pass reported the round
+bullhead fixed from that one node). A sweep over branch size ratio (0.5,
+0.75, 1.0 of the run), branch angle (30, 45, 60 degrees), every profile
+(round, rectangular, wide and tall oval) and wall build-up (none, 1 mm,
+3 mm; smacna with and without 25 mm insulation), 300 mm run
+(`tools/.smoke/robust_sweep.py`, not committed):
+
+| Type | builtin_basic ok / cases | smacna ok / cases | Where it fails |
+|---|---|---|---|
+| `branch_wye_radius` | 76 / 144 | (not in smacna) | everywhere: every profile, with and without a wall |
+| `branch_wye_mitered` | 130 / 144 | 79 / 96 | tall oval; round with a thick wall or insulation |
+| `cross_double_wye_radius` | 60 / 72 | 33 / 48 | branch as large as the run |
+| `cross_double_wye_mitered` | 70 / 72 | 43 / 48 | branch as large as the run, with a wall |
+| `branch_lateral_tee_radius` | 63 / 72 | 40 / 48 | branch as large as the run |
+| `branch_lateral_tee_mitered` | 66 / 72 | 45 / 48 | branch as large as the run |
+| `branch_tap_mitered_shoe` | 72 / 72 | 45 / 48 | branch as large as the run, round, with a wall |
+| `branch_tee_radius_center` / `_edge` | 90 / 90 | 58 / 60 | wide and tall oval, branch as large as the run |
+| straight tee, straight / saddle / shoe taps, radius and mitered elbows | all | all | none |
+
+**Comparison with `main`.** `main` built these fittings as air-space
+solids only (no wall layers) and tried up to ten fuse orders for the
+radius wye, keeping the first result OpenCascade called valid. That hid
+the same fragility: Stage 7's stricter check found accepted radius wyes
+that had dropped a leg or come out as fragments. This branch builds every
+envelope once, in a fixed order, and checks the result, so the failures
+now show.
+
+**Causes.** Three patterns, all the same OpenCascade weakness: plain
+booleans fail where two solids share a curved face or touch tangentially;
+they are reliable where pieces meet on a plane or cross at an angle.
+
+1. *Split-half sweeps (radius wye; mitered wye with a wall).* Each half
+   of the split main section is swept round its own bend. The cut edge,
+   swept along an arc, is no longer a plane: the two halves touch along
+   the start and part tangentially. With a wall, each grown half reaches
+   past the cut, so the halves also share curved faces in that strip.
+2. *Coaxial branch-bend start (lateral tees, double wyes, mitered shoe).*
+   The bend begins on the run axis with the branch's own section, inside
+   the run. When the branch is as large as the run (in the bend plane),
+   that section coincides with the run's own wall: two identical curved
+   surfaces, the bend then leaving the run tangentially.
+3. *Walls repeat every boolean.* Each construction layer builds its
+   envelope again, so a fragile fuse is attempted two or three times per
+   fitting, and each grown copy is closer to tangency. Insulation makes
+   pattern 1 and 2 cases fail that build without it.
+
+**Principles (for every branch fitting).**
+- Pieces meet only on a plane, or cross at a clear angle. Never a shared
+  curved face, never a tangent touch.
+- Every cut is a plane cut decided by the layout (a `common` with a
+  half-space), never a cut by a curved surface.
+- Wall envelopes reuse the same planes; only the sections grow. So the
+  grown pieces meet on the same planes as the air-space pieces.
+- Where tangency cannot be avoided, the layout refuses before building,
+  saying what to change. No retries, fuse-order searches or fuzzy booleans
+  (the existing rule).
+
+**A. Plane-split wyes (radius and mitered).**
+1. Layout (unchanged): common port C, legs A and B, the split line across
+   the main section in the legs' size proportion, the bend routes and the
+   trims. New: the split *plane* Π, through the split line, containing the
+   common axis direction and the normal of the legs' plane. Leg A lies on
+   one side of Π, leg B on the other.
+2. Each leg's bend is built with the **full** common section at its start
+   (on the split station, centred on the common axis) and the leg's own
+   section at its end: a sweep along the arc for the radius wye, the same
+   gores as today for the mitered wye. No half sections, no corner-matched
+   circle splits (`_wye_branch_end_wire`, `make_circular_wire_split_at`
+   are no longer needed here).
+3. Leg A's piece is its bend ∩ the half-space on A's side of Π; leg B's
+   likewise. The two pieces meet face to face on Π: a plane, which a
+   plain fuse handles. The main straight ends on the split station, its
+   end face the union of the two pieces' start faces (planar again).
+4. Wall envelopes: the same three steps with every section grown by the
+   offset, cut by the same Π.
+5. Crotch wall on an asymmetric wye. Where the legs differ (size or
+   radius), the larger leg's section on Π reaches past the smaller leg's
+   near the crotch, and there its air face lies on Π with no wall beyond
+   it. The fix is one planar plate: the larger leg's grown section on Π
+   minus the smaller leg's grown section on Π, extruded one wall
+   thickness into the smaller leg's side. Its faces are planar or
+   perpendicular to Π, so it meets the bends at an angle. A symmetric wye
+   or bullhead needs no plate.
+6. Trims and `measure_*` are unchanged (the routes are the same), so
+   measure still equals build.
+7. Removed: the split-half sweeps, `_wye_main_split_faces(curved=...)`
+   and the narrowed strip added in the pending-items pass, and the radius
+   wye's fixed fuse order (the pieces no longer depend on order).
+
+**B. Inset branch-bend start (lateral tees, double wyes, mitered shoe).**
+The part of the bend inside the run only has to stay inside the run's air.
+Where the bend's start section would reach within a margin of the run
+wall, it starts smaller: the start section is the branch section scaled
+so it clears the run's inside face by max(10 % of the run's half-depth,
+twice the total wall) on every side, and the sweep (or the first gore)
+grows it to the full branch section along the bend. The bend then crosses
+the run wall at an angle instead of running along it. Nothing changes
+outside the run: the reduced part lies inside the run's air. The same
+inset start fixes the radius tee's oval ratio-1 cases (its centre-aligned
+body meets the run on the shared tangent plane, today patched by a 1 %
+overlap; with the inset start the overlap is no longer needed).
+
+**Acceptance.** The sweep above becomes a committed tool
+(`tools/geometry_sweep.py`, same report as the smoke run). Target: every
+case of the types above builds, except ones the layout refuses with a
+message; symmetric wyes and bullheads build on every profile with and
+without a wall. The smoke run must not lose a build. Shapes still need a
+look in the GUI (the crotch plate in particular).
+
+**Risks.**
+- A full common section swept into a smaller or differently shaped leg
+  can twist (round into rectangular); the existing split-circle start
+  (`api.make_split_circular_wire`) is used where profiles differ.
+- The crotch plate is new geometry; if its 2D difference on Π degenerates
+  (legs nearly equal), it is skipped below a size threshold, which leaves
+  a sliver without wall. To be measured by the sweep.
+- The radius wye's look changes slightly at the crotch: the legs part on
+  a flat face instead of along two curved ones (as the mitered wye does
+  today).
+
+**Owner input.**
+- (a) Approve A for both wyes, including the crotch plate (5), or limit
+  the radius wye to symmetric wyes and bullheads (refusing asymmetric ones
+  with a wall)?
+- (b) Approve B, with its margin (10 % of the run half-depth, at least
+  twice the wall)?
+- (c) Commit the sweep as `tools/geometry_sweep.py` and make it the
+  acceptance check for fitting geometry changes?
+- (d) Until this lands: leave the radius wye as it is (it fails on about
+  half the sweep, on every profile), or take it out of the Change Type
+  list for round ducts only?
