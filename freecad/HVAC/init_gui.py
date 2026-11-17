@@ -71,12 +71,12 @@ class HVAC(Gui.Workbench):
                     'HVAC_CreateLine',
                     'HVAC_CreateSpline',
                     'HVAC_CreateVirtualJunction',
-                    'HVAC_AddEquipment',
                     "Separator",
                     'HVAC_EditBaseObject',
                     'HVAC_EditDuctDirections',
                     # 'HVAC_ReverseGeometryDirection',
                     "Separator",
+                    'HVAC_AddEquipment',
                     'HVAC_CreateEquipment',
                     'HVAC_CreateCustomFitting',
                     "Separator",
@@ -218,7 +218,6 @@ class HVAC(Gui.Workbench):
                                  'HVAC_CreateLine',
                                  'HVAC_CreateSpline',
                                  'HVAC_CreateVirtualJunction',
-                                 'HVAC_AddEquipment',
                                  'HVAC_EditBaseObject',
                                  'HVAC_EditDuctDirections']
                 self.title = translate("HVAC", "Routing Tools")
@@ -226,6 +225,7 @@ class HVAC(Gui.Workbench):
             def shouldShow(self):
                 # Show if there is an active document
                 return is_network_active()
+
         
         class HVACEditObjectWatcher:
             """Shows 'Edit Object' when an object is selected."""
@@ -244,7 +244,7 @@ class HVAC(Gui.Workbench):
                 # Show if there is an active document and an object is selected
                 return is_network_active() and is_object_selected()
                 
-
+                        
         class HVACModelWatcher:
             """
             Shows Create Custom Equipment / Custom Fitting when a modelled part
@@ -255,7 +255,7 @@ class HVAC(Gui.Workbench):
             def __init__(self):
                 self.commands = ['HVAC_CreateEquipment',
                                  'HVAC_CreateCustomFitting']
-                self.title = translate("HVAC", "Equipment and Custom Fittings")
+                self.title = translate("HVAC", "Fittings and Equipment")
 
             def shouldShow(self):
                 from .ui.Command import _is_port_container, _selected_part
@@ -264,6 +264,19 @@ class HVAC(Gui.Workbench):
                 part = _selected_part()
                 return part is not None and not _is_port_container(part)
 
+
+        class HVACModelWatcherNew:
+            """Shows 'Fittings and Equipment' when an HVAC Network is active and no objects selected."""
+
+            def __init__(self):
+                super().__init__()
+                self.commands = ['HVAC_AddEquipment']
+                self.title = translate("HVAC", "Fittings and Equipment")
+                
+            def shouldShow(self):
+                # Show if there is an active document
+                return is_network_active() and not is_object_selected()
+
         self.watchers = [
             HVACCreateWatcher(),
             HVACActivateWatcher(),
@@ -271,6 +284,7 @@ class HVAC(Gui.Workbench):
             HVACRoutingWatcher(),
             HVACEditObjectWatcher(),
             HVACModelWatcher(),
+            HVACModelWatcherNew(),
         ]
         Gui.Control.addTaskWatcher(self.watchers)
         

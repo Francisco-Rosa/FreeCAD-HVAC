@@ -1523,7 +1523,7 @@ class CommandAddEquipment:
     def GetResources(self):
         return {
             'Pixmap': hvaclib.get_icon_path("AddEquipment.svg"),
-            'MenuText': QT_TRANSLATE_NOOP('HVAC_AddEquipment', 'Add Equipment from Library'),
+            'MenuText': QT_TRANSLATE_NOOP('HVAC_AddEquipment', 'Add Equipment'),
             'ToolTip': QT_TRANSLATE_NOOP(
                 'HVAC_AddEquipment',
                 'Add a ready-made unit from the library (an air handling unit, a fan): pick the model, set its sizes '
