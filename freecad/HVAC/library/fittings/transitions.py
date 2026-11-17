@@ -108,6 +108,39 @@ def _radiussed_radius(api, ports, total, requested, wall=0.0):
     return radius
 
 
+def _lateral_offset(api, ports):
+    """How far apart the two (parallel) port axes are, across the duct."""
+    axis = api.unit(api.port_direction(ports[0]))
+    delta = api.port_position(ports[1]) - api.port_position(ports[0])
+    return (delta - axis * delta.dot(axis)).Length
+
+
+def radiussed_body_length(api, ports, params, wall=0.0):
+    """
+    A radiussed offset's body length: TransitionLength when set; when 0, the
+    default length (body_length), made longer where needed so the arcs fit
+    at the radius _radiussed_radius starts from.
+
+    The corners sit a quarter of the length in from each end, so the
+    diagonal turns by `turn` with tan(turn) = 2 d / L for a lateral offset d,
+    and each arc fits when 0.98 (L / 4) / tan(turn / 2) >= R. With
+    k = 0.98 / (4 R) and t = tan(turn / 2) = k L, that is
+    2 t / (1 - t^2) = 2 d / L, so L = sqrt(d / (k (1 + d k))).
+    """
+    length = float(params.get("TransitionLength") or 0.0)
+    if length > 0.0:
+        return length
+    length = body_length(api, ports, 0.0)
+    size = max(_size(api, ports[0]), _size(api, ports[1]))
+    radius = max(_positive(params.get("TransitionRadius"), max(size, 10.0)), _min_bend_radius(size, wall))
+    offset = _lateral_offset(api, ports)
+    if offset <= api.EPS:
+        return length
+    k = 0.98 / (4.0 * radius)
+    # A hair longer than the exact fit, so the arcs never come out a rounding error short.
+    return max(length, 1.001 * math.sqrt(offset / (k * (1.0 + offset * k))))
+
+
 def offset_dimensions(api, ports, params, radiussed=False, wall=0.0):
     """
     A two-port offset's derived values, from the transition-named properties
@@ -120,7 +153,10 @@ def offset_dimensions(api, ports, params, radiussed=False, wall=0.0):
     """
     if len(ports) != 2:
         raise ValueError("Expected 2 connected ports, got {}".format(len(ports)))
-    length = body_length(api, ports, params.get("TransitionLength"))
+    if radiussed:
+        length = radiussed_body_length(api, ports, params, wall)
+    else:
+        length = body_length(api, ports, params.get("TransitionLength"))
     axis = api.offset_transition_axis(ports[0], ports[1], length)
     result = {"body_length": length, "offset_angle": math.degrees(axis["turn_angle"])}
     if radiussed:
@@ -167,7 +203,7 @@ def _transition_radiussed_route(context):
     if len(ports) != 2:
         raise ValueError(f"Expected 2 connected ports, got {len(ports)}")
     p = _props(context)
-    total = body_length(api, ports, p.get("TransitionLength"))
+    total = radiussed_body_length(api, ports, p, _wall_thickness(context))
     radius = _radiussed_radius(api, ports, total, p.get("TransitionRadius"), _wall_thickness(context))
     route = api.make_radiussed_path(ports[0], ports[1], total, radius)
     return ports, route

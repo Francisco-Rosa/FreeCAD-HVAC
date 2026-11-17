@@ -180,6 +180,19 @@
           "ShowFlange1",
           "ShowFlange2"
         ]
+      },
+      {
+        "id": "coil_block",
+        "role": "coil",
+        "host_layer": "casing",
+        "module": "shared:details",
+        "generator": "coil_block",
+        "parameters": [
+          "BoxLength",
+          "BoxWidth",
+          "BoxHeight",
+          "CollarLength"
+        ]
       }
     ]
   },

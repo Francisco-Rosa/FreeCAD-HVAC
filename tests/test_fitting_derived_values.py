@@ -98,3 +98,20 @@ def test_radiussed_offset_reports_the_radius_it_can_fit():
 def test_radiussed_offset_too_steep_raises():
     with pytest.raises(ValueError, match="too steep"):
         tr.offset_dimensions(api, _offset_ports(600.0, size=400.0), {"TransitionLength": 300.0}, radiussed=True)
+
+
+def test_radiussed_offset_without_a_length_grows_until_its_arcs_fit():
+    # The case the explicit 300 mm length refuses (see above) builds at length 0,
+    # with the arcs at the default radius (the duct size) and only just longer than they need.
+    ports = _offset_ports(600.0, size=400.0)
+    dims = tr.offset_dimensions(api, ports, {"TransitionLength": 0.0}, radiussed=True)
+    assert dims["actual_radius"] == pytest.approx(400.0, rel=2.0e-3)
+    assert dims["body_length"] > 400.0
+    shorter = tr.offset_dimensions(api, ports, {"TransitionLength": 0.99 * dims["body_length"]}, radiussed=True)
+    assert shorter["actual_radius"] < 400.0
+
+
+def test_radiussed_offset_without_a_length_keeps_the_default_when_it_already_fits():
+    ports = _offset_ports(10.0)
+    assert tr.radiussed_body_length(api, ports, {"TransitionLength": 0.0}) == pytest.approx(200.0)
+    assert tr.radiussed_body_length(api, ports, {"TransitionLength": 150.0}) == pytest.approx(150.0)

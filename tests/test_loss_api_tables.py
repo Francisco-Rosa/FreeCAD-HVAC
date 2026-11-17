@@ -443,3 +443,42 @@ def test_sum_losses_takes_the_weaker_status_and_joins_warnings():
     assert total.warning == "clamped"
     unsupported = LossEvaluation([], LossStatus.UNSUPPORTED, warning="no")
     assert api.sum_losses(a, unsupported) is a
+
+
+# ----------------------------------------------------------------------------
+# Equipment connection: the transition where air enters a unit
+# ----------------------------------------------------------------------------
+
+
+def _return(properties, port):
+    """A 600 x 400 duct carrying air into a unit through `port` (an equipment port)."""
+    from freecad.HVAC.library.library_api import HVACLibraryAPI
+
+    context = _terminal(dict(properties), entering=False, **_AHU_DUCT)
+    # 5 m/s through 0.6 x 0.4 m.
+    context["connected_ports"][0]["flow_rate_lps"] = 1200.0
+    context.update(loss_api=api, hvac_api=HVACLibraryAPI, air_density=1.2, equipment_port=port)
+    return context
+
+
+def test_return_duct_into_a_smaller_port_reads_the_contraction():
+    from freecad.HVAC.library.fittings import losses
+
+    port = {"profile": "Rectangular", "section_params": {"Width": 400.0, "Height": 300.0}}
+    result = losses.loss_equipment_connection(_return({"TransitionAngle": 30.0}, port))
+    assert result.status == api.EXACT
+    k_duct = _k(result)
+    assert k_duct > 0.0
+    # 14-12 A at 30 degrees, A1/A = 0.5 (the port is the outlet): C = 0.05 at the port's velocity,
+    # referred to the duct's: (A_duct / A_port)^2 = 4.
+    assert k_duct == pytest.approx(0.05 * 4.0)
+
+
+def test_return_duct_into_its_own_size_or_a_supply_connection_has_no_transition():
+    from freecad.HVAC.library.fittings import losses
+
+    same = {"profile": "Rectangular", "section_params": {"Width": 600.0, "Height": 400.0}}
+    assert losses._equipment_inlet_transition_loss(_return({"TransitionAngle": 30.0}, same)) is None
+    assert losses._equipment_inlet_transition_loss(_return({}, None)) is None
+    supply = _supply({"FanConnection": "Discharge into casing", "FanWheel": "Airfoil"})
+    assert losses._equipment_inlet_transition_loss(supply) is None

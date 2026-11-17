@@ -103,6 +103,23 @@
       }
     }
   ],
+  "construction": {
+    "features": [
+      {
+        "id": "coil_block",
+        "role": "coil",
+        "host_layer": "shape",
+        "module": "shared:details",
+        "generator": "coil_block",
+        "parameters": [
+          "BoxLength",
+          "BoxWidth",
+          "BoxHeight",
+          "CollarLength"
+        ]
+      }
+    ]
+  },
   "geometry": {
     "backend": "generator",
     "module": "shared:inline",

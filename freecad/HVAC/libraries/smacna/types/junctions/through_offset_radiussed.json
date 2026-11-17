@@ -43,8 +43,8 @@
       "name": "OffsetLength",
       "prop_type": "App::PropertyLength",
       "group": "Dimensions",
-      "description": "Length of the offset along the duct axis. 0 uses the duct size",
-      "default": 300.0,
+      "description": "Length of the offset along the duct axis. 0 uses the duct size, or longer where the arcs need it to fit at OffsetRadius",
+      "default": 0.0,
       "validation": {
         "minimum": 0.0
       }

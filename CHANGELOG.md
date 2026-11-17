@@ -19,6 +19,14 @@ for in `library.json` (`"requires_api"`) and is refused by any other.
 
 ## Unreleased
 
+- Radius wye: builds with a wall on a round bullhead and solid on a tall oval; a round wye with a wall still refuses
+  (use the mitered wye).
+- Radiussed offset: `OffsetLength` 0 (the new default) makes the offset as long as its arcs need.
+- Drawn as features: turning vanes, splitter vanes, the SMACNA tap dampers, extractor blades, filter media pleats and
+  the coil block with its header connections.
+- A return duct into an equipment port of another size reads the transition tables (14-11 / 14-12).
+- Size Ducts panel: a Friction section (model, CSV chart with Browse, expression).
+
 - Inline devices in both libraries, each a manual choice on a straight node: silencer, filter (pressure drop by
   condition: clean, mid-life, final), coil, fire damper (frame and curtain pack drawn as a feature), access door
   (door panel on a chosen side, a feature) and flexible connector. One loss function, `loss_inline_device`.

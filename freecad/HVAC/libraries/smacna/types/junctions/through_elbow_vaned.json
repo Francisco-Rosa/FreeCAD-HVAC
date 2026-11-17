@@ -29,7 +29,7 @@
       "name": "VaneDesign",
       "prop_type": "App::PropertyEnumeration",
       "group": "Parameters",
-      "description": "Turning vanes fitted in the corner: single or double thickness, vane radius R and spacing S in mm. Used for the loss; the vanes are not drawn",
+      "description": "Turning vanes fitted in the corner: single or double thickness, vane radius R and spacing S in mm. Drawn as a feature",
       "default": "Single R50 S38",
       "validation": {
         "enum": [
@@ -116,6 +116,16 @@
           "FlangeThickness",
           "ShowFlange1",
           "ShowFlange2"
+        ]
+      },
+      {
+        "id": "turning_vanes",
+        "role": "turning_vane",
+        "host_layer": "casing",
+        "module": "shared:details",
+        "generator": "turning_vanes",
+        "parameters": [
+          "VaneDesign"
         ]
       }
     ]

@@ -1,7 +1,7 @@
 {
   "id": "branch_tap_shoe_damper",
   "label": "Tap - Shoe (45 deg Entry), with Damper",
-  "description": "SMACNA 14-14 P: rectangular main and branch, 45 degree entry with a damper (loss only, the damper is not drawn). A manual choice: never selected automatically.",
+  "description": "SMACNA 14-14 P: rectangular main and branch, 45 degree entry with a damper (the damper is drawn as a feature). A manual choice: never selected automatically.",
   "category": "junction",
   "topology": "branch",
   "family": [
@@ -180,6 +180,16 @@
           "ShowFlangeRunA",
           "ShowFlangeRunB",
           "ShowFlangeBranch"
+        ]
+      },
+      {
+        "id": "tap_damper",
+        "role": "damper_blade",
+        "host_layer": "casing",
+        "module": "shared:details",
+        "generator": "tap_damper",
+        "parameters": [
+          "TapHeight"
         ]
       }
     ]

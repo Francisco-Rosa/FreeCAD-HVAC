@@ -2115,6 +2115,12 @@ class TaskPanelSizeDucts:
         ("FixedHeight", "Fixed Height"),
         ("FixedWidth", "Fixed Width"),
     ]
+    FRICTION_MODELS = [
+        ("DarcyAltshulTsal", "Darcy-Weisbach (Altshul-Tsal)"),
+        ("DarcyColebrook", "Darcy-Weisbach (Colebrook)"),
+        ("Table", "Friction chart (CSV)"),
+        ("Expression", "Expression"),
+    ]
 
     def __init__(self, network_obj):
         self.network_obj = network_obj
@@ -2153,6 +2159,7 @@ class TaskPanelSizeDucts:
         self._loadFromNetwork()
         self.sizing_method_combo.currentIndexChanged.connect(self._refreshParameterVisibility)
         self.rectangular_sizing_mode_combo.currentIndexChanged.connect(self._refreshParameterVisibility)
+        self.friction_model_combo.currentIndexChanged.connect(self._refreshParameterVisibility)
         self._refreshParameterVisibility()
 
     def _buildParametersGroup(self):
@@ -2247,8 +2254,58 @@ class TaskPanelSizeDucts:
         self.size_rounding_increment.setSingleStep(5.0)
         self.size_rounding_increment.setSuffix(" mm")
         grid.addWidget(self.size_rounding_increment, row, 1)
+        row += 1
+
+        # The network's friction model (also used by Calculate Airflow): a formula, a chart file or an expression.
+        grid.addWidget(QtWidgets.QLabel(translate("HVAC_SizeDucts", "Friction model:")), row, 0)
+        self.friction_model_combo = QtWidgets.QComboBox()
+        for value, label in self.FRICTION_MODELS:
+            self.friction_model_combo.addItem(translate("HVAC_SizeDucts", label), value)
+        grid.addWidget(self.friction_model_combo, row, 1)
+        row += 1
+
+        self.friction_table_label = QtWidgets.QLabel(translate("HVAC_SizeDucts", "Friction chart (CSV):"))
+        grid.addWidget(self.friction_table_label, row, 0)
+        self.friction_table_row = QtWidgets.QWidget()
+        table_layout = QtWidgets.QHBoxLayout(self.friction_table_row)
+        table_layout.setContentsMargins(0, 0, 0, 0)
+        self.friction_table_file = QtWidgets.QLineEdit()
+        self.friction_table_file.setToolTip(
+            translate(
+                "HVAC_SizeDucts",
+                "A header row with diameter_mm, velocity_ms (or flow_lps) and pa_per_m, then one row per chart point",
+            )
+        )
+        browse = QtWidgets.QPushButton(translate("HVAC_SizeDucts", "Browse..."))
+        browse.clicked.connect(self._browseFrictionTable)
+        table_layout.addWidget(self.friction_table_file)
+        table_layout.addWidget(browse)
+        grid.addWidget(self.friction_table_row, row, 1)
+        row += 1
+
+        self.friction_expression_label = QtWidgets.QLabel(translate("HVAC_SizeDucts", "Friction expression:"))
+        grid.addWidget(self.friction_expression_label, row, 0)
+        self.friction_expression = QtWidgets.QLineEdit()
+        self.friction_expression.setToolTip(
+            translate(
+                "HVAC_SizeDucts",
+                "Friction rate in Pa/m in Q (m3/s), V (m/s), Dh (m), A (m2), eps (m), rho (kg/m3), nu (m2/s), Re; "
+                "+ - * / **, sqrt, log, log10, exp, abs, min, max",
+            )
+        )
+        grid.addWidget(self.friction_expression, row, 1)
 
         return group
+
+    def _browseFrictionTable(self):
+        path, _filter = QtWidgets.QFileDialog.getOpenFileName(
+            None,
+            translate("HVAC_SizeDucts", "Friction chart"),
+            self.friction_table_file.text(),
+            translate("HVAC_SizeDucts", "CSV files (*.csv);;All files (*)"),
+        )
+        if path:
+            self.friction_table_file.setText(path)
 
     def _loadFromNetwork(self):
         net = self.network_obj
@@ -2273,6 +2330,12 @@ class TaskPanelSizeDucts:
         self.target_aspect_ratio.setValue(float(getattr(net, "TargetAspectRatio", 2.0) or 2.0))
         self.size_rounding_increment.setValue(float(getattr(net, "SizeRoundingIncrement", 10.0) or 10.0))
 
+        model = str(getattr(net, "FrictionModel", "DarcyAltshulTsal") or "DarcyAltshulTsal")
+        idx = self.friction_model_combo.findData(model)
+        self.friction_model_combo.setCurrentIndex(idx if idx >= 0 else 0)
+        self.friction_table_file.setText(str(getattr(net, "FrictionTableFile", "") or ""))
+        self.friction_expression.setText(str(getattr(net, "FrictionExpression", "") or ""))
+
     def _refreshParameterVisibility(self):
         """Only show the parameters relevant to the currently-picked SizingMethod/RectangularSizingMode."""
         method = self.sizing_method_combo.currentData()
@@ -2290,6 +2353,12 @@ class TaskPanelSizeDucts:
         for widget in (self.target_aspect_ratio_label, self.target_aspect_ratio):
             widget.setVisible(show_aspect_ratio)
 
+        friction = self.friction_model_combo.currentData()
+        for widget in (self.friction_table_label, self.friction_table_row):
+            widget.setVisible(friction == "Table")
+        for widget in (self.friction_expression_label, self.friction_expression):
+            widget.setVisible(friction == "Expression")
+
     def _applyParametersToNetwork(self):
         net = self.network_obj
         net.SizingMethod = self.sizing_method_combo.currentData()
@@ -2302,6 +2371,10 @@ class TaskPanelSizeDucts:
         net.RectangularSizingMode = self.rectangular_sizing_mode_combo.currentData()
         net.TargetAspectRatio = self.target_aspect_ratio.value()
         net.SizeRoundingIncrement = self.size_rounding_increment.value()
+        if "FrictionModel" in net.PropertiesList:
+            net.FrictionModel = self.friction_model_combo.currentData()
+            net.FrictionTableFile = self.friction_table_file.text().strip()
+            net.FrictionExpression = self.friction_expression.text().strip()
 
     def _runSizing(self):
         from ..core.DuctSizer import DuctSizer

@@ -31,6 +31,8 @@ one inlet AND more than one outlet has no single trunk to break down
 against, so it falls back to a flat coefficient.
 """
 
+import math
+
 
 def loss_through_generic(context):
     # A generic "through" type covers straight/offset/bend families in one
@@ -194,14 +196,82 @@ def loss_ahu(context):
 
 
 def loss_equipment_connection(context):
-    # Where a network meets its equipment (an AHU, a fan; ROADMAP 6.5): only
-    # the fan connection's system effect (SMACNA 14-11 F to J, 14-16 I). The
-    # equipment's own internal pressure drop belongs to the HVACEquipment
-    # object, which adds it to each network's worst path.
+    # Where a network meets its equipment (an AHU, a fan; ROADMAP 6.5): the
+    # fan connection's system effect where air leaves the unit (SMACNA 14-11
+    # F to J, 14-16 I), and the transition from the duct to the port where
+    # air enters it (_equipment_inlet_transition_loss). The equipment's own
+    # internal pressure drop belongs to the HVACEquipment object, which adds
+    # it to each network's worst path.
     api = context["loss_api"]
     collar = api.terminal_component_loss(_with_properties(context, LossCoefficient=0.0))
+    inlet = _equipment_inlet_transition_loss(context)
+    if inlet is not None:
+        return api.sum_losses(collar, inlet)
     fan = api.fan_connection_loss(context)
     return api.sum_losses(collar, fan)
+
+
+def _equipment_inlet_transition_loss(context):
+    """
+    Air entering a unit through an equipment port of another size or shape:
+    the transition the geometry draws from the duct to the port, read as a
+    transition (SMACNA 14-11 / 14-12) at the included TransitionAngle, then
+    referred to the duct's velocity. None when air leaves the unit here,
+    there is no equipment port, or the port is the duct's own section.
+    """
+    hvac, api = context.get("hvac_api"), context["loss_api"]
+    port = context.get("equipment_port")
+    if hvac is None or not port:
+        return None
+    ports = list(hvac.connected_ports(context))
+    if len(ports) != 1 or ports[0].get("flow_into_junction") is not True:
+        return None
+    duct = ports[0]
+    a_duct, a_port = float(hvac.port_area(duct)), float(hvac.port_area(port))
+    if a_duct <= 0.0 or a_port <= 0.0:
+        return None
+    same_shape = hvac.port_profile(duct) == hvac.port_profile(port)
+    if same_shape and abs(a_duct - a_port) <= 0.01 * a_duct:
+        return None
+
+    # The transition's length at the included TransitionAngle (the larger side change sets it).
+    def extents(p):
+        if hvac.port_profile(p) == "Circular":
+            return float(hvac.port_diameter(p)), float(hvac.port_diameter(p))
+        return float(hvac.port_width(p)), float(hvac.port_height(p))
+
+    (w_duct, h_duct), (w_port, h_port) = extents(duct), extents(port)
+    properties = context.get("properties") or {}
+    angle = min(max(float(properties.get("TransitionAngle", 0.0) or 20.0), 5.0), 150.0)
+    change = max(abs(w_duct - w_port), abs(h_duct - h_port))
+    length = max(change / (2.0 * math.tan(math.radians(angle) / 2.0)), 1.0)
+    if not same_shape:
+        length = max(length, 0.5 * max(w_duct, h_duct))
+
+    velocity = float(duct.get("velocity_ms", 0.0) or 0.0)
+    unit_side = dict(port)
+    unit_side.update(
+        {
+            "edge_key": "__equipment_port__",
+            "position": list(duct.get("position") or (0.0, 0.0, 0.0)),
+            "direction": [-float(c) for c in duct["direction"]],
+            "flow_into_junction": False,
+            "velocity_ms": velocity * a_duct / a_port,
+            "flow_rate_lps": duct.get("flow_rate_lps", 0.0),
+        }
+    )
+    transition = api.transition_loss(
+        dict(context, connected_ports=[duct, unit_side], properties=dict(properties, TransitionLength=length))
+    )
+    if transition.status == api.UNSUPPORTED or not transition.paths:
+        return None
+    # The transition is referenced to the port's velocity. terminal_component_loss refers a K at a
+    # neck to the duct; a round neck of the port's own area has exactly the port's velocity.
+    k_port = transition.paths[0].loss_coefficient
+    if k_port <= 0.0:
+        return None
+    neck_mm = 1000.0 * math.sqrt(4.0 * a_port / math.pi)
+    return api.terminal_component_loss(_with_properties(context, LossCoefficient=k_port, NeckSize=neck_mm))
 
 
 def loss_register_generic(context):

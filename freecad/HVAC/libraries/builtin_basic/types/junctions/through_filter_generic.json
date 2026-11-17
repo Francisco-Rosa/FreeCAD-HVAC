@@ -104,6 +104,23 @@
       }
     }
   ],
+  "construction": {
+    "features": [
+      {
+        "id": "filter_media",
+        "role": "filter_media",
+        "host_layer": "shape",
+        "module": "shared:details",
+        "generator": "filter_media",
+        "parameters": [
+          "BoxLength",
+          "BoxWidth",
+          "BoxHeight",
+          "CollarLength"
+        ]
+      }
+    ]
+  },
   "geometry": {
     "backend": "generator",
     "module": "shared:inline",

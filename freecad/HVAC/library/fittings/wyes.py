@@ -249,8 +249,9 @@ def _wye_split_crosses_curve(api, main, branch_a, branch_b):
     a curved side: always on a round duct, on an oval when the cut falls in
     one of its rounded ends, never on a rectangle.
 
-    Where it does, the walls of the two halves overlap past the cut and meet
-    at a grazing angle, which OpenCascade's booleans cannot fuse reliably.
+    Where it does, the walls of the two halves would overlap past the cut and
+    meet at a grazing angle, which OpenCascade's booleans cannot fuse
+    reliably; _wye_main_split_faces then narrows the strip past the cut.
     """
     profile = api.port_profile(main)
     if profile == "Circular":
@@ -263,13 +264,24 @@ def _wye_split_crosses_curve(api, main, branch_a, branch_b):
     return cut_from_centre >= max(width - height, 0.0) / 2.0 - api.EPS
 
 
-def _wye_main_split_faces(api, main_center, branch_a, branch_b, offset=0.0):
+# How far (as a share of the wall offset) the strip past the cut is grown on a curved side.
+_WYE_STRIP_GROWTH = 0.5
+
+
+def _wye_main_split_faces(api, main_center, branch_a, branch_b, offset=0.0, curved=False):
     """
     Split the main profile horizontally in proportion to the branches.
 
     With an `offset` each half is cut from the grown profile, so a half of a
     wall envelope has the same corners as its air half (offsetting the air
     half's wire can add a corner where the arc meets the cut).
+
+    `curved` (the cut crosses a curved side, _wye_split_crosses_curve): the
+    strip each grown half reaches past the cut is taken from the profile
+    grown by half the offset only. Grown fully, the two halves would share
+    the same curved outer face along the strip and meet the other half's
+    bend at a grazing angle, which a plain fuse cannot handle; narrowed,
+    the strip lies inside the other half's wall wherever both are present.
     """
     main_profile = api.profile_from_port(main_center)
     _, horizontal, _vertical, main_dir = api.make_profile_frame(
@@ -298,6 +310,30 @@ def _wye_main_split_faces(api, main_center, branch_a, branch_b, offset=0.0):
     low, high = api.profile_projection_bounds(main_profile, horizontal)
     extent = high - low
     grown = api.profile_from_port(main_center, offset)
+    if curved:
+        # Each grown half up to the cut, plus a strip past the cut from the half-grown profile.
+        at_cut_positive, at_cut_negative = api.split_profile_face_by_extent(
+            grown, horizontal, (extent * ratio + offset) / (extent + 2.0 * offset)
+        )
+        g = _WYE_STRIP_GROWTH * offset
+        narrow = api.profile_from_port(main_center, g)
+        strip_positive, _ = api.split_profile_face_by_extent(
+            narrow, horizontal, (extent * ratio + g + offset) / (extent + 2.0 * g)
+        )
+        _, strip_negative = api.split_profile_face_by_extent(
+            narrow, horizontal, (extent * ratio + g - offset) / (extent + 2.0 * g)
+        )
+
+        def merged(face, strip):
+            faces = api.refine(api.fuse(face, strip)).Faces
+            if len(faces) != 1:
+                raise RuntimeError("Wye split half did not merge into one face")
+            return faces[0]
+
+        return {
+            id(branch_a): merged(at_cut_positive, strip_positive),
+            id(branch_b): merged(at_cut_negative, strip_negative),
+        }
     positive, _ = api.split_profile_face_by_extent(
         grown, horizontal, (extent * ratio + 2.0 * offset) / (extent + 2.0 * offset)
     )
@@ -418,7 +454,7 @@ def _wye_branch_end_wire(api, route, start_wire, offset):
 # The order a radius wye's pieces are fused in. OCC booleans on swept solids
 # that share seams depend on the order; this one was chosen with the smoke run
 # (tools/geometry_smoke.py) as the one that builds the most cases.
-_WYE_RADIUS_FUSE_ORDER = ("main", "split_a", "split_b", "bend_a", "bend_b", "trim_a", "trim_b")
+_WYE_RADIUS_FUSE_ORDER = ("split_a", "split_b", "bend_a", "bend_b", "main", "trim_a", "trim_b")
 
 
 def _wye_radius_layout(context):
@@ -450,18 +486,13 @@ def build_wye_radius(context):
     """Build a radiused wye from a horizontally divided main profile."""
     api = context["hvac_api"]
     ports, main_center, routes, trims = _wye_radius_layout(context)
-    walls_unsupported = _wye_split_crosses_curve(api, ports[0], ports[1], ports[2])
+    split_crosses_curve = _wye_split_crosses_curve(api, ports[0], ports[1], ports[2])
 
     def envelope(offset):
-        if offset > api.EPS and walls_unsupported:
-            raise ValueError(
-                "A radius wye cannot have a wall where its split crosses a curved side of the main duct "
-                "(a round duct, or the rounded ends of an oval): use the mitered wye"
-            )
         # Sweep each split half of the main profile into its branch tangent.
         split_sweeps = []
         branch_sweeps = []
-        grown_faces = _wye_main_split_faces(api, main_center, ports[1], ports[2], offset)
+        grown_faces = _wye_main_split_faces(api, main_center, ports[1], ports[2], offset, split_crosses_curve)
         for branch, _branch_index, split_face, route in routes:
             main_tangent = route["ports"][1]
             main_tangent_position = api.port_position(main_tangent)
@@ -544,7 +575,9 @@ def build_wye_radius(context):
             effective_radii = ", ".join("{:.3f}".format(route["radius"]) for _, _, _, route in routes)
             raise RuntimeError(
                 "Wye geometry could not be fused into one valid solid "
-                "(requested radius {:.3f} mm; effective branch radii {} mm)".format(requested_radius, effective_radii)
+                "(requested radius {:.3f} mm; effective branch radii {} mm): use the mitered wye".format(
+                    requested_radius, effective_radii
+                )
             )
         return shape
 

@@ -377,6 +377,13 @@ class HVACLossAPI:
             # type used for an offset (the generic through fitting) names it
             # TransitionLength. Same helper as the geometry's derived values.
             length_value = properties.get("OffsetLength", properties.get("TransitionLength", 0.0))
+            if "OffsetRadius" in properties:
+                # A radiussed offset left at length 0 is made as long as its arcs need (the geometry's rule).
+                length_value = transition_fittings.radiussed_body_length(
+                    HVACLibraryAPI,
+                    list(ports),
+                    {"TransitionLength": length_value, "TransitionRadius": properties.get("OffsetRadius")},
+                )
             dims = transition_fittings.offset_dimensions(
                 HVACLibraryAPI, list(ports), {"TransitionLength": length_value}
             )

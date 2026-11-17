@@ -1057,3 +1057,17 @@ def test_offset_loss_without_a_length_uses_the_duct_size_like_the_geometry():
 def test_radiussed_offset_is_an_approximation():
     result = api.offset_loss(_offset_context({"OffsetLength": 300.0, "OffsetRadius": 200.0}))
     assert result.status == api.APPROXIMATION
+
+
+def test_radiussed_offset_without_a_length_reads_the_length_its_arcs_need():
+    # The geometry makes it as long as its arcs need; the loss reads the same angle.
+    from freecad.HVAC.library.fittings import transitions as transition_fittings
+
+    context = _offset_context({"OffsetLength": 0.0, "OffsetRadius": 400.0})
+    length = transition_fittings.radiussed_body_length(
+        geometry_api, context["connected_ports"], {"TransitionLength": 0.0, "TransitionRadius": 400.0}
+    )
+    assert length > 200.0
+    unset = api.offset_loss(context)
+    explicit = api.offset_loss(_offset_context({"OffsetLength": length, "OffsetRadius": 400.0}))
+    assert _paths_by_edge(unset) == pytest.approx(_paths_by_edge(explicit))

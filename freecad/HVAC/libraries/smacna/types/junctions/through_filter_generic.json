@@ -181,6 +181,19 @@
           "ShowFlange1",
           "ShowFlange2"
         ]
+      },
+      {
+        "id": "filter_media",
+        "role": "filter_media",
+        "host_layer": "casing",
+        "module": "shared:details",
+        "generator": "filter_media",
+        "parameters": [
+          "BoxLength",
+          "BoxWidth",
+          "BoxHeight",
+          "CollarLength"
+        ]
       }
     ]
   },

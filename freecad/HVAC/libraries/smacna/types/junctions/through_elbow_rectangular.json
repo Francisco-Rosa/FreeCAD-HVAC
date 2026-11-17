@@ -31,9 +31,12 @@
       "name": "SplitterVanes",
       "prop_type": "App::PropertyInteger",
       "group": "Parameters",
-      "description": "Number of splitter vanes in the elbow, 0 to 3. Used for the loss; the vanes are not drawn",
+      "description": "Number of splitter vanes in the elbow, 0 to 3. Drawn as a feature",
       "default": 0,
-      "validation": {"minimum": 0, "maximum": 3}
+      "validation": {
+        "minimum": 0,
+        "maximum": 3
+      }
     },
     {
       "name": "Thickness",
@@ -110,6 +113,17 @@
           "FlangeThickness",
           "ShowFlange1",
           "ShowFlange2"
+        ]
+      },
+      {
+        "id": "splitter_vanes",
+        "role": "splitter_vane",
+        "host_layer": "casing",
+        "module": "shared:details",
+        "generator": "splitter_vanes",
+        "parameters": [
+          "CenterlineRadius",
+          "SplitterVanes"
         ]
       }
     ]
