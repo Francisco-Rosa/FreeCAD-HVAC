@@ -186,6 +186,59 @@ def test_vav_box_coefficient_and_fixed_pressure_drop():
 
 
 # ----------------------------------------------------------------------------
+# Inline devices: silencer, filter, coil, fire damper, access door, flex connector
+# ----------------------------------------------------------------------------
+
+
+def _inline_ports():
+    # Velocity pressure at 4 m/s: 1.2 * 16 / 2 = 9.6 Pa.
+    out = _port("OUT", False, velocity_ms=4.0)
+    out["direction"] = [1.0, 0.0, 0.0]
+    inlet = _port("IN", True, velocity_ms=4.0)
+    inlet["direction"] = [-1.0, 0.0, 0.0]
+    return [inlet, out]
+
+
+@pytest.mark.parametrize("condition, drop", [("Clean", 80.0), ("Mid-life", 165.0), ("Final", 250.0)])
+def test_filter_pressure_drop_follows_its_condition(condition, drop):
+    properties = {"CleanPressureDrop": 80.0, "FinalPressureDrop": 250.0, "FilterCondition": condition}
+    assert losses.filter_pressure_drop(properties) == pytest.approx(drop)
+    result = losses.loss_inline_device(_context(_inline_ports(), properties))
+    assert result.status == api.EXACT
+    assert _k(result) == pytest.approx(drop / 9.6)
+    assert result.paths[0].source == "fixed_pressure_drop"
+
+
+def test_filter_final_drop_below_the_clean_one_is_taken_as_the_clean_one():
+    properties = {"CleanPressureDrop": 100.0, "FinalPressureDrop": 50.0, "FilterCondition": "Final"}
+    assert losses.filter_pressure_drop(properties) == pytest.approx(100.0)
+
+
+def test_filter_condition_must_be_known():
+    with pytest.raises(ValueError):
+        losses.filter_pressure_drop({"CleanPressureDrop": 80.0, "FilterCondition": "Dusty"})
+
+
+def test_inline_device_in_fixed_pressure_drop_mode_ignores_its_coefficient():
+    properties = {"LossMode": "Fixed pressure drop", "PressureDrop": 48.0, "LossCoefficient": 3.0}
+    assert _k(losses.loss_inline_device(_context(_inline_ports(), properties))) == pytest.approx(5.0)
+
+
+def test_inline_device_uses_its_coefficient():
+    properties = {"LossMode": "Coefficient", "PressureDrop": 48.0, "LossCoefficient": 0.2}
+    result = losses.loss_inline_device(_context(_inline_ports(), properties))
+    assert result.status == api.EXACT
+    assert _k(result) == pytest.approx(0.2)
+    assert result.paths[0].source == "inline_device"
+
+
+def test_inline_device_with_no_coefficient_has_no_loss_of_its_own():
+    result = losses.loss_inline_device(_context(_inline_ports(), {"LossCoefficient": 0.0}))
+    assert result.status != api.UNSUPPORTED
+    assert sum(path.loss_coefficient for path in result.paths) == pytest.approx(0.0)
+
+
+# ----------------------------------------------------------------------------
 # Entry and exit types: each loss function fixes the shape the table is read for
 # ----------------------------------------------------------------------------
 

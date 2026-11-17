@@ -1,0 +1,119 @@
+{
+  "id": "through_coil_generic",
+  "label": "Coil - Generic",
+  "category": "junction",
+  "topology": "through",
+  "family": [
+    "through.straight.coil"
+  ],
+  "profiles": [
+    "Circular",
+    "Rectangular",
+    "Oval"
+  ],
+  "selection": {
+    "kind": "inline",
+    "priority": 50
+  },
+  "constraints": {
+    "degree": 2
+  },
+  "properties": [
+    {
+      "name": "Thickness",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Wall thickness. 0 builds the air space as a solid body instead of a hollow shell",
+      "default": 1.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "BoxLength",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Casing length along the duct. 0 uses twice the duct size",
+      "default": 0.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "BoxWidth",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Casing width. 0 uses 1.5 times the duct size",
+      "default": 0.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "BoxHeight",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Casing height. 0 uses 1.5 times the duct size",
+      "default": 0.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "CollarLength",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Length of the inlet and outlet collars. 0 uses a quarter of the duct size",
+      "default": 0.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "LossMode",
+      "prop_type": "App::PropertyEnumeration",
+      "group": "Parameters",
+      "description": "How the loss is given: a coefficient K, or a fixed pressure drop from the maker's data",
+      "default": "Fixed pressure drop",
+      "validation": {
+        "enum": [
+          "Coefficient",
+          "Fixed pressure drop"
+        ]
+      }
+    },
+    {
+      "name": "LossCoefficient",
+      "prop_type": "App::PropertyFloat",
+      "group": "Parameters",
+      "description": "Pressure-loss coefficient K, referenced to the connecting duct's own velocity",
+      "default": 3.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "PressureDrop",
+      "prop_type": "App::PropertyFloat",
+      "group": "Parameters",
+      "description": "Air-side pressure drop in Pa at the design flow, used when LossMode is Fixed pressure drop (a typical value: replace with the maker's data)",
+      "default": 120.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    }
+  ],
+  "geometry": {
+    "backend": "generator",
+    "module": "shared:inline",
+    "function": "build_vav_box"
+  },
+  "connection_lengths": {
+    "module": "shared:inline",
+    "function": "measure_vav_box"
+  },
+  "loss": {
+    "module": "shared:losses",
+    "function": "loss_inline_device"
+  }
+}

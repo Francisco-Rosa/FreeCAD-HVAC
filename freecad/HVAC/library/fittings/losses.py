@@ -235,6 +235,48 @@ def loss_vav_generic(context):
     return context["loss_api"].inline_device_loss(context)
 
 
+# FilterCondition -> where between the clean and the final pressure drop the filter is taken.
+_FILTER_CONDITIONS = {"clean": 0.0, "mid-life": 0.5, "final": 1.0}
+
+
+def filter_pressure_drop(properties):
+    """
+    A filter's pressure drop in Pa for its FilterCondition: the clean drop,
+    the final (change-out) drop, or halfway between them at mid-life.
+    """
+    clean = max(float(properties.get("CleanPressureDrop", 0.0) or 0.0), 0.0)
+    final = max(float(properties.get("FinalPressureDrop", 0.0) or 0.0), clean)
+    condition = str(properties.get("FilterCondition", "") or "mid-life").strip().lower()
+    if condition not in _FILTER_CONDITIONS:
+        raise ValueError("unknown FilterCondition '{}'".format(properties.get("FilterCondition")))
+    return clean + (final - clean) * _FILTER_CONDITIONS[condition]
+
+
+def loss_inline_device(context):
+    """
+    Loss of an inline device (silencer, filter, coil, fire damper, access
+    door, flexible connector), from whichever of its own properties it has:
+
+    - FilterCondition: the filter's pressure drop at that condition
+      (filter_pressure_drop), as a fixed pressure drop;
+    - LossMode "Fixed pressure drop": the PressureDrop given;
+    - a LossCoefficient above 0: that K at the duct's velocity;
+    - otherwise no loss of its own: the duct carries straight through, read
+      as a transition (no loss for an unchanged section).
+    """
+    api = context["loss_api"]
+    properties = context.get("properties") or {}
+    if "FilterCondition" in properties:
+        # An unknown FilterCondition raises: the type-def's enum rules it out.
+        drop = filter_pressure_drop(properties)
+        return api.fixed_pressure_drop_loss(_with_properties(context, PressureDrop=drop))
+    if _fixed_pressure_drop(context):
+        return api.fixed_pressure_drop_loss(context)
+    if float(properties.get("LossCoefficient", 0.0) or 0.0) > 0.0:
+        return api.inline_device_loss(context)
+    return api.transition_loss(context)
+
+
 # ----------------------------------------------------------------------
 # Table-driven terminal and inline fittings (SMACNA Tables 14-15 to
 # 14-18). Each reads its shape from the type's own properties -- see the

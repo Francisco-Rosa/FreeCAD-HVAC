@@ -26,6 +26,45 @@ only to `HVACLibraryAPI` / `HVACLossAPI`.
 | 9 | Done, owner checked 13 and 17 November | Done, not tried in the GUI: **layer visibility (item 2).** `DuctNetwork` has `ShowLayer_<Role>` for every layer role and `ShowFeatures` (group `HVAC Display`, `Prop_NoRecompute`); `_component_appearance` draws a layer whose roles are all hidden, and every feature when `ShowFeatures` is off, fully transparent (they stay pickable, as decision 7 accepted); changing one re-renders the network's segments and components at once (`DuctNetwork.refreshAppearance`). Owner (14 November 2026): the switches are out of place in Network Defaults, so they were removed there. `HVAC_LayerVisibility` run from the menu, context menu or Tasks pane opens `TaskPanelLayerVisibility` (one checkbox per layer role plus features, "Show All", applied at once); its toolbar button is a drop-down with the same switches (`Toolbar.attach_dropdown`, attached after each workbench activation; checked in FreeCAD 1.1.4 offscreen, not yet by hand). Toolbar, menu and context menu share one list: Renumber sits with the network commands, Layer Visibility with Select All Segments / Components. Tests: `tests/test_layer_visibility.py` (the rules only). Done, not tried in the GUI: **result tooltips (item 1).** While the Calculate Airflow results panel is open, `AirflowResultObserver` listens to mouse moves (never consuming them); after the mouse rests 350 ms it ray-picks its own port planes and segment boxes, or else asks the view for the duct or fitting under the cursor, and shows a `QToolTip`: a duct's flow, velocity, friction rate, friction / fitting / total loss and cumulative pressure; a port's flow and static pressure plus velocity, K, pressure drop, loss status and path on legs with a fitting result; a fitting's legs one per line. Text builders in `core/_component_results.py` (`segment_tooltip`, `port_tooltip`, `component_tooltip`), tested in `tests/test_result_tooltips.py`. Segments only carry a cumulative pressure, so "static pressure at both ends" is not shown. Fixed after the owner's first GUI check: the tooltip closed after about a second (shown with no widget, so Qt closed it on the next mouse event, and every small move re-picked); a held-open `QToolTip` still closed after about a second in the GUI (owner, 13 November 2026), so the observer now shows its own tooltip-styled popup (a frameless `Qt.ToolTip` `QLabel`), which only it hides: when the cursor moves more than 10 px from where the popup opened (also checked every 200 ms, so leaving the 3D view closes it) or the results panel closes. Result planes and boxes gave no tooltip: the pick ran on the overlay subgraph alone, which has no camera; it now picks the whole scene with pick-all and takes the first overlay hit. |
 | 10 | Done, owner checked 17 November | Custom fittings, design 6.3 (section 6). Open: save a custom fitting as a library type (owner: not now). |
 | 11 | Done, owner checked 17 November; freeze tagged `api-freeze-1` | Design 6.4 and 6.5 (section 6): stable edge keys, single-form schema, public API lists, frozen context keys, `requires_api`, terminal function, equipment. `CHANGELOG.md` has the compatibility policy. Left for after the freeze: the gaps of 6.4 item 5. |
+| After the freeze | Started | 6.4 item 5. Done (18 November 2026): **inline devices**, in both libraries, each a manual choice on a straight node (`through.straight.<device>`): `through_silencer_generic` (casing in the duct's own section grown by `CasingGrowth`, collars), `through_filter_generic` and `through_coil_generic` (rectangular housing, the VAV box builder), `through_fire_damper_generic` (sleeve; retaining frame and curtain pack as the `fire_damper_frame` feature), `through_access_door_generic` (sleeve; door panel and handle as the `access_door` feature, `DoorSide`), `through_flex_connector_generic` (sleeve bulging by `Bulge`). Geometry in `fittings/devices.py`. One loss function, `loss_inline_device`: a filter's drop by `FilterCondition` (clean, mid-life, final, from `CleanPressureDrop` / `FinalPressureDrop`), else `LossMode` fixed drop, else K, else no loss of its own; silencer, filter and coil default to typical pressure drops (50, 80 to 250, 120 Pa) the descriptions say to replace with the maker's data. Tests in `tests/test_loss_api_devices.py`. All 48 builds valid in FreeCAD 1.1.4 (both libraries, every profile), features placed outside the wall (checked by bounding box). Not seen in the GUI. |
+
+**Pending items (18 November 2026).** Everything still open in this plan, in one place.
+
+*Needs the owner*
+- GUI check of the inline devices (above).
+- Which "after the freeze" gap comes next (list below).
+- Deferred by the owner: saving a custom fitting as a library type.
+
+*After the freeze (6.4 item 5)*
+- Fan curves and the fan's operating point.
+- Duct leakage.
+- Bill of quantities.
+- Imperial units in the analysis.
+- Design first: looped networks, thermal calculations, acoustic calculations.
+
+*Known geometry defects and limits*
+- Radius wye: no wall on round ducts (refused; the mitered wye is the automatic choice), and the tall oval wye and bullhead do not fuse.
+- `through_offset_radiussed` refuses offsets too steep for its smallest radius (a parameter limit; 6 smoke builds).
+- Not drawn, loss only: turning vanes and splitter vanes, the SMACNA tap dampers and the extractor.
+- Filter and coil are plain housings (no media or coil block drawn).
+
+*Loss coverage gaps*
+- 14-14 I to L (wyes whose collar leaves the run at 45 degrees: no type builds an inclined collar) and 14-14 M (conical main).
+- Crosses have no SMACNA table: decomposed `manifold_loss`, an approximation.
+- No converging table for damper or extractor branch styles (plain table used, flagged).
+- AHU fan connection: supply only; 14-16 G and H not wired.
+- Static regain applies only at sizing-section boundaries (the simple reading of Stage 8).
+- Not digitised: charts 14-3 (roughness correction), 14-4 (flex duct), 14-5 (density), and the nominal-size tables 14-2 to 14-5 (only the equivalent-diameter equation).
+
+*Smaller open items*
+- No UI to pick a friction CSV beyond the property editor (Stage 8).
+- `circular_flex` not built in FreeCAD (same generator as `circular_generic`).
+- Transition labels not checked against the SMACNA Duct Construction Standards (not in `reference/`).
+- Draft snapping onto equipment snap points not tried by script (the owner's GUI check covered the port panel).
+
+*Testing*
+- Unit tests: 2226 pass on Linux. The 20 failures once seen on the Windows machine were never investigated.
+- Smoke run, 18 November 2026: 651 valid / 32 skipped / 10 known errors (the radius wyes and steep radiussed offsets above). The 48 inline device builds are new; nothing else moved.
 
 Differences from the plan as written below:
 

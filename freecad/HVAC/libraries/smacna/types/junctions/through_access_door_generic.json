@@ -1,0 +1,205 @@
+{
+  "id": "through_access_door_generic",
+  "label": "Access Door - Generic",
+  "category": "junction",
+  "topology": "through",
+  "family": [
+    "through.straight.access_door"
+  ],
+  "profiles": [
+    "Circular",
+    "Rectangular",
+    "Oval"
+  ],
+  "selection": {
+    "kind": "inline",
+    "priority": 50
+  },
+  "constraints": {
+    "degree": 2
+  },
+  "properties": [
+    {
+      "name": "Thickness",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Sheet metal thickness. 0 builds the air space as a solid body instead of a hollow shell",
+      "default": 0.8,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "InsulationThickness",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Insulation thickness wrapped around the outside of the fitting; 0 disables insulation",
+      "default": 0.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "BodyLength",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Sleeve length along the duct. 0 uses the duct size, at least 400 mm",
+      "default": 0.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "DoorWidth",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Door size along the duct. 0 fills the sleeve less 50 mm at each end",
+      "default": 0.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "DoorHeight",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Door size across the duct face. 0 uses three quarters of the face",
+      "default": 0.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "DoorThickness",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Thickness of the door panel",
+      "default": 20.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "DoorSide",
+      "prop_type": "App::PropertyEnumeration",
+      "group": "Options",
+      "description": "Side of the duct the door is on: Right / Left along the section's width, Top / Bottom along its height",
+      "default": "Right",
+      "validation": {
+        "enum": [
+          "Right",
+          "Left",
+          "Top",
+          "Bottom"
+        ]
+      }
+    },
+    {
+      "name": "LossCoefficient",
+      "prop_type": "App::PropertyFloat",
+      "group": "Parameters",
+      "description": "Pressure-loss coefficient K, referenced to the connecting duct's own velocity. 0: no loss beyond the duct's own",
+      "default": 0.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "FlangeHeight",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Height of the transverse flange at each duct connection",
+      "default": 25.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "FlangeThickness",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Thickness of the transverse flange; 0 draws no flanges",
+      "default": 1.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "ShowFlange1",
+      "prop_type": "App::PropertyBool",
+      "group": "Options",
+      "description": "Include the flange at port 1",
+      "default": true
+    },
+    {
+      "name": "ShowFlange2",
+      "prop_type": "App::PropertyBool",
+      "group": "Options",
+      "description": "Include the flange at port 2",
+      "default": true
+    }
+  ],
+  "construction": {
+    "layers": [
+      {
+        "id": "casing",
+        "roles": [
+          "flow_surface",
+          "structural_shell"
+        ],
+        "default_material_role": "structural_shell",
+        "thickness_property": "Thickness"
+      },
+      {
+        "id": "insulation",
+        "roles": [
+          "thermal_insulation"
+        ],
+        "default_material_role": "thermal_insulation",
+        "thickness_property": "InsulationThickness"
+      }
+    ],
+    "features": [
+      {
+        "id": "transverse_flange",
+        "role": "transverse_joint",
+        "host_layer": "casing",
+        "module": "shared:features",
+        "generator": "transverse_flange",
+        "parameters": [
+          "FlangeHeight",
+          "FlangeThickness",
+          "ShowFlange1",
+          "ShowFlange2"
+        ]
+      },
+      {
+        "id": "access_door",
+        "role": "access_door",
+        "host_layer": "casing",
+        "module": "shared:devices",
+        "generator": "access_door",
+        "parameters": [
+          "BodyLength",
+          "DoorWidth",
+          "DoorHeight",
+          "DoorThickness",
+          "DoorSide"
+        ]
+      }
+    ]
+  },
+  "geometry": {
+    "backend": "generator",
+    "module": "shared:devices",
+    "function": "build_access_door"
+  },
+  "connection_lengths": {
+    "module": "shared:devices",
+    "function": "measure_access_door"
+  },
+  "loss": {
+    "module": "shared:losses",
+    "function": "loss_inline_device"
+  }
+}

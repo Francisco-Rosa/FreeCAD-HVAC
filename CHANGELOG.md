@@ -19,6 +19,10 @@ for in `library.json` (`"requires_api"`) and is refused by any other.
 
 ## Unreleased
 
+- Inline devices in both libraries, each a manual choice on a straight node: silencer, filter (pressure drop by
+  condition: clean, mid-life, final), coil, fire damper (frame and curtain pack drawn as a feature), access door
+  (door panel on a chosen side, a feature) and flexible connector. One loss function, `loss_inline_device`.
+
 - The saddle (conical) tap is offered on lateral tees; side-mounted it reads SMACNA 14-14 C (45 degrees).
 - Face-mounted round tees with the collar rolled 45 degrees (`CollarRoll`) read 14-14 D and F (plain tap) or G and H
   (saddle tap), for a branch square or at 45 degrees to the main.

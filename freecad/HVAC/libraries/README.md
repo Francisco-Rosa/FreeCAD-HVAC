@@ -663,9 +663,14 @@ and also when this table is out of date (regenerate it with
 | builtin_basic | `multiport_generic` | Circular, Rectangular, Oval, Generic | model | `loss_multiport_generic` |
 | builtin_basic | `multiport_marker` | Generic | placeholder | none (marker) |
 | builtin_basic | `multiport_plenum_generic` | Circular, Rectangular, Oval | model | `loss_plenum` |
+| builtin_basic | `through_access_door_generic` | Circular, Rectangular, Oval | inline | `loss_inline_device` |
+| builtin_basic | `through_coil_generic` | Circular, Rectangular, Oval | inline | `loss_inline_device` |
 | builtin_basic | `through_damper_generic` | Circular, Rectangular, Oval | inline | `loss_damper_generic` |
 | builtin_basic | `through_elbow_mitered` | Circular, Rectangular, Oval | model | `loss_elbow_mitered` |
 | builtin_basic | `through_elbow_radius` | Circular, Rectangular, Oval | model | `loss_elbow_generic` |
+| builtin_basic | `through_filter_generic` | Circular, Rectangular, Oval | inline | `loss_inline_device` |
+| builtin_basic | `through_fire_damper_generic` | Circular, Rectangular, Oval | inline | `loss_inline_device` |
+| builtin_basic | `through_flex_connector_generic` | Circular, Rectangular, Oval | inline | `loss_inline_device` |
 | builtin_basic | `through_generic` | Generic | model | `loss_through_generic` |
 | builtin_basic | `through_marker` | Generic | placeholder | none (marker) |
 | builtin_basic | `through_obstruction_generic` | Circular, Rectangular, Oval | inline | `loss_obstruction` |
@@ -673,6 +678,7 @@ and also when this table is out of date (regenerate it with
 | builtin_basic | `through_offset_mitered` | Circular, Rectangular, Oval | model | `loss_offset_generic` |
 | builtin_basic | `through_offset_radiussed` | Circular, Rectangular, Oval | model | `loss_offset_generic` |
 | builtin_basic | `through_plenum_generic` | Circular, Rectangular, Oval | model | `loss_plenum` |
+| builtin_basic | `through_silencer_generic` | Circular, Rectangular, Oval | inline | `loss_inline_device` |
 | builtin_basic | `through_straight_generic` | Circular, Rectangular, Oval | model | `loss_transition_generic` |
 | builtin_basic | `through_transition_concentric` | Circular, Rectangular, Oval | model | `loss_transition_generic`; expansion: `loss_transition_expansion`; contraction: `loss_transition_contraction` |
 | builtin_basic | `through_transition_eccentric` | Circular, Rectangular, Oval | model | `loss_transition_generic`; expansion: `loss_transition_expansion`; contraction: `loss_transition_contraction` |
@@ -725,11 +731,16 @@ and also when this table is out of date (regenerate it with
 | smacna | `multiport_generic` | Circular, Rectangular, Oval, Generic | model | `loss_multiport_generic` |
 | smacna | `multiport_marker` | Generic | placeholder | none (marker) |
 | smacna | `multiport_plenum_generic` | Circular, Rectangular, Oval | model | `loss_plenum` |
+| smacna | `through_access_door_generic` | Circular, Rectangular, Oval | inline | `loss_inline_device` |
+| smacna | `through_coil_generic` | Circular, Rectangular, Oval | inline | `loss_inline_device` |
 | smacna | `through_damper_generic` | Circular, Rectangular, Oval | inline | `loss_damper_generic` |
 | smacna | `through_elbow_generic` | Circular, Rectangular, Oval | model | `loss_elbow_generic` |
 | smacna | `through_elbow_mitered` | Circular, Rectangular, Oval | model | `loss_elbow_mitered` |
 | smacna | `through_elbow_rectangular` | Rectangular | model | `loss_elbow_generic` |
 | smacna | `through_elbow_vaned` | Rectangular | model | `loss_elbow_vaned` |
+| smacna | `through_filter_generic` | Circular, Rectangular, Oval | inline | `loss_inline_device` |
+| smacna | `through_fire_damper_generic` | Circular, Rectangular, Oval | inline | `loss_inline_device` |
+| smacna | `through_flex_connector_generic` | Circular, Rectangular, Oval | inline | `loss_inline_device` |
 | smacna | `through_generic` | Generic | model | `loss_through_generic` |
 | smacna | `through_marker` | Generic | placeholder | none (marker) |
 | smacna | `through_obstruction_generic` | Circular, Rectangular, Oval | inline | `loss_obstruction` |
@@ -737,6 +748,7 @@ and also when this table is out of date (regenerate it with
 | smacna | `through_offset_mitered` | Circular, Rectangular, Oval | model | `loss_offset_generic` |
 | smacna | `through_offset_radiussed` | Circular, Rectangular, Oval | model | `loss_offset_generic` |
 | smacna | `through_plenum_generic` | Circular, Rectangular, Oval | model | `loss_plenum` |
+| smacna | `through_silencer_generic` | Circular, Rectangular, Oval | inline | `loss_inline_device` |
 | smacna | `through_transition_concentric` | Circular, Rectangular, Oval | model | `loss_transition_generic`; expansion: `loss_transition_expansion`; contraction: `loss_transition_contraction` |
 | smacna | `through_transition_eccentric` | Circular, Rectangular, Oval | model | `loss_transition_generic`; expansion: `loss_transition_expansion`; contraction: `loss_transition_contraction` |
 | smacna | `through_transition_offset` | Circular, Rectangular, Oval | model | `loss_transition_generic`; expansion: `loss_transition_expansion`; contraction: `loss_transition_contraction` |
@@ -920,7 +932,9 @@ instead:
   `select_type()` call never returns one.
 
 `freecad/HVAC/libraries/smacna/types/junctions/through_damper_generic.json`
-and `through_vav_generic.json` are the built-in examples.
+and `through_vav_generic.json` are the built-in examples; the silencer,
+filter, coil, fire damper, access door and flexible connector types
+(`through_<device>_generic.json`) follow the same pattern.
 
 ### Adding a new type that's automatically selectable
 
@@ -970,7 +984,8 @@ list), see
 After the topology, two further tokens narrow it down:
 
 - **`family`** -- the specific fitting family within that topology (`tee`,
-  `wye`, `elbow`, `transition`, `damper`, `vav`, `diffuser`, `fan_source`,
+  `wye`, `elbow`, `transition`, `damper`, `vav`, `silencer`, `filter`, `coil`,
+  `fire_damper`, `access_door`, `flex_connector`, `diffuser`, `fan_source`,
   `intake_exhaust`, `terminal`, ...). Omit this token (collapsing to just
   `topology_sub_classification`) when the type is generic across every
   family in its topology rather than one specific fitting -- e.g.
@@ -998,6 +1013,7 @@ Worked examples (from `smacna/types/junctions/`):
 | `branch_tap_straight_damper` | branch | tap | straight_damper (a SMACNA-only variant, manual choice) |
 | `through_damper_generic` | through | damper | generic |
 | `through_vav_generic` | through | vav | generic |
+| `through_fire_damper_generic` | through | fire_damper | generic |
 | `through_generic` / `through_marker` | through | *(all)* | generic / marker |
 | `cross_generic` / `cross_marker` | cross | *(all)* | generic / marker |
 | `multiport_generic` / `multiport_marker` | multiport | *(all)* | generic / marker |

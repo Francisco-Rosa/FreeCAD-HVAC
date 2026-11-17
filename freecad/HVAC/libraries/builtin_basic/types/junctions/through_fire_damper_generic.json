@@ -1,0 +1,101 @@
+{
+  "id": "through_fire_damper_generic",
+  "label": "Fire Damper - Generic",
+  "category": "junction",
+  "topology": "through",
+  "family": [
+    "through.straight.fire_damper"
+  ],
+  "profiles": [
+    "Circular",
+    "Rectangular",
+    "Oval"
+  ],
+  "selection": {
+    "kind": "inline",
+    "priority": 50
+  },
+  "constraints": {
+    "degree": 2
+  },
+  "properties": [
+    {
+      "name": "Thickness",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Wall thickness. 0 builds the air space as a solid body instead of a hollow shell",
+      "default": 1.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "BodyLength",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Sleeve length along the duct. 0 uses half the duct size, at least 300 mm",
+      "default": 0.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "FrameWidth",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "How far the retaining frame stands out from the duct wall",
+      "default": 40.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "FrameDepth",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Depth of the retaining frame along the duct",
+      "default": 50.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "LossCoefficient",
+      "prop_type": "App::PropertyFloat",
+      "group": "Parameters",
+      "description": "Pressure-loss coefficient K, referenced to the connecting duct's own velocity (a curtain held out of the air stream; use the maker's data)",
+      "default": 0.2,
+      "validation": {
+        "minimum": 0.0
+      }
+    }
+  ],
+  "construction": {
+    "features": [
+      {
+        "id": "fire_damper_frame",
+        "role": "fire_damper_frame",
+        "host_layer": "shape",
+        "module": "shared:devices",
+        "generator": "fire_damper_frame",
+        "parameters": [
+          "FrameWidth",
+          "FrameDepth"
+        ]
+      }
+    ]
+  },
+  "geometry": {
+    "backend": "generator",
+    "module": "shared:devices",
+    "function": "build_fire_damper"
+  },
+  "connection_lengths": {
+    "module": "shared:devices",
+    "function": "measure_fire_damper"
+  },
+  "loss": {
+    "module": "shared:losses",
+    "function": "loss_inline_device"
+  }
+}
