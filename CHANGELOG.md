@@ -19,6 +19,11 @@ for in `library.json` (`"requires_api"`) and is refused by any other.
 
 ## Unreleased
 
+- The saddle (conical) tap is offered on lateral tees; side-mounted it reads SMACNA 14-14 C (45 degrees).
+- Face-mounted round tees with the collar rolled 45 degrees (`CollarRoll`) read 14-14 D and F (plain tap) or G and H
+  (saddle tap), for a branch square or at 45 degrees to the main.
+- A conical tap more than 10 degrees from the printed 45 or 90 degrees is reported as an approximation.
+
 ## API freeze 1 (tag `api-freeze-1`, 17 November 2026)
 
 API versions: geometry 3, loss 1, PartScript 3. The library surface above is frozen

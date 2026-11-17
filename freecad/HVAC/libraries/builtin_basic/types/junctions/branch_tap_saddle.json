@@ -5,7 +5,9 @@
   "topology": "branch",
   "family": [
     "branch.tee",
-    "branch.tee.3d"
+    "branch.tee.3d",
+    "branch.lateral_tee",
+    "branch.lateral_tee.3d"
   ],
   "profiles": [
     "Circular",

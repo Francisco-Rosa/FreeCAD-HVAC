@@ -635,6 +635,8 @@ class HVACLossAPI:
                 variant = "conical_wye_45" if angle_deg <= 67.5 else "conical_tee_90"
                 branch_l, main_l = diverging_tables.round_variant(variant, vb_on_vc, vs_on_vc)
                 source = "smacna_tee_" + variant
+                if abs(angle_deg - (45.0 if angle_deg <= 67.5 else 90.0)) > 10.0:
+                    reasons.append("conical tap tables are printed for 45 and 90 degrees only")
             else:
                 if style not in ("straight",):
                     if style not in HVACLossAPI._RECT_TEE_KINDS:
@@ -722,6 +724,50 @@ class HVACLossAPI:
 
     # A face-mounted branch within this many degrees of square reads the 90 degree tee-with-elbow table.
     _SQUARE_BRANCH_TOLERANCE_DEG = 5.0
+    # CollarRoll (and a lateral branch angle) within this many degrees of 45 reads the "rolled 45 deg" tables.
+    _ROLLED_TOLERANCE_DEG = 5.0
+
+    # Round face-mounted tees with a collar square to the run (14-14 D to H),
+    # by (collar rolled 45 deg, branch angle to the main 90 or 45, BranchStyle).
+    # The wyes of 14-14 I to L have a collar inclined to the run, which no
+    # type builds.
+    _FACE_MOUNTED_ROUND_VARIANTS = {
+        (False, 90, "straight"): "tee_90_elbow_90",
+        (True, 90, "straight"): "tee_90_rolled_45_elbow_45",
+        (True, 45, "straight"): "tee_90_rolled_45_elbow_60",
+        (True, 90, "conical"): "conical_tee_90_rolled_45_elbow_45",
+        (True, 45, "conical"): "conical_tee_90_rolled_45_elbow_60",
+    }
+
+    @staticmethod
+    def _face_mounted_round_variant(context, angle_deg):
+        """
+        The 14-14 round table key for a face-mounted diverging branch, or
+        None when no table describes it. Reads the type's CollarRoll (0 or
+        about 45 deg), the branch angle to the main (about 90, or about 45
+        with a rolled collar) and BranchStyle ("straight" or "conical").
+
+        An unrolled conical collar has no table of its own and reads 14-14 E
+        like a plain one, as before.
+        """
+        properties = context.get("properties") or {}
+        roll = float(properties.get("CollarRoll", 0.0) or 0.0)
+        style = HVACLossAPI._choice(properties.get("BranchStyle"), "straight")
+        tolerance = HVACLossAPI._ROLLED_TOLERANCE_DEG
+        if abs(roll) <= 1.0e-6:
+            rolled = False
+            style = "straight" if style == "conical" else style
+        elif abs(roll - 45.0) <= tolerance:
+            rolled = True
+        else:
+            return None
+        if abs(angle_deg - 90.0) <= HVACLossAPI._SQUARE_BRANCH_TOLERANCE_DEG:
+            angle = 90
+        elif abs(angle_deg - 45.0) <= tolerance:
+            angle = 45
+        else:
+            return None
+        return HVACLossAPI._FACE_MOUNTED_ROUND_VARIANTS.get((rolled, angle, style))
 
     @staticmethod
     def _face_mounted_branch_loss(
@@ -730,19 +776,23 @@ class HVACLossAPI:
         """
         Loss of a tee whose branch is face-mounted (collar plus 90 deg elbow).
 
-        A round diverging tee with a square branch has its own table for
-        exactly this fitting (SMACNA 14-14 E, "90 deg tee, round, with 90 deg
-        elbow"). Every other case has none -- including a face-mounted
-        lateral, whose elbow turns into an inclined branch -- so the plain
-        tee loss at the branch's angle is used with the loss of the branch
-        elbow added to the branch leg, as an approximation.
+        A round diverging tee has its own table for a square branch (SMACNA
+        14-14 E, "90 deg tee, round, with 90 deg elbow") and, with the
+        collar rolled 45 deg (CollarRoll), for a branch square or at 45 deg
+        to the main, plain or conical (14-14 D, F, G, H; see
+        _face_mounted_round_variant). Every other case has none, so the
+        plain tee loss at the branch's angle is used with the loss of the
+        branch elbow added to the branch leg, as an approximation.
         """
         source = "smacna_branch_face_mounted"
         round_ducts = all(HVACLibraryAPI.port_profile(p) == "Circular" for p in (common, straight, branch))
-        square_branch = abs(angle_deg - 90.0) <= HVACLossAPI._SQUARE_BRANCH_TOLERANCE_DEG
 
-        if diverging and round_ducts and square_branch:
-            lookup_branch, lookup_main = diverging_tables.round_variant("tee_90_elbow_90", vb_on_vc, vs_on_vc)
+        variant = None
+        if diverging and round_ducts:
+            variant = HVACLossAPI._face_mounted_round_variant(context, angle_deg)
+
+        if variant is not None:
+            lookup_branch, lookup_main = diverging_tables.round_variant(variant, vb_on_vc, vs_on_vc)
             # Both are printed against the common duct's velocity; each path is referenced to its own leg's.
             zeta_branch = lookup_branch.value / (vb_on_vc**2) if vb_on_vc > 0 else lookup_branch.value
             zeta_straight = lookup_main.value / (vs_on_vc**2) if vs_on_vc > 0 else lookup_main.value

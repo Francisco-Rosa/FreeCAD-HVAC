@@ -899,6 +899,64 @@ def test_face_mounted_round_diverging_tee_uses_the_tee_with_elbow_table():
     assert _path_for(result, "BRANCH").source == "smacna_branch_face_mounted"
 
 
+def _lateral_over_context(properties, angle_deg=45.0):
+    """A face-mounted tee whose branch leans `angle_deg` from the main flow (in the run's plane)."""
+    context = _tee_over_context(400.0, properties)
+    rad = math.radians(angle_deg)
+    context["connected_ports"][2]["direction"] = [math.cos(rad), math.sin(rad), 0.0]
+    return context
+
+
+@pytest.mark.parametrize(
+    "angle, style, branch_k",
+    [
+        # Vb/Vc = 1.2 in each 14-14 table.
+        (90.0, "straight", 1.87),  # D: rolled 45 deg, 45 deg elbow, branch 90 deg to main
+        (45.0, "straight", 1.89),  # F: rolled 45 deg, 60 deg elbow, branch 45 deg to main
+        (90.0, "conical", 0.84),  # G
+        (45.0, "conical", 0.79),  # H
+    ],
+)
+def test_face_mounted_round_tee_with_a_rolled_collar_reads_the_rolled_tables(angle, style, branch_k):
+    properties = {"Attachment": "Auto", "CollarRoll": 45.0, "BranchStyle": style}
+    result = api.branch_loss(_lateral_over_context(properties, angle))
+    assert result.status == api.EXACT
+    assert _paths_by_edge(result) == pytest.approx({"BRANCH": branch_k / 1.2**2, "STRAIGHT": 0.02 / 0.8**2})
+    assert _path_for(result, "BRANCH").source == "smacna_branch_face_mounted"
+
+
+def test_face_mounted_unrolled_conical_collar_reads_the_plain_tee_with_elbow_table():
+    plain = api.branch_loss(_tee_over_context(400.0, {"Attachment": "Auto"}))
+    conical = api.branch_loss(_tee_over_context(400.0, {"Attachment": "Auto", "BranchStyle": "conical"}))
+    assert conical.status == api.EXACT
+    assert _paths_by_edge(conical) == pytest.approx(_paths_by_edge(plain))
+
+
+@pytest.mark.parametrize("roll, angle", [(30.0, 90.0), (45.0, 60.0)])
+def test_face_mounted_roll_or_angle_with_no_table_falls_back_to_tee_plus_elbow(roll, angle):
+    result = api.branch_loss(_lateral_over_context({"Attachment": "Auto", "CollarRoll": roll}, angle))
+    assert result.status == api.APPROXIMATION
+    assert "no table" in result.warning
+
+
+def test_side_mounted_conical_lateral_reads_the_conical_wye_table():
+    # 14-14 C at Vb/Vc = 1.2 -> 0.12.
+    context = _lateral_over_context({"BranchStyle": "conical"}, 45.0)
+    context["connected_ports"][2]["position"] = [0.0, 0.0, 0.0]
+    result = api.branch_loss(context)
+    assert result.status == api.EXACT
+    assert _paths_by_edge(result)["BRANCH"] == pytest.approx(0.12 / 1.2**2)
+    assert _path_for(result, "BRANCH").source == "smacna_tee_conical_wye_45"
+
+
+def test_side_mounted_conical_branch_between_the_printed_angles_is_an_approximation():
+    context = _lateral_over_context({"BranchStyle": "conical"}, 60.0)
+    context["connected_ports"][2]["position"] = [0.0, 0.0, 0.0]
+    result = api.branch_loss(context)
+    assert result.status == api.APPROXIMATION
+    assert "45 and 90 degrees" in result.warning
+
+
 def test_side_mounted_tee_is_unchanged_by_the_attachment_property():
     with_property = api.branch_loss(_tee_over_context(0.0, {"Attachment": "Auto"}))
     without = api.branch_loss(_tee_over_context(0.0, {}))

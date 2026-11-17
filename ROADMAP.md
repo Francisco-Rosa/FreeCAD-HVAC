@@ -208,9 +208,17 @@ now).
   `CollarRoll` rolls the collar round a round run towards the branch, the
   elbow turning the rest (14-14 D, F to L "rolled 45 deg"; 0 is E). Run trims
   of a face mount are now measured from the node (a rolled lateral's collar
-  foot moves along the run). Not covered: a conical *lateral* (14-14 C, J, L:
-  the conical tap is offered on square tees only, its loss reads 14-14 B), and
-  14-14 M's conical main.
+  foot moves along the run). Done 17 November 2026: `branch_tap_saddle` is
+  also offered on laterals (manual, priority 30, below the lateral tees), the
+  cone along the branch axis; side-mounted it reads 14-14 C at 45 degrees (B
+  at 90; flagged `APPROXIMATION` more than 10 degrees from either).
+  Face-mounted round diverging tees read the rolled-collar tables by
+  `CollarRoll` (about 45 degrees), branch angle (90 or 45) and `BranchStyle`:
+  14-14 D, F (plain) and G, H (conical); an unrolled collar reads E as before
+  (`HVACLossAPI._face_mounted_round_variant`). Not covered: 14-14 I to L
+  (wyes whose collar leaves the run at 45 degrees: no type builds an inclined
+  collar) and 14-14 M's conical main. Smoke run 603 valid / 32 skipped / 10
+  errors: the 16 new saddle-on-lateral builds are valid, nothing else moved.
 - *Fan connection.* `end_equipment_connection` builds `terminals.build_terminal_fan`:
   the collar, and for a FanConnection transition a loft from the fan outlet
   (FanOutletWidth x FanOutletHeight at the node) to the duct at the included
@@ -324,8 +332,8 @@ fan connections. "Add Equipment from Library" is now "Add Equipment", in a
 "Fittings and Equipment" task group. The freeze is tagged `api-freeze-1`
 (geometry API 3, loss API 1, PartScript 3).
 
-**Next task:** the open items below the freeze line: conical lateral taps
-(14-14 C, J, L), then the "after the freeze" gaps of 6.4 item 5. Known open defect: the radius wye has no wall on round and tall
+**Next task:** the "after the freeze" gaps of 6.4 item 5 (conical lateral
+taps done 17 November 2026, see "SMACNA parity" below). Known open defect: the radius wye has no wall on round and tall
 oval ducts (above); the mitered wye is the automatic choice there anyway.
 
 **Branch:** all roadmap work is on `roadmap-stage-0`. Work done in a
