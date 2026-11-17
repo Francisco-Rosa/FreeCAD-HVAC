@@ -19,6 +19,9 @@ for in `library.json` (`"requires_api"`) and is refused by any other.
 
 ## Unreleased
 
+- Radius tees and lateral tees have one radius: `ElbowRadius` is gone from them, and a face-mounted branch uses
+  `BranchRadius` for its elbow. A document that set `ElbowRadius` on one of these types loses that value.
+
 - Radius wye: builds with a wall on a round bullhead and solid on a tall oval; a round wye with a wall still refuses
   (use the mitered wye).
 - Radiussed offset: `OffsetLength` 0 (the new default) makes the offset as long as its arcs need.

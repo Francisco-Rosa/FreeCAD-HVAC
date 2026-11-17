@@ -493,7 +493,9 @@ def face_tap_layout(context, run_factor=0.3, branch_factor=0.5, collar="plain"):
     # the bend folds over).
     rise = (corner - q_run).Length - run_half
     minimum = _min_bend_radius(size, _wall_thickness(context))
-    radius = min(max(_positive(p.get("ElbowRadius"), size), minimum), rise / tangent_factor)
+    # A type whose branch already has a bend radius (BranchRadius) uses it for this elbow too.
+    requested = p.get("ElbowRadius", p.get("BranchRadius"))
+    radius = min(max(_positive(requested, size), minimum), rise / tangent_factor)
     if radius < minimum - 1.0e-6:
         raise ValueError(
             "The branch is too close to the run surface for its elbow: move it {:.1f} mm further away".format(

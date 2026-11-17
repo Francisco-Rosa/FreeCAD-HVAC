@@ -1071,3 +1071,27 @@ def test_radiussed_offset_without_a_length_reads_the_length_its_arcs_need():
     unset = api.offset_loss(context)
     explicit = api.offset_loss(_offset_context({"OffsetLength": length, "OffsetRadius": 400.0}))
     assert _paths_by_edge(unset) == pytest.approx(_paths_by_edge(explicit))
+
+
+def test_face_mounted_elbow_takes_branch_radius_on_a_type_without_elbow_radius():
+    # The radius tees and lateral tees have one radius, BranchRadius, which a
+    # face-mounted branch uses for its elbow: R/D = 300/200 = 1.5 on the round elbow table.
+    plain = api.branch_loss(_tee_over_context(400.0, {}, diverging=False))
+    by_branch_radius = api.branch_loss(
+        _tee_over_context(400.0, {"Attachment": "Auto", "BranchRadius": 300.0}, diverging=False)
+    )
+    by_elbow_radius = api.branch_loss(
+        _tee_over_context(400.0, {"Attachment": "Auto", "ElbowRadius": 300.0}, diverging=False)
+    )
+    assert _paths_by_edge(by_branch_radius) == pytest.approx(_paths_by_edge(by_elbow_radius))
+    elbow = elbows.SMOOTH_ROUND(1.5)
+    assert _paths_by_edge(by_branch_radius)["BRANCH"] == pytest.approx(_paths_by_edge(plain)["BRANCH"] + elbow)
+
+
+def test_elbow_radius_wins_over_branch_radius_where_a_type_has_both():
+    both = {"Attachment": "Auto", "ElbowRadius": 0.0, "BranchRadius": 300.0}
+    unset = {"Attachment": "Auto", "ElbowRadius": 0.0}
+    result = api.branch_loss(_tee_over_context(400.0, both, diverging=False))
+    assert _paths_by_edge(result) == pytest.approx(
+        _paths_by_edge(api.branch_loss(_tee_over_context(400.0, unset, diverging=False)))
+    )

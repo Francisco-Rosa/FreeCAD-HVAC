@@ -31,7 +31,7 @@ only to `HVACLibraryAPI` / `HVACLossAPI`.
 **Pending items (18 November 2026).** Everything still open in this plan, in one place.
 
 *Needs the owner*
-- GUI check of the pending-items pass of 18 November 2026 (below): the drawn vanes, tap damper, extractor, filter media and coil block; the radius wye on round ducts; radiussed offsets at length 0; the Friction section of the Size Ducts panel.
+- GUI check of the pending-items pass of 18 November 2026 (below): the drawn vanes, tap damper, extractor, filter media and coil block; the radius wye on round ducts; radiussed offsets at length 0; the Friction section of the Size Ducts panel; the single BranchRadius on face-mounted radius and lateral tees.
 - Which "after the freeze" gap comes next (list below).
 - Deferred by the owner: saving a custom fitting as a library type.
 
@@ -48,6 +48,7 @@ only to `HVACLibraryAPI` / `HVACLossAPI`.
 - Drawn as construction features (`fittings/details.py`): turning vanes (`through_elbow_vaned`, by `VaneDesign`), splitter vanes (`through_elbow_rectangular`), the tap damper blade (`branch_tap_straight_damper`, `branch_tap_shoe_damper`), extractor blades (`branch_tap_extractor`), filter media pleats and the coil's fin block with header connections (`through_filter_generic`, `through_coil_generic`, both libraries).
 - Equipment connection: a duct carrying air into a unit through a port of another size or shape reads the transition tables (14-11 / 14-12) at `TransitionAngle`, referred to the duct (`losses._equipment_inlet_transition_loss`). The fan tables stay on the discharge side.
 - Size Ducts panel: a Friction section (model, CSV chart with Browse, expression), shown by model; it sets the network's `FrictionModel`, `FrictionTableFile`, `FrictionExpression`, which Calculate Airflow uses too.
+- One radius on the radius tees and lateral tees (owner, 18 November 2026): `branch_tee_radius_center`, `branch_tee_radius_edge`, `branch_lateral_tee_radius` and `branch_lateral_tee_mitered` (both libraries) lost `ElbowRadius`; a face-mounted branch uses `BranchRadius` for the elbow after its collar (`taps.face_tap_layout`, `HVACLossAPI._face_elbow_radius`: `ElbowRadius` where a type has it, else `BranchRadius`). `branch_tap_mitered_shoe` keeps both: its `BranchRadius` is the lean its mitre cut approximates, not a bend. All 68 builds of the four types (side and face-mounted) valid.
 - `circular_flex` builds valid in FreeCAD 1.1.4 (straight, solid and curved), the same shapes as `circular_generic`.
 - Charts: Fig. 14-4 (flex duct compression) was already in `analysis/friction.flex_compression_factor` and on `circular_flex`; Fig. 14-3 (roughness) and 14-5 (density) are what Darcy-Weisbach with the duct's roughness and the network's air properties computes directly; the nominal-size tables 14-2 to 14-5 are the equivalent-diameter equation, which is implemented. Nothing more to digitise.
 

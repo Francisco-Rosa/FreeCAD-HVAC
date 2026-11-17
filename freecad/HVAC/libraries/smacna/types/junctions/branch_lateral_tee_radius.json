@@ -76,16 +76,6 @@
       }
     },
     {
-      "name": "ElbowRadius",
-      "prop_type": "App::PropertyLength",
-      "group": "Dimensions",
-      "description": "Centreline radius of the elbow of a face-mounted branch. 0 uses the branch size",
-      "default": 0.0,
-      "validation": {
-        "minimum": 0.0
-      }
-    },
-    {
       "name": "CollarRoll",
       "prop_type": "App::PropertyAngle",
       "group": "Options",
@@ -100,7 +90,7 @@
       "name": "BranchRadius",
       "prop_type": "App::PropertyLength",
       "group": "Dimensions",
-      "description": "Centreline radius of the branch bend. 0 uses the branch size",
+      "description": "Centreline radius of the branch bend. 0 uses the branch size. A face-mounted branch (one passing over or under the run) uses it for the elbow after its collar",
       "default": 0.0,
       "validation": {
         "minimum": 0.0

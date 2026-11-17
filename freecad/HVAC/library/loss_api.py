@@ -825,12 +825,12 @@ class HVACLossAPI:
         properties = context.get("properties") or {}
         if HVACLibraryAPI.port_profile(branch) == "Circular":
             size = float(HVACLibraryAPI.port_diameter(branch))
-            radius = max(float(properties.get("ElbowRadius", 0.0) or 0.0) or size, 0.5 * size)
+            radius = max(HVACLossAPI._face_elbow_radius(properties) or size, 0.5 * size)
             zeta_elbow = elbow_tables.SMOOTH_ROUND(radius / size)
         else:
             width, height = float(HVACLibraryAPI.port_width(branch)), float(HVACLibraryAPI.port_height(branch))
             size = max(width, height)
-            radius = max(float(properties.get("ElbowRadius", 0.0) or 0.0) or size, 0.5 * size)
+            radius = max(HVACLossAPI._face_elbow_radius(properties) or size, 0.5 * size)
             # With no Reynolds number for the branch, skip the correction (it is 1.0 from Re = 2e5 up).
             reynolds = float(branch.get("reynolds", 0.0) or 0.0) or 1.0e6
             zeta_elbow = elbow_tables.smooth_rect(height / width, radius / width, reynolds).value
@@ -841,6 +841,15 @@ class HVACLossAPI:
         return HVACLossAPI._approximation(
             paths, "{}: no table for this face-mounted branch; plain tee loss plus the branch elbow".format(source)
         )
+
+    @staticmethod
+    def _face_elbow_radius(properties):
+        """
+        The requested radius of a face-mounted branch's elbow: ElbowRadius, or
+        for a type whose branch already has a bend radius, BranchRadius (the
+        geometry's rule, taps.face_tap_layout). 0 when neither is set.
+        """
+        return float(properties.get("ElbowRadius", properties.get("BranchRadius", 0.0)) or 0.0)
 
     @staticmethod
     def _round_branch_zetas(diverging, angle_deg, ab_on_ac, vb_on_vc, vs_on_vc):
