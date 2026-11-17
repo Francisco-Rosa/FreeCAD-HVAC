@@ -17,9 +17,12 @@ A change to any of these raises `HVACLibraryAPI.API_VERSION` or
 `HVACLossAPI.API_VERSION`. A library declares the versions it was written
 for in `library.json` (`"requires_api"`) and is refused by any other.
 
-## Unreleased (roadmap-stage-0)
+## Unreleased
 
-API versions: geometry 3, loss 1, PartScript 3.
+## API freeze 1 (tag `api-freeze-1`, 17 November 2026)
+
+API versions: geometry 3, loss 1, PartScript 3. The library surface above is frozen
+at these versions; a change to it raises the version.
 
 - Libraries: one type-def form (`"geometry": {"backend": ...}`), one result
   form (`{"layers": ...}`, `HVACLibraryAPI.single_layer` for one solid), one
@@ -97,3 +100,5 @@ API versions: geometry 3, loss 1, PartScript 3.
 - Hidden construction layers are left out of the displayed shape instead of drawn transparent.
 - SMACNA library: the full builtin_basic type set with sheet-metal walls, insulation and flanges as construction features.
 - Result tooltips; per-network layer visibility; per-port values table.
+- "Add Equipment from Library" is "Add Equipment", next to Create Custom Equipment / Custom Fitting, and in a
+  "Fittings and Equipment" Tasks group while a network is active and nothing is selected.
