@@ -127,8 +127,12 @@ class HVACLibraryService:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _segment_request(profile: str, curved: bool, context: dict | None = None) -> HVACTypeMatchRequest:
+    def _segment_request(
+        profile: str, curved: bool, context: dict | None = None, flex: bool = False
+    ) -> HVACTypeMatchRequest:
         family = "curved_segment" if curved else "straight_segment"
+        if flex:
+            family += ".flex"
         ctx = dict(context or {})
         ctx.setdefault("profile", profile or "")
         return HVACTypeMatchRequest(
@@ -146,17 +150,51 @@ class HVACLibraryService:
             category="junction", topology=topology or "", family=family_key or "", profile=profile or "", context=ctx
         )
 
+    @staticmethod
+    def _is_real_model(selection) -> bool:
+        """Whether a selection found a type that is not a placeholder."""
+        type_def = getattr(selection, "type_def", None)
+        return type_def is not None and getattr(type_def.selection, "kind", "") != "placeholder"
+
     @classmethod
-    def select_segment_type(cls, library_id: str, profile: str, curved: bool = False, context: dict | None = None):
-        """Fresh automatic segment-type selection (non-sticky)."""
+    def select_segment_type(
+        cls, library_id: str, profile: str, curved: bool = False, context: dict | None = None, flex: bool = False
+    ):
+        """
+        Fresh automatic segment-type selection (non-sticky).
+
+        `flex` (a curved route drawn as a spline, see BaseCurveIsSpline) asks
+        for a flexible duct first ("curved_segment.flex") and falls back to
+        the plain curved type when the library has none for this profile.
+        """
+        if flex and curved:
+            selection = cls._get_registry().select_type(library_id, cls._segment_request(profile, curved, context, True))
+            if cls._is_real_model(selection):
+                return selection
         request = cls._segment_request(profile, curved, context)
         return cls._get_registry().select_type(library_id, request)
 
     @classmethod
     def resolve_segment_type(
-        cls, library_id: str, current_type_id: str, profile: str, curved: bool = False, context: dict | None = None
+        cls,
+        library_id: str,
+        current_type_id: str,
+        profile: str,
+        curved: bool = False,
+        context: dict | None = None,
+        flex: bool = False,
     ):
-        """Sticky segment-type resolution used by normal network sync."""
+        """
+        Sticky segment-type resolution used by normal network sync. With
+        `flex`, see select_segment_type(); a type the user chose stays either
+        way (a flexible and a plain curved duct are compatible with both requests).
+        """
+        if flex and curved:
+            selection = cls._get_registry().resolve_sticky_type(
+                library_id, current_type_id, cls._segment_request(profile, curved, context, True)
+            )
+            if cls._is_real_model(selection):
+                return selection
         request = cls._segment_request(profile, curved, context)
         return cls._get_registry().resolve_sticky_type(library_id, current_type_id, request)
 
@@ -475,6 +513,23 @@ def BaseCurveKind(base_obj_name, local_index):
         if len(base_obj.Shape.Edges) > local_index:
             return EdgeKind(base_obj.Shape.Edges[local_index])
     return "Unknown"
+
+def BaseCurveIsSpline(base_obj_name, local_index):
+    """
+    Whether a base edge is a spline (B-spline or Bezier): what the "New
+    Curved" tool draws. Such a route defaults to a flexible duct; an arc
+    stays a plain curved duct.
+    """
+    base_obj = get_obj_by_name(base_obj_name)
+    curve = None
+    if base_obj and isSketch(base_obj):
+        if len(base_obj.Geometry) > local_index:
+            curve = base_obj.Geometry[local_index]
+    elif base_obj and isWire(base_obj):
+        if len(base_obj.Shape.Edges) > local_index:
+            curve = getattr(base_obj.Shape.Edges[local_index], "Curve", None)
+    return bool(curve) and GeomType(curve) in ("Part::GeomBSplineCurve", "Part::GeomBezierCurve")
+
 
 def get_obj_name(obj):
     # Get object name from FreeCAD object

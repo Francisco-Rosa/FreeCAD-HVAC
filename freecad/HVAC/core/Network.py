@@ -600,7 +600,7 @@ class DuctNetwork:
 
     ## Library defaults management
 
-    def defaultSegmentSelection(self, kind="straight"):
+    def defaultSegmentSelection(self, kind="straight", flex=False):
         """
         Return network default segment library/profile/type.
         Used only when creating a new segment or resetting one to defaults.
@@ -614,7 +614,10 @@ class DuctNetwork:
         if profile not in valid_profiles:
             profile = hvaclib.HVACLibraryService.default_segment_profile_for_library(library_id)
 
-        selection = hvaclib.HVACLibraryService.select_segment_type(library_id, profile, curved=(kind != "straight"))
+        # A spline route (flex) gets a flexible duct when the library has one for this profile.
+        selection = hvaclib.HVACLibraryService.select_segment_type(
+            library_id, profile, curved=(kind != "straight"), flex=flex
+        )
         type_id = selection.type_def.id if selection.type_def else ""
 
         return {
@@ -761,7 +764,10 @@ class DuctNetwork:
                 # sticky manual TypeId, unlike normal sync (see
                 # HVACLibraryRegistry.resolve_sticky_type).
                 selection = hvaclib.HVACLibraryService.select_segment_type(
-                    default_lib.id, default_profile, curved=(kind != "straight")
+                    default_lib.id,
+                    default_profile,
+                    curved=(kind != "straight"),
+                    flex=hvaclib.BaseCurveIsSpline(obj.SourceObjectName, obj.SourceIndex),
                 )
                 default_type_id = selection.type_def.id if selection.type_def else ""
 
@@ -1400,7 +1406,9 @@ class DuctNetwork:
 
                 # Get and set default segment properties from default library
                 kind = hvaclib.BaseCurveKind(edge_ref.obj_name, edge_ref.local_index)
-                defaults = self.defaultSegmentSelection(kind=kind)
+                defaults = self.defaultSegmentSelection(
+                    kind=kind, flex=hvaclib.BaseCurveIsSpline(edge_ref.obj_name, edge_ref.local_index)
+                )
                 if hasattr(segment_obj, "LibraryId"):
                     segment_obj.LibraryId = defaults["library_id"]
                 if hasattr(segment_obj, "Profile"):
@@ -1457,7 +1465,11 @@ class DuctNetwork:
             # it's still a compatible real model, otherwise auto-select.
             current_type_id = getattr(segment_obj, "TypeId", "")
             selection = hvaclib.HVACLibraryService.resolve_segment_type(
-                library_id, current_type_id, profile, curved=(kind != "straight")
+                library_id,
+                current_type_id,
+                profile,
+                curved=(kind != "straight"),
+                flex=hvaclib.BaseCurveIsSpline(edge_ref.obj_name, edge_ref.local_index),
             )
             type_id = selection.type_def.id if selection.type_def else ""
 

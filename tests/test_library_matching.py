@@ -1538,3 +1538,44 @@ def test_bundled_builtin_basic_wye_defaults_to_the_mitered_wye():
     request = _junction_request("branch", "branch.wye", "Circular", _ports(3, "Circular"))
     # The radius wye fails to build hollow on round and rectangular ducts (see README), so it is manual only.
     assert reg.select_type("builtin_basic", request, strict=True).type_def.id == "branch_wye_mitered"
+
+
+# ----------------------------------------------------------------------------
+# A spline route (the "New Curved" tool) defaults to a flexible duct.
+# ----------------------------------------------------------------------------
+
+
+@pytest.fixture
+def bundled_service(monkeypatch):
+    reg = _load_bundled_registry()
+    monkeypatch.setattr(hvaclib.HVACLibraryService, "_get_registry", classmethod(lambda cls: reg))
+    return hvaclib.HVACLibraryService
+
+
+@pytest.mark.parametrize("library_id", ["builtin_basic", "smacna"])
+def test_a_round_spline_route_gets_the_flexible_duct(bundled_service, library_id):
+    selection = bundled_service.select_segment_type(library_id, "Circular", curved=True, flex=True)
+    assert selection.type_def.id == "circular_flex"
+
+
+@pytest.mark.parametrize("library_id", ["builtin_basic", "smacna"])
+def test_a_rectangular_spline_route_falls_back_to_the_curved_duct(bundled_service, library_id):
+    # No flexible rectangular duct: the plain curved one is used.
+    selection = bundled_service.select_segment_type(library_id, "Rectangular", curved=True, flex=True)
+    assert selection.type_def.id == "rectangular_generic"
+
+
+def test_an_arc_route_keeps_the_curved_duct(bundled_service):
+    selection = bundled_service.select_segment_type("smacna", "Circular", curved=True)
+    assert selection.type_def.id == "circular_generic"
+
+
+def test_a_curved_duct_chosen_by_hand_on_a_spline_route_stays(bundled_service):
+    selection = bundled_service.resolve_segment_type("smacna", "circular_generic", "Circular", curved=True, flex=True)
+    assert selection.type_def.id == "circular_generic"
+    assert selection.status == "retained"
+
+
+def test_a_spline_route_whose_profile_changes_moves_to_a_type_for_the_new_profile(bundled_service):
+    selection = bundled_service.resolve_segment_type("smacna", "circular_flex", "Rectangular", curved=True, flex=True)
+    assert selection.type_def.id == "rectangular_generic"

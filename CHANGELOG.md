@@ -27,6 +27,8 @@ for in `library.json` (`"requires_api"`) and is refused by any other.
   `branch_tee_generic` and `branch_wye_generic` are replaced by `branch_generic`; `through_straight_generic` is added
   and is the automatic choice on a straight node; the mitered elbow defaults to one cut. A document using a removed id
   needs its fitting type chosen again.
+- A route drawn with "New Curved" (a spline) gets the flexible duct by default, where the library has one for the
+  profile (round); other profiles, and arcs, keep the curved duct. A type chosen by hand stays.
 - SMACNA flexible duct draws its wire-helix ribs as a feature (`flex_ribs`: `RibPitch`, `RibWidth`, `RibHeight`);
   builtin_basic's stays a plain round duct.
 - A segment's flanges face along its path at each end; on a curved segment they used to follow the chord.
