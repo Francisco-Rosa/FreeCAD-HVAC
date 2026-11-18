@@ -1725,10 +1725,10 @@ names in `libraries/README.md` and `samples/README.md`.**
      `single_layer`, `build_envelopes` + `envelopes_to_layers`, and
      `build_fitting` / `build_layered_fitting` / `measure_fitting` (the
      last three are for external libraries; unused by shipped ones).
-3. *Unused public names* (21 geometry, not counting `API_VERSION`,
+3. *Unused public names* (20 geometry, not counting `API_VERSION`,
    `PUBLIC`, `STANDARD_FITTINGS`): `arc_wire`, `boundary`,
-   `bridge_boundaries`, `distance_between_lines`, `make_oval_wire`, `offset_wire`
-   (used by wyes now), `sew`, `solidify`, `transform`, `trim`,
+   `bridge_boundaries`, `distance_between_lines`, `make_oval_wire`,
+   `offset_wire`, `sew`, `solidify`, `transform`, `trim`,
    `virtual_corner_for_lines`, the four `make_section_*`, the
    `build_*`/`measure_fitting` group above. Unused is not wrong (they are
    for external libraries), but each needs a stated purpose or should go.
