@@ -1,6 +1,6 @@
 {
-  "id": "branch_wye_generic",
-  "label": "Wye - Generic",
+  "id": "branch_generic",
+  "label": "Branch - Generic",
   "category": "junction",
   "topology": "branch",
   "family": [
@@ -27,6 +27,13 @@
   },
   "properties": [
     {
+      "name": "Thickness",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Sheet metal thickness",
+      "default": 0.8
+    },
+    {
       "name": "TrimLength",
       "prop_type": "App::PropertyLength",
       "group": "Dimensions",
@@ -36,13 +43,6 @@
       "validation": {
         "minimum": 0.0
       }
-    },
-    {
-      "name": "Thickness",
-      "prop_type": "App::PropertyLength",
-      "group": "Dimensions",
-      "description": "Sheet metal thickness",
-      "default": 0.8
     },
     {
       "name": "FlangeHeight",
@@ -74,49 +74,14 @@
       "default": 0.0
     }
   ],
-  "construction": {
-    "layers": [
-      {
-        "id": "casing",
-        "roles": [
-          "flow_surface",
-          "structural_shell"
-        ],
-        "default_material_role": "structural_shell",
-        "thickness_property": "Thickness"
-      },
-      {
-        "id": "insulation",
-        "roles": [
-          "thermal_insulation"
-        ],
-        "default_material_role": "thermal_insulation",
-        "thickness_property": "InsulationThickness"
-      }
-    ],
-    "features": [
-      {
-        "id": "transverse_flange",
-        "role": "transverse_joint",
-        "host_layer": "casing",
-        "module": "shared:features",
-        "generator": "transverse_flange",
-        "parameters": [
-          "FlangeHeight",
-          "FlangeThickness",
-          "ShowFlange"
-        ]
-      }
-    ]
-  },
   "geometry": {
     "backend": "generator",
     "module": "shared:stars",
-    "function": "build_wye_generic"
+    "function": "build_branch_generic"
   },
   "connection_lengths": {
     "module": "shared:stars",
-    "function": "measure_wye_generic"
+    "function": "measure_branch_generic"
   },
   "loss": {
     "module": "shared:losses",
@@ -193,6 +158,41 @@
         },
         "module": "shared:losses",
         "function": "loss_branch_converging_branch"
+      }
+    ]
+  },
+  "construction": {
+    "layers": [
+      {
+        "id": "casing",
+        "roles": [
+          "flow_surface",
+          "structural_shell"
+        ],
+        "default_material_role": "structural_shell",
+        "thickness_property": "Thickness"
+      },
+      {
+        "id": "insulation",
+        "roles": [
+          "thermal_insulation"
+        ],
+        "default_material_role": "thermal_insulation",
+        "thickness_property": "InsulationThickness"
+      }
+    ],
+    "features": [
+      {
+        "id": "transverse_flange",
+        "role": "transverse_joint",
+        "host_layer": "casing",
+        "module": "shared:features",
+        "generator": "transverse_flange",
+        "parameters": [
+          "FlangeHeight",
+          "FlangeThickness",
+          "ShowFlange"
+        ]
       }
     ]
   }

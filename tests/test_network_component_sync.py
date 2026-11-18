@@ -142,11 +142,9 @@ def test_creates_primary_component_when_absent():
     primary = components[0]
     assert primary.ComponentRole == "Primary"
     assert primary.ParentJunctionName == junction.Name
-    # through_transition_generic only matches "through.transition" (a real
-    # section change); a plain "through.straight" request falls to the
-    # broad through_generic catch-all model in smacna (no dedicated
-    # straight-only model there).
-    assert primary.TypeId == "through_generic"
+    # A plain "through.straight" request gets smacna's dedicated straight
+    # joint, through_straight_generic (as in builtin_basic).
+    assert primary.TypeId == "through_straight_generic"
 
 
 def test_sticky_primary_type_is_retained_across_syncs():
@@ -447,7 +445,7 @@ def test_adding_inline_component_updates_aggregate_segment_trims():
     # Primary only: sync, compose, execute, aggregate.
     _run_full_sync_round(net_proxy, junction, lib)
     primary = next(o for o in net_obj.Geometry.OutList if hvaclib.isDuctComponent(o))
-    assert primary.TypeId == "through_generic"
+    assert primary.TypeId == "through_straight_generic"
 
     lengths_before = {
         item["edge_key"]: item["length"] for item in json.loads(junction.ConnectionLengthsJson)

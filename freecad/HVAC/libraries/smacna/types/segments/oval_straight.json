@@ -19,7 +19,9 @@
       "group": "Dimensions",
       "description": "Clear-air duct width",
       "default": 200.0,
-      "validation": {"exclusiveMinimum": 0.0}
+      "validation": {
+        "exclusiveMinimum": 0.0
+      }
     },
     {
       "name": "Height",
@@ -27,7 +29,9 @@
       "group": "Dimensions",
       "description": "Clear-air duct height",
       "default": 100.0,
-      "validation": {"exclusiveMinimum": 0.0}
+      "validation": {
+        "exclusiveMinimum": 0.0
+      }
     },
     {
       "name": "Thickness",
@@ -111,7 +115,8 @@
     ]
   },
   "geometry": {
-    "backend": "partscript",
-    "file": "models/oval_straight.py"
+    "backend": "generator",
+    "module": "shared:segments",
+    "function": "build_oval_straight"
   }
 }

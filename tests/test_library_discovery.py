@@ -20,14 +20,15 @@ def test_all_shipped_libraries_parse_without_error():
     assert lib_ids == {"builtin_basic", "smacna", "samples"}
 
 
-def test_smacna_straight_segments_use_partscript_backend():
+def test_smacna_segments_use_the_shared_segment_generator():
+    # Same builder as builtin_basic: straight and curved, one generator module.
     reg = _load_registry()
     smacna = reg._libraries["smacna"]
-    for type_id in ("circular_straight", "oval_straight", "rectangular_straight"):
+    for type_id in ("circular_straight", "oval_straight", "rectangular_straight", "circular_generic", "circular_flex"):
         type_def = smacna.get_type(type_id)
         assert type_def is not None, type_id
-        assert type_def.geometry.backend == "partscript"
-        assert os.path.isfile(os.path.join(smacna.root_path, type_def.geometry.file))
+        assert type_def.geometry.backend == "generator"
+        assert type_def.generator_module == "shared:segments"
 
 
 def test_circular_and_oval_straight_flanges_default_off():

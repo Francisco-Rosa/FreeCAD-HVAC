@@ -23,6 +23,10 @@ for in `library.json` (`"requires_api"`) and is refused by any other.
   its fuse hung; design 6.6 fixed that), and curved segments (`circular_generic`, `oval_generic`,
   `rectangular_generic`) and the flexible duct (`circular_flex`) are added. Before, an arc drawn in a SMACNA network
   had no segment type.
+- SMACNA type ids and choices follow builtin_basic: `through_elbow_generic` is now `through_elbow_radius`;
+  `branch_tee_generic` and `branch_wye_generic` are replaced by `branch_generic`; `through_straight_generic` is added
+  and is the automatic choice on a straight node; the mitered elbow defaults to one cut. A document using a removed id
+  needs its fitting type chosen again.
 - A segment's flanges face along its path at each end; on a curved segment they used to follow the chord.
 - A value typed in the property editor is synced when it is entered (Enter, or leaving the field), not on every
   keystroke. A property set from a script, outside a transaction, still syncs at once.

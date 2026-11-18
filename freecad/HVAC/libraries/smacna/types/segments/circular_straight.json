@@ -112,7 +112,8 @@
     ]
   },
   "geometry": {
-    "backend": "partscript",
-    "file": "models/circular_straight.py"
+    "backend": "generator",
+    "module": "shared:segments",
+    "function": "build_circular_straight"
   }
 }

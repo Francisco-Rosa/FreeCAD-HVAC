@@ -995,7 +995,7 @@ def test_bundled_smacna_rectangular_elbow_prefers_the_mitered_then_the_dedicated
     lib = reg.get_library("smacna")
     found = lib.list_types(category="junction", family="through.bend_90", connected_ports=_ports(2, "Rectangular"))
     ids = [t.id for t in found]
-    assert ids.index("through_elbow_rectangular") < ids.index("through_elbow_generic")
+    assert ids.index("through_elbow_rectangular") < ids.index("through_elbow_radius")
 
 
 def test_bundled_smacna_circular_elbow_uses_the_mitered_elbow_model():
@@ -1377,10 +1377,8 @@ def test_bundled_reclassifying_dampers_to_inline_does_not_disturb_other_selectio
     request = _junction_request("through", "through.straight", "Circular", _ports(2))
     selection = reg.select_type("smacna", request, strict=True)
     assert selection.type_def is not None
-    # through_transition_generic now only matches "through.transition"
-    # (a real section change), so a plain equal-size straight run falls to
-    # the broad through_generic catch-all model instead.
-    assert selection.type_def.id == "through_generic"
+    # A plain equal-size straight run gets the dedicated straight joint, as in builtin_basic.
+    assert selection.type_def.id == "through_straight_generic"
 
 
 # ----------------------------------------------------------------------

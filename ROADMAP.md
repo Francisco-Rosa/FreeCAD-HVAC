@@ -37,7 +37,7 @@ only to `HVACLibraryAPI` / `HVACLossAPI`.
 - Deferred by the owner: saving a custom fitting as a library type.
 
 *Done 19 November 2026 (owner: design 6.6 geometry good; SMACNA lags builtin; typing a value is slow):*
-- SMACNA checked against builtin_basic type by type (families, properties, geometry and loss functions). Missing and added: `branch_wye_radius` (sweep 120 / 120), curved segments `circular_generic` / `oval_generic` / `rectangular_generic` (a SMACNA network had no type for an arc) and `circular_flex` (no flanges). Left as they are, on purpose: SMACNA's `through_elbow_generic` in place of builtin's `through_elbow_radius` (same builder), its own fallbacks (`branch_tee_generic`, `branch_wye_generic` instead of `branch_generic`; no `through_straight_generic`), PartScript straights, the gored-elbow defaults, and the terminal face properties only SMACNA exposes.
+- SMACNA checked against builtin_basic type by type (families, properties, geometry and loss functions). Missing and added: `branch_wye_radius` (sweep 120 / 120), curved segments `circular_generic` / `oval_generic` / `rectangular_generic` (a SMACNA network had no type for an arc) and `circular_flex` (no flanges). Then aligned as well (owner: none of these was a plan decision): SMACNA's `through_elbow_generic` renamed `through_elbow_radius` (builtin renamed its own in 260d137; priority 40); `branch_tee_generic` and `branch_wye_generic` replaced by builtin's single fallback `branch_generic`; `through_straight_generic` added (a plain straight node now gets it, as in builtin, instead of `through_generic`); `through_elbow_mitered` takes builtin's priority (50) and `NumberOfCuts` (1), with `through_elbow_rectangular` moved from 55 to 45 so the mitered elbow stays the default; the straight segments build with `shared:segments` and their PartScripts are deleted. Only SMACNA still has: the terminal face properties (builtin uses the face defaults), the damper and extractor taps, the vaned and rectangular elbows.
 - A segment's flanges are placed square to its path tangents at both ends (`features._flange_ends`); on an arc they followed the chord.
 - Property edits: a type property typed into the property editor changed on every keystroke, and each change asked for a full network sync. Inside an open transaction (the property editor opens one per edit and commits it when the value is entered) `request_sync_after_edit` now only marks the network (`DuctNetwork.deferEditSync`); `DuctNetworkChangeObserver.slotCommitTransaction` / `slotAbortTransaction` run the one sync (`runEditSync`). Outside a transaction it syncs at once, as before.
 
@@ -73,8 +73,8 @@ only to `HVACLibraryAPI` / `HVACLossAPI`.
 - Draft snapping onto equipment snap points not tried by script (the owner's GUI check covered the port panel).
 
 *Testing*
-- Unit tests: 2255 pass on Linux. The 20 failures once seen on the Windows machine were never investigated.
-- Smoke run, 18 November 2026 (after design 6.6): 661 valid / 32 skipped / 0 errors. No build lost; volumes and trims changed only on the types 6.6 rebuilt (and on face-mounted tees, from the single BranchRadius change before it).
+- Unit tests: 2254 pass on Linux. The 20 failures once seen on the Windows machine were never investigated.
+- Smoke run, 19 November 2026 (SMACNA aligned): 665 valid / 32 skipped / 0 errors; only the SMACNA mitered elbow changed (one cut). Before, 18 November 2026 (after design 6.6): 661 valid / 32 skipped / 0 errors. No build lost; volumes and trims changed only on the types 6.6 rebuilt (and on face-mounted tees, from the single BranchRadius change before it).
 - Geometry sweep (`tools/geometry_sweep.py`, design 6.6), 18 November 2026: 1838 / 1838 valid, every type and case (the design's table had the radius wye at 76 / 144, the others failing on full-size branches and thick walls).
 
 Differences from the plan as written below:

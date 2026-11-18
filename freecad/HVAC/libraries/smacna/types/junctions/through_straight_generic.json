@@ -1,13 +1,10 @@
 {
-  "id": "through_elbow_generic",
-  "label": "Elbow - Generic",
+  "id": "through_straight_generic",
+  "label": "Straight - Generic",
   "category": "junction",
   "topology": "through",
   "family": [
-    "through.bend",
-    "through.bend.3d",
-    "through.bend_90",
-    "through.bend_90.3d"
+    "through.straight"
   ],
   "profiles": [
     "Circular",
@@ -16,25 +13,25 @@
   ],
   "selection": {
     "kind": "model",
-    "priority": 50
+    "priority": 60
   },
   "constraints": {
     "degree": 2
   },
   "properties": [
     {
-      "name": "CenterlineRadius",
-      "prop_type": "App::PropertyLength",
-      "group": "Dimensions",
-      "description": "Elbow centerline radius",
-      "default": 300.0
-    },
-    {
       "name": "Thickness",
       "prop_type": "App::PropertyLength",
       "group": "Dimensions",
       "description": "Sheet metal thickness",
       "default": 0.8
+    },
+    {
+      "name": "Length",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Straight coupling length (no special fitting accessory)",
+      "default": 5.0
     },
     {
       "name": "FlangeHeight",
@@ -72,6 +69,19 @@
       "default": 0.0
     }
   ],
+  "geometry": {
+    "backend": "generator",
+    "module": "shared:through",
+    "function": "build_straight"
+  },
+  "connection_lengths": {
+    "module": "shared:through",
+    "function": "measure_straight"
+  },
+  "loss": {
+    "module": "shared:losses",
+    "function": "loss_transition_generic"
+  },
   "construction": {
     "layers": [
       {
@@ -107,18 +117,5 @@
         ]
       }
     ]
-  },
-  "geometry": {
-    "backend": "generator",
-    "module": "shared:elbows",
-    "function": "build_elbow"
-  },
-  "connection_lengths": {
-    "module": "shared:elbows",
-    "function": "measure_elbow"
-  },
-  "loss": {
-    "module": "shared:losses",
-    "function": "loss_elbow_generic"
   }
 }

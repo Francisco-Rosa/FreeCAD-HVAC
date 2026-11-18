@@ -271,9 +271,9 @@ def _port(edge_key, direction, flow_into_junction, diameter, velocity_ms):
     }
 
 
-def test_bundled_smacna_branch_tee_generic_declares_four_variants():
+def test_bundled_smacna_branch_generic_declares_four_variants():
     reg = _load_bundled_registry()
-    type_def = reg.get_library("smacna").get_type("branch_tee_generic")
+    type_def = reg.get_library("smacna").get_type("branch_generic")
     assert len(type_def.loss_variants) == 4
     resolved = {
         (v.constraints["flow_class"]["enum"][0], v.constraints["qualifiers"]["common_leg"]["enum"][0]): v.function
@@ -287,7 +287,7 @@ def test_bundled_smacna_branch_tee_generic_declares_four_variants():
 
 def test_bundled_smacna_call_loss_dispatches_to_bullhead_variant():
     reg = _load_bundled_registry()
-    type_def = reg.get_library("smacna").get_type("branch_tee_generic")
+    type_def = reg.get_library("smacna").get_type("branch_generic")
 
     # Bullhead diverging: single inlet on the branch leg, splitting into
     # two collinear run legs -- common_leg="branch".
@@ -316,7 +316,7 @@ def test_bundled_smacna_call_loss_falls_back_when_flow_class_unresolved():
     # specific variants -- falls back to the type-def's own top-level
     # loss_module/loss_function, same as before this feature existed.
     reg = _load_bundled_registry()
-    type_def = reg.get_library("smacna").get_type("branch_tee_generic")
+    type_def = reg.get_library("smacna").get_type("branch_generic")
 
     primary = _port("IN", (-1, 0, 0), True, 300.0, 5.0)
     straight = _port("STRAIGHT", (1, 0, 0), False, 300.0, 4.0)
