@@ -387,6 +387,66 @@ def _mitered_bend(api, port0, port1, radius, cuts, profile0=None, profile1=None,
     return shape, [route["trim_lengths"][0], route["trim_lengths"][1]]
 
 
+# Directions sampled round a section when checking that one section fits inside another.
+_INSET_DIRECTIONS = 24
+# How far an inset bend start stays clear of the run's inside face: this share of
+# the run's half-depth, and at least this many times the total wall thickness.
+_INSET_DEPTH_SHARE = 0.10
+_INSET_WALL_FACTOR = 2.0
+
+
+def _scaled_port(api, port, scale):
+    """A copy of `port` with its section scaled by `scale` about its centre (same shape, smaller)."""
+    params = dict(api.port_section_params(port))
+    for name in ("Diameter", "Width", "Height"):
+        if name in params and params[name] is not None:
+            params[name] = float(params[name]) * scale
+    scaled = api.copy_port(port)
+    scaled["section_params"] = params
+    return scaled
+
+
+def _inset_bend_start(api, start_port, run_port, wall=0.0):
+    """
+    The section a branch bend starts on inside a run (design 6.6 B).
+
+    `start_port` is the bend's start: on the run axis, facing along the run,
+    carrying the branch's section. When that section reaches within a
+    margin of the run's inside face, the bend would start on (or along)
+    the run wall itself: two identical curved surfaces, which OpenCascade's
+    booleans cannot fuse. The start section is then scaled down so it
+    clears the inside face by max(10 % of the run's half-depth, twice the
+    total wall) on every side; the sweep grows it back to the full branch
+    section along the bend, so the bend crosses the run wall at an angle.
+
+    Returns `start_port` unchanged when the section already clears the run,
+    else a copy with the scaled section. Each wall layer grows the returned
+    section by its own offset, which the margin leaves room for.
+    """
+    position = api.port_position(start_port)
+    run_profile = api.profile_from_port(api.copy_port(run_port, position=position))
+    branch_profile = api.profile_from_port(start_port)
+    _, x_axis, y_axis, _ = api.make_profile_frame(api.port_direction(start_port), api.port_profile_x_axis(start_port))
+
+    # Step 1: how far each section reaches from the shared centre, in many directions.
+    run_reach, branch_reach = [], []
+    for index in range(_INSET_DIRECTIONS):
+        angle = 2.0 * math.pi * index / _INSET_DIRECTIONS
+        direction = x_axis * math.cos(angle) + y_axis * math.sin(angle)
+        centre = position.dot(direction)
+        run_reach.append(api.profile_projection_bounds(run_profile, direction)[1] - centre)
+        branch_reach.append(api.profile_projection_bounds(branch_profile, direction)[1] - centre)
+
+    # Step 2: the margin, and the largest scale that keeps it in every direction.
+    margin = max(_INSET_DEPTH_SHARE * min(run_reach), _INSET_WALL_FACTOR * max(float(wall or 0.0), 0.0))
+    scale = min((run - margin) / branch for run, branch in zip(run_reach, branch_reach) if branch > _EPS)
+    if scale >= 1.0:
+        return start_port
+    if scale <= 0.1:
+        raise ValueError("The run is too small for this branch bend to start inside it")
+    return _scaled_port(api, start_port, scale)
+
+
 def _extend_leg(api, shape, port, current_trim, requested_trim, offset=0.0):
     """Fuse a plain straight extension onto a swept/mitred leg's outer end,
     so a user-requested trim length can grow past whatever minimum the

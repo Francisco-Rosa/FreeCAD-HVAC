@@ -74,7 +74,7 @@
       "name": "BranchRadius",
       "prop_type": "App::PropertyLength",
       "group": "Dimensions",
-      "description": "Reference centerline radius used to position the mitered branch bends",
+      "description": "Reference centerline radius used to position the mitered branch bends (a minimum: legs at a narrow angle get a larger radius so they part)",
       "default": 150.0
     },
     {

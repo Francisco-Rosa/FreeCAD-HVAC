@@ -8,7 +8,6 @@ Wyes: one main port splitting into two branch routes (mitered and radius).
 import math
 
 from ._common import (
-    _extend_leg,
     _finish,
     _is_union_of,
     _junction_minimums,
@@ -17,6 +16,7 @@ from ._common import (
     _loft,
     _min_bend_radius,
     _mitered_bend,
+    _outward,
     _port_axis_point,
     _props,
     _size,
@@ -25,39 +25,10 @@ from ._common import (
 )
 
 
-def _wye_mitered_branch_shapes(api, branch, split_face, route, main_center, cuts, offset=0.0):
-    """
-    The two pieces that carry one branch into the common leg of a mitered wye.
-
-    Returns (split_shape, bend_shape, branch_trim):
-    - split_shape: the branch's own half of the main profile, extruded from
-      the split plane up to where its bend starts (None if they coincide).
-    - bend_shape: the faceted bend from there to the branch.
-
-    `offset` grows both pieces outward by a wall offset (see _common._finish).
-    The split plane, bend route and trim never depend on it.
-    """
-    split_wire = api.offset_wire(split_face.OuterWire, offset)
-    split_port = api.copy_port(main_center, position=split_face.CenterOfMass)
-    main_tangent = route["ports"][1]
-    main_tangent_position = api.port_position(main_tangent)
-    main_reach = main_tangent_position - split_face.CenterOfMass
-    tangent_wire = split_wire
-    split_shape = None
-    if main_reach.Length > api.EPS:
-        split_shape = api.extrude(split_wire, main_reach, solid=True)
-        tangent_face = api.section_face(split_shape, (main_tangent_position, api.port_direction(main_tangent)))
-        tangent_wire = tangent_face.OuterWire
-
-    bend_shape, route_trims = _mitered_bend(
-        api, branch, split_port, route["radius"], cuts, profile1=tangent_wire, offset=offset
-    )
-    return split_shape, bend_shape, route_trims[0]
-
-
 def _wye_mitered_layout(context):
     """
-    Lay out two split-profile faceted bends entering one common leg.
+    Lay out a mitered wye: the shared split layout, plus each leg's
+    plane-split piece built once at the air-space size to measure it.
 
     measure_wye_mitered() and build_wye_mitered() both use this layout, so
     their trims agree.
@@ -67,29 +38,24 @@ def _wye_mitered_layout(context):
     cuts = max(int(p.get("NumberOfCuts", 2) or 2), 1)
 
     # Reuse the same split plane and feasible elbow paths as the radius wye.
-    ports, center, main_center, split_routes = _wye_split_route_layout(context)
+    ports, center, main_center, split_routes, plane = _wye_split_route_layout(context)
     main = ports[0]
     main_direction = api.unit(api.port_direction(main))
     routes = []
     intrinsic_shapes = []
 
     for branch, branch_index, split_face, route in split_routes:
-        split_shape, bend_shape, branch_trim = _wye_mitered_branch_shapes(
-            api, branch, split_face, route, main_center, cuts
-        )
-        routes.append(
-            {
-                "branch": branch,
-                "branch_index": branch_index,
-                "split_face": split_face,
-                "route": route,
-                "split_shape": split_shape,
-                "bend_shape": bend_shape,
-                "branch_trim": branch_trim,
-                "radius": route["radius"],
-            }
-        )
-        intrinsic_shapes.extend((split_shape, bend_shape))
+        leg = {
+            "branch": branch,
+            "branch_index": branch_index,
+            "split_face": split_face,
+            "route": route,
+            "side": _wye_leg_side(branch_index),
+        }
+        piece, branch_trim = _wye_leg_piece(api, leg, main_center, plane, 0.0, cuts)
+        leg.update({"piece": piece, "branch_trim": branch_trim})
+        routes.append(leg)
+        intrinsic_shapes.append(piece)
 
     intrinsic_shape = api.compound(intrinsic_shapes)
 
@@ -98,9 +64,9 @@ def _wye_mitered_layout(context):
     main_split_trim = (api.port_position(main_center) - api.port_position(main)).dot(main_direction)
     minimums[0] = max(minimums[0], main_split_trim)
 
-    for route in routes:
-        branch_index = route["branch_index"]
-        minimums[branch_index] = max(minimums[branch_index], route["branch_trim"])
+    for leg in routes:
+        branch_index = leg["branch_index"]
+        minimums[branch_index] = max(minimums[branch_index], leg["branch_trim"])
 
     trims = _junction_trims(api, p, ports, ("TrimMain", "TrimBranchA", "TrimBranchB"), (0.70, 0.70, 0.70), minimums)
 
@@ -109,6 +75,7 @@ def _wye_mitered_layout(context):
         "center": center,
         "main": main,
         "main_center": main_center,
+        "plane": plane,
         "cuts": cuts,
         "routes": routes,
         "trims": trims,
@@ -122,45 +89,19 @@ def measure_wye_mitered(context):
     return api.build_trim_rec_from_port_lengths(list(zip(layout["ports"], layout["trims"])))
 
 
-def _wye_mitered_envelope(api, layout, offset):
-    """The mitered wye's whole outer boundary grown by `offset`: main leg, split halves and bends, fused."""
-    main = layout["main"]
-    main_center = layout["main_center"]
-    trims = layout["trims"]
-    main_end = _trimmed(api, main, trims[0])
-    main_reach = api.port_position(main_end) - api.port_position(main_center)
-    main_tolerance = max(api.EPS, 1.0e-6 * _size(api, main))
-
-    shape = None
-    if main_reach.Length > main_tolerance:
-        shape = _loft(api, [main_end, main_center], offset, ruled=True)
-
-    for route in layout["routes"]:
-        branch = route["branch"]
-        # The layout already built the air-space pieces to measure them;
-        # only a wall envelope (offset > 0) needs them built again, larger.
-        if offset > 0.0:
-            split_shape, bend_shape, _ = _wye_mitered_branch_shapes(
-                api, branch, route["split_face"], route["route"], main_center, layout["cuts"], offset
-            )
-        else:
-            split_shape, bend_shape = route["split_shape"], route["bend_shape"]
-        bend_shape = _extend_leg(api, bend_shape, branch, route["branch_trim"], trims[route["branch_index"]], offset)
-        shape = api.fuse(shape, split_shape, bend_shape)
-    return shape
-
-
 def build_wye_mitered(context):
-    """Mitered wye with each non-main branch entering the common leg through a faceted bend."""
+    """Mitered wye: each leg a faceted bend from the full common section, cut by the split plane."""
     api = context["hvac_api"]
     layout = _wye_mitered_layout(context)
     ports = layout["ports"]
     trims = layout["trims"]
 
     def envelope(offset):
-        shape = _wye_mitered_envelope(api, layout, offset)
-        validation = api.validate(shape, require_solid=True)
-        if not validation["valid"] or validation["solid_count"] != 1:
+        # The layout already built the air-space pieces to measure them;
+        # only a wall envelope (offset > 0) needs them built again, larger.
+        pieces = None if offset > 0.0 else [leg["piece"] for leg in layout["routes"]]
+        shape = _wye_envelope(api, layout, offset, layout["cuts"], pieces)
+        if shape is None:
             raise RuntimeError(
                 "Mitered wye geometry could not be fused into one valid solid "
                 "(requested radius {:.3f} mm; cuts {})".format(
@@ -243,45 +184,15 @@ def _wye_horizontal_extent(api, port):
     return extent
 
 
-def _wye_split_crosses_curve(api, main, branch_a, branch_b):
+def _wye_main_split(api, main_center, branch_a, branch_b):
     """
-    Whether the line splitting the main section between the branches crosses
-    a curved side: always on a round duct, on an oval when the cut falls in
-    one of its rounded ends, never on a rectangle.
+    Split the main profile across in proportion to the branches' widths.
 
-    Where it does, the walls of the two halves would overlap past the cut and
-    meet at a grazing angle, which OpenCascade's booleans cannot fuse
-    reliably; _wye_main_split_faces then narrows the strip past the cut.
-    """
-    profile = api.port_profile(main)
-    if profile == "Circular":
-        return True
-    if profile != "Oval":
-        return False
-    width, height = float(api.port_width(main)), float(api.port_height(main))
-    extent_a, extent_b = _wye_horizontal_extent(api, branch_a), _wye_horizontal_extent(api, branch_b)
-    cut_from_centre = abs(width * (0.5 - extent_a / (extent_a + extent_b)))
-    return cut_from_centre >= max(width - height, 0.0) / 2.0 - api.EPS
-
-
-# How far (as a share of the wall offset) the strip past the cut is grown on a curved side.
-_WYE_STRIP_GROWTH = 0.5
-
-
-def _wye_main_split_faces(api, main_center, branch_a, branch_b, offset=0.0, curved=False):
-    """
-    Split the main profile horizontally in proportion to the branches.
-
-    With an `offset` each half is cut from the grown profile, so a half of a
-    wall envelope has the same corners as its air half (offsetting the air
-    half's wire can add a corner where the arc meets the cut).
-
-    `curved` (the cut crosses a curved side, _wye_split_crosses_curve): the
-    strip each grown half reaches past the cut is taken from the profile
-    grown by half the offset only. Grown fully, the two halves would share
-    the same curved outer face along the strip and meet the other half's
-    bend at a grazing angle, which a plain fuse cannot handle; narrowed,
-    the strip lies inside the other half's wall wherever both are present.
+    Returns ({id(branch): half face}, split plane). The split plane (design
+    6.6, called the plane P below) passes through the split line, along the
+    main axis and square to the profile's horizontal axis; its normal points
+    to branch A's side. The half faces only place each leg's bend route
+    (their centres); the legs themselves are cut by the plane.
     """
     main_profile = api.profile_from_port(main_center)
     _, horizontal, _vertical, main_dir = api.make_profile_frame(
@@ -300,45 +211,15 @@ def _wye_main_split_faces(api, main_center, branch_a, branch_b, offset=0.0, curv
     branch_a_extent = _wye_horizontal_extent(api, branch_a)
     branch_b_extent = _wye_horizontal_extent(api, branch_b)
     ratio = branch_a_extent / (branch_a_extent + branch_b_extent)
-    offset = float(offset)
-    if abs(offset) <= api.EPS:
-        positive, negative = api.split_profile_face_by_extent(main_profile, horizontal, ratio)
-        return {id(branch_a): positive, id(branch_b): negative}
+    positive, negative = api.split_profile_face_by_extent(main_profile, horizontal, ratio)
 
-    # Each grown half reaches `offset` past the cut as well, so the wall keeps
-    # its thickness in the crotch where the two legs part.
+    # The cut sits where split_profile_face_by_extent puts it: the positive
+    # half takes `ratio` of the extent from the high side.
     low, high = api.profile_projection_bounds(main_profile, horizontal)
-    extent = high - low
-    grown = api.profile_from_port(main_center, offset)
-    if curved:
-        # Each grown half up to the cut, plus a strip past the cut from the half-grown profile.
-        at_cut_positive, at_cut_negative = api.split_profile_face_by_extent(
-            grown, horizontal, (extent * ratio + offset) / (extent + 2.0 * offset)
-        )
-        g = _WYE_STRIP_GROWTH * offset
-        narrow = api.profile_from_port(main_center, g)
-        strip_positive, _ = api.split_profile_face_by_extent(
-            narrow, horizontal, (extent * ratio + g + offset) / (extent + 2.0 * g)
-        )
-        _, strip_negative = api.split_profile_face_by_extent(
-            narrow, horizontal, (extent * ratio + g - offset) / (extent + 2.0 * g)
-        )
-
-        def merged(face, strip):
-            faces = api.refine(api.fuse(face, strip)).Faces
-            if len(faces) != 1:
-                raise RuntimeError("Wye split half did not merge into one face")
-            return faces[0]
-
-        return {
-            id(branch_a): merged(at_cut_positive, strip_positive),
-            id(branch_b): merged(at_cut_negative, strip_negative),
-        }
-    positive, _ = api.split_profile_face_by_extent(
-        grown, horizontal, (extent * ratio + 2.0 * offset) / (extent + 2.0 * offset)
-    )
-    _, negative = api.split_profile_face_by_extent(grown, horizontal, extent * ratio / (extent + 2.0 * offset))
-    return {id(branch_a): positive, id(branch_b): negative}
+    cut = high - (high - low) * ratio
+    centre = api.port_position(main_center)
+    origin = centre + horizontal * (cut - centre.dot(horizontal))
+    return {id(branch_a): positive, id(branch_b): negative}, (origin, horizontal)
 
 
 def _wye_route_clearance(api, branch):
@@ -372,6 +253,23 @@ def _wye_elbow_route(api, branch, split_port, requested_radius, wall=0.0):
     return route
 
 
+# Growth of a wye leg's bend radius per step while its branch end still crosses the
+# split plane, and how many steps are tried before the layout refuses.
+_WYE_RADIUS_GROWTH = 1.25
+_WYE_RADIUS_STEPS = 16
+
+
+def _wye_end_crosses_plane(api, route, plane, branch_index, offset=0.0):
+    """Whether a leg's branch section (grown by `offset`) where its bend ends reaches the other side of the split plane."""
+    origin, normal = plane
+    low, high = api.profile_projection_bounds(api.profile_from_port(route["ports"][0], offset), normal)
+    level = origin.dot(normal)
+    tolerance = max(api.EPS, 1.0e-6 * _size(api, route["ports"][0]))
+    if _wye_leg_side(branch_index) == "positive":
+        return low < level - tolerance
+    return high > level + tolerance
+
+
 def _wye_split_route_layout(context):
     """Calculate shared port roles, split profiles, and feasible elbow paths."""
     api = context["hvac_api"]
@@ -386,82 +284,281 @@ def _wye_split_route_layout(context):
     wall = _wall_thickness(context)
     radius = float(_props(context).get("BranchRadius") or 0.0)
 
-    # Step 1: Build provisional paths at the junction center.
     main_direction = api.unit(api.port_direction(main))
     main_axis_center = _port_axis_point(api, main, center)
-    main_center = api.copy_port(main, position=main_axis_center)
 
-    def build_routes(split_center):
-        split_faces = _wye_main_split_faces(api, split_center, branch_a, branch_b)
+    def build_routes(split_center, radii):
+        split_faces, plane = _wye_main_split(api, split_center, branch_a, branch_b)
         result = []
-        for branch_index, branch in branch_legs:
+        for (branch_index, branch), leg_radius in zip(branch_legs, radii):
             split_face = split_faces[id(branch)]
             split_port = api.copy_port(split_center, position=split_face.CenterOfMass)
-            route = _wye_elbow_route(api, branch, split_port, radius, wall)
+            route = _wye_elbow_route(api, branch, split_port, leg_radius, wall)
             result.append((branch, branch_index, split_face, route))
-        return result
+        return result, plane
 
-    routes = build_routes(main_center)
+    def layout(radii):
+        # Step 1: Build provisional paths at the junction center.
+        main_center = api.copy_port(main, position=main_axis_center)
+        routes, plane = build_routes(main_center, radii)
 
-    # Step 2: Large radii can put an elbow tangent beyond the split plane.
-    # Move the plane outward so each split half approaches its arc from behind.
-    main_shift = max(
-        [0.0]
-        + [
-            (api.port_position(route["ports"][1]) - split_face.CenterOfMass).dot(main_direction)
-            + _wye_route_clearance(api, branch)
-            for branch, _, split_face, route in routes
+        # Step 2: Large radii can put an elbow tangent beyond the split plane.
+        # Move the plane outward so each split half approaches its arc from behind.
+        main_shift = max(
+            [0.0]
+            + [
+                (api.port_position(route["ports"][1]) - split_face.CenterOfMass).dot(main_direction)
+                + _wye_route_clearance(api, branch)
+                for branch, _, split_face, route in routes
+            ]
+        )
+        if main_shift > api.EPS:
+            main_center = api.copy_port(main_center, position=main_axis_center + main_direction * main_shift)
+            routes, plane = build_routes(main_center, radii)
+        return main_center, routes, plane
+
+    # Step 3: Each leg is cut by the split plane (design 6.6 A), so its branch
+    # section must lie wholly on its own side where the bend ends. Legs at a
+    # narrow angle leave each other further out: their bends get a larger
+    # radius (BranchRadius is a minimum here, as it already is for clearance).
+    radii = [radius, radius]
+    for _attempt in range(_WYE_RADIUS_STEPS):
+        main_center, routes, plane = layout(radii)
+        crossing = [_wye_end_crosses_plane(api, route, plane, index, wall) for _b, index, _f, route in routes]
+        if not any(crossing):
+            break
+        radii = [
+            route["radius"] * _WYE_RADIUS_GROWTH if crosses else leg_radius
+            for crosses, leg_radius, (_b, _i, _f, route) in zip(crossing, radii, routes)
         ]
-    )
-    if main_shift > api.EPS:
-        main_center = api.copy_port(main_center, position=api.port_position(main_center) + main_direction * main_shift)
-        routes = build_routes(main_center)
+    else:
+        raise ValueError(
+            "Wye branches overlap where they leave the fitting: increase the angle between them or BranchRadius"
+        )
 
-    return ports, center, main_center, routes
+    return ports, center, main_center, routes, plane
 
 
-def _wye_branch_end_wire(api, route, start_wire, offset):
+def _wye_turn(api, route):
     """
-    The section a split-half sweep ends on at the branch tangent.
-
-    A round branch end is one edge, while the split half it comes from has
-    corners, so the sweep twists. The circle is cut where the half's corners
-    arrive after turning through the bend (about the bend axis), giving it
-    the same number of corners in the same places.
+    (axis, across at the main end, across at the branch end) of a leg's bend:
+    a section direction at the main end, written as axis * a + across_main * b,
+    arrives at the branch end as axis * a + across_branch * b.
     """
     main_tangent, branch_tangent = route["ports"][1], route["ports"][0]
-    profile = api.profile_from_port(branch_tangent, offset)
-    corners = [vertex.Point for vertex in start_wire.Vertexes]
-    if profile.profile != "Circular" or len(corners) < 2:
-        return profile
-
     start_dir = api.unit(api.port_direction(main_tangent)) * -1.0
     end_dir = api.unit(api.port_direction(branch_tangent))
     bend_axis = start_dir.cross(end_dir)
-    start_center = api.port_position(main_tangent)
+    if bend_axis.Length <= api.EPS:
+        return None
+    axis = api.unit(bend_axis)
+    return axis, axis.cross(start_dir), axis.cross(end_dir)
+
+
+def _wye_matched_ends(api, route, start, end):
+    """
+    The two section wires a leg's sweep runs between, with matching corners.
+
+    A round section is one edge while a rectangle or oval has corners, so a
+    sweep from one to the other twists. The round one is drawn as arcs that
+    meet where the other section's corners arrive after turning through the
+    bend (about the bend axis), so both have the same corners in the same
+    places. Two round sections, or two with corners, are used as they are.
+    """
+    start_round, end_round = start.profile == "Circular", end.profile == "Circular"
+    if start_round == end_round:
+        return start, end
+    turn = _wye_turn(api, route)
+    if end_round:
+        corners, centre, other = start.wire.Vertexes, start.center, end
+    else:
+        corners, centre, other = end.wire.Vertexes, end.center, start
     directions = []
-    for corner in corners:
-        relative = corner - start_center
-        if bend_axis.Length <= api.EPS:
-            directions.append(relative)
+    for vertex in corners:
+        relative = vertex.Point - centre
+        if turn is not None:
+            axis, across_main, across_branch = turn
+            if end_round:
+                relative = axis * relative.dot(axis) + across_branch * relative.dot(across_main)
+            else:
+                relative = axis * relative.dot(axis) + across_main * relative.dot(across_branch)
+        directions.append(relative)
+    if len(directions) < 2:
+        return start, end
+    wire = api.make_circular_wire_split_at(other.center, other.direction, float(other.params["Diameter"]), directions)
+    return (start, wire) if end_round else (wire, end)
+
+
+def _wye_leg_side(branch_index):
+    """Which side of the split plane a leg is kept on: branch A (index 1) the positive one."""
+    return "positive" if branch_index == 1 else "negative"
+
+
+def _wye_leg_piece(api, leg, main_center, plane, offset, cuts=None):
+    """
+    One leg of a plane-split wye (design 6.6 A), grown by `offset`.
+
+    The leg starts from the *full* common section on the split station,
+    centred on the main axis: a straight piece up to its bend's start, then
+    the bend into the branch section (a sweep along the arc, or faceted
+    gores when `cuts` is given). The result is cut by the split plane and
+    only the leg's own side kept, so the two legs meet face to face on a
+    plane -- which a plain fuse handles -- instead of along the curved,
+    tangent faces two split-half sweeps used to share.
+
+    Returns (piece, trim along the branch to where the bend ends).
+    """
+    branch, route = leg["branch"], leg["route"]
+    main_dir = api.unit(api.port_direction(main_center))
+    centre = api.port_position(main_center)
+
+    # Step 1: a branch section that crosses the split plane at the bend's end
+    # would lose part of itself to the cut. The layout grows the radius to
+    # avoid it, so this only guards a wall grown beyond what it allowed for.
+    end_profile = api.profile_from_port(route["ports"][0], offset)
+    tolerance = max(api.EPS, 1.0e-6 * _size(api, branch))
+    if _wye_end_crosses_plane(api, route, plane, leg["branch_index"], offset):
+        raise ValueError(
+            "Wye branches overlap where they leave the fitting: increase the angle between them or BranchRadius"
+        )
+
+    # Step 2: the straight piece, full common section, from the split station to the bend start.
+    station = (api.port_position(route["ports"][1]) - centre).dot(main_dir)
+    bend_start = api.copy_port(main_center, position=centre + main_dir * station)
+    start_profile = api.profile_from_port(bend_start, offset)
+    pieces = []
+    if abs(station) > tolerance:
+        pieces.append(_outward(api.extrude(api.profile_from_port(main_center, offset), main_dir * station, solid=True)))
+
+    # Step 3: the bend from the full common section into the branch.
+    if cuts is not None:
+        split_port = api.copy_port(main_center, position=leg["split_face"].CenterOfMass)
+        bend, bend_trims = _mitered_bend(
+            api, branch, split_port, route["radius"], cuts, profile1=start_profile, offset=offset
+        )
+        branch_trim = bend_trims[0]
+    else:
+        try:
+            start_wire, end_wire = _wye_matched_ends(api, route, start_profile, end_profile)
+            bend = api.sweep([start_wire, end_wire], api.reverse(route["path"]), solid=True)
+        except Exception as exc:
+            raise RuntimeError(
+                "Wye branch sweep failed at effective radius {:.3f} mm: {}".format(route["radius"], exc)
+            ) from exc
+        branch_trim = route["trim_lengths"][0]
+    pieces.append(_outward(bend))
+
+    # Step 4: keep only the leg's own side of the split plane.
+    piece = api.fuse(*pieces) if len(pieces) > 1 else pieces[0]
+    return api.clip_plane(piece, plane, side=leg["side"]), branch_trim
+
+
+# A crotch plate is left out when the other leg's grown piece already holds this
+# share of it: the wall it would add is there already.
+_WYE_PLATE_COVERED = 0.99
+# A plate cut from the other leg's piece is trusted only up to this multiple of
+# the volume the two legs' faces on the split plane allow for.
+_WYE_PLATE_SLACK = 1.1
+
+
+def _wye_crotch_plates(api, pieces, plane, offset):
+    """
+    Wall plates on the split plane for an asymmetric wye (design 6.6 A 5).
+
+    Where one leg's section on the plane reaches past the other's, its air
+    face lies on the plane with no wall beyond it. The plate fills that
+    region to one wall thickness on the other leg's side.
+
+    Step 1 decides whether a side needs a plate at all, from the two legs'
+    faces on the plane: nothing is left of one minus the other on a
+    symmetric wye or bullhead, and slivers narrower than the wall are
+    ignored (their gap lies within the neighbouring wall, and a plate that
+    thin only fuses as a separate solid).
+    Step 2 builds the plate from the pieces themselves: the leg's own face
+    extruded one wall thickness across the plane, minus the other leg's
+    piece. The plate then shares the pieces' own faces, which fuses far
+    more reliably than a plate drawn from the 2D difference.
+    Step 3 falls back to the 2D difference where that cut misfires (it
+    keeps more than the faces allow for), leaving out a plate the other
+    leg's piece already holds.
+    """
+    _origin, normal = plane
+    faces = [api.section_face(piece, plane) for piece in pieces]
+    plates = []
+    for own, other, other_piece, into in (
+        (faces[0], faces[1], pieces[1], normal * -offset),
+        (faces[1], faces[0], pieces[0], normal * offset),
+    ):
+        # Step 1: the region of this leg's face the other leg's face does not cover.
+        regions = [
+            face
+            for face in api.cut(own, other).Faces
+            if face.Area > api.EPS and 2.0 * face.Area / max(face.Length, api.EPS) >= offset
+        ]
+        if not regions:
             continue
-        axis = api.unit(bend_axis)
-        across_start, across_end = axis.cross(start_dir), axis.cross(end_dir)
-        directions.append(axis * relative.dot(axis) + across_end * relative.dot(across_start))
-    return api.make_circular_wire_split_at(profile.center, end_dir, float(profile.params["Diameter"]), directions)
+        allowed = _WYE_PLATE_SLACK * sum(face.Area for face in regions) * offset + offset**3
+
+        # Step 2: the leg's own face across the plane, minus the other leg.
+        cut = []
+        for face in own.Faces:
+            prism = _outward(api.extrude(face.OuterWire, into, solid=True))
+            cut.extend(solid for solid in api.cut(prism, other_piece).Solids if solid.Volume > offset**3)
+        if cut and sum(solid.Volume for solid in cut) <= allowed:
+            plates.extend(cut)
+            continue
+
+        # Step 3: the 2D difference, extruded.
+        for face in regions:
+            plate = _outward(api.extrude(face.OuterWire, into, solid=True))
+            if api.common(plate, other_piece).Volume < _WYE_PLATE_COVERED * plate.Volume:
+                plates.append(plate)
+    return plates
 
 
-# The order a radius wye's pieces are fused in. OCC booleans on swept solids
-# that share seams depend on the order; this one was chosen with the smoke run
-# (tools/geometry_smoke.py) as the one that builds the most cases.
-_WYE_RADIUS_FUSE_ORDER = ("split_a", "split_b", "bend_a", "bend_b", "main", "trim_a", "trim_b")
+def _wye_envelope(api, layout, offset, cuts=None, pieces=None):
+    """
+    A plane-split wye's whole outer boundary grown by `offset`: the main
+    straight up to the split station, both legs (cut by the split plane),
+    the crotch plates of a wall envelope, and each branch's straight trim.
+    `pieces` reuses legs already built at this offset. Returns None when the
+    fuse does not give one valid solid holding every piece.
+    """
+    main, main_center, trims = layout["main"], layout["main_center"], layout["trims"]
+    legs = layout["routes"]
+    if pieces is None:
+        pieces = [_wye_leg_piece(api, leg, main_center, layout["plane"], offset, cuts)[0] for leg in legs]
+
+    parts = list(pieces)
+    if offset > 0.0:
+        parts.extend(_wye_crotch_plates(api, pieces, layout["plane"], offset))
+
+    # The main straight ends on the split station, where the two legs' start faces meet it.
+    main_end = _trimmed(api, main, trims[0])
+    main_reach = api.port_position(main_end) - api.port_position(main_center)
+    if main_reach.Length > max(api.EPS, 1.0e-6 * _size(api, main)):
+        parts.append(_loft(api, [main_end, main_center], offset, ruled=True))
+
+    # Each branch's straight trim past its bend.
+    for leg in legs:
+        branch = leg["branch"]
+        start = leg["route"]["ports"][0]
+        end = _trimmed(api, branch, trims[leg["branch_index"]])
+        if (api.port_position(end) - api.port_position(start)).Length > max(api.EPS, 1.0e-6 * _size(api, branch)):
+            parts.append(_loft(api, [start, end], offset, ruled=True))
+
+    try:
+        shape = api.fuse(*parts)
+    except Exception:
+        return None
+    return shape if _is_union_of(api, shape, parts) else None
 
 
 def _wye_radius_layout(context):
-    """Calculate the split profiles, branch paths, and trims for a wye."""
+    """Calculate the split plane, branch paths, and trims for a radius wye."""
     api = context["hvac_api"]
     p = _props(context)
-    ports, center, main_center, routes = _wye_split_route_layout(context)
+    ports, center, main_center, routes, plane = _wye_split_route_layout(context)
     main = ports[0]
     main_direction = api.unit(api.port_direction(main))
 
@@ -473,111 +570,39 @@ def _wye_radius_layout(context):
         minimums[branch_index] = max(minimums[branch_index], route["trim_lengths"][0])
 
     trims = _junction_trims(api, p, ports, ("TrimMain", "TrimBranchA", "TrimBranchB"), (0.70, 0.70, 0.70), minimums)
-    return ports, main_center, routes, trims
+    legs = [
+        {
+            "branch": branch,
+            "branch_index": branch_index,
+            "split_face": split_face,
+            "route": route,
+            "side": _wye_leg_side(branch_index),
+        }
+        for branch, branch_index, split_face, route in routes
+    ]
+    return {"ports": ports, "main": main, "main_center": main_center, "plane": plane, "routes": legs, "trims": trims}
 
 
 def measure_wye_radius(context):
     api = context["hvac_api"]
-    ports, _main_center, _routes, trims = _wye_radius_layout(context)
-    return api.build_trim_rec_from_port_lengths(list(zip(ports, trims)))
+    layout = _wye_radius_layout(context)
+    return api.build_trim_rec_from_port_lengths(list(zip(layout["ports"], layout["trims"])))
 
 
 def build_wye_radius(context):
-    """Build a radiused wye from a horizontally divided main profile."""
+    """Radius wye: each leg swept from the full common section into its branch, cut by the split plane."""
     api = context["hvac_api"]
-    ports, main_center, routes, trims = _wye_radius_layout(context)
-    split_crosses_curve = _wye_split_crosses_curve(api, ports[0], ports[1], ports[2])
+    layout = _wye_radius_layout(context)
+    ports, trims = layout["ports"], layout["trims"]
 
     def envelope(offset):
-        # Sweep each split half of the main profile into its branch tangent.
-        split_sweeps = []
-        branch_sweeps = []
-        grown_faces = _wye_main_split_faces(api, main_center, ports[1], ports[2], offset, split_crosses_curve)
-        for branch, _branch_index, split_face, route in routes:
-            main_tangent = route["ports"][1]
-            main_tangent_position = api.port_position(main_tangent)
-            main_reach = main_tangent_position - split_face.CenterOfMass
-            split_wire = grown_faces[id(branch)].OuterWire
-            tangent_wire = split_wire
-            if main_reach.Length > api.EPS:
-                route_overlap = 0.1 * _wye_route_clearance(api, branch)
-                section_probe = api.extrude(split_wire, main_reach, solid=True)
-                probe = api.extrude(split_wire, main_reach + api.unit(main_reach) * route_overlap, solid=True)
-                tangent_face = api.section_face(
-                    section_probe, (main_tangent_position, api.port_direction(main_tangent))
-                )
-                tangent_wire = tangent_face.OuterWire
-                split_sweeps.append(probe)
-            else:
-                split_sweeps.append(None)
-
-            try:
-                branch_sweeps.append(
-                    api.sweep(
-                        [tangent_wire, _wye_branch_end_wire(api, route, tangent_wire, offset)],
-                        api.reverse(route["path"]),
-                        solid=True,
-                    )
-                )
-            except Exception as exc:
-                raise RuntimeError(
-                    "Wye branch sweep failed at effective radius {:.3f} mm: {}".format(route["radius"], exc)
-                ) from exc
-
-        # A small scaled overlap avoids a coplanar boolean at the split plane;
-        # the full main profile still stops at the split approach itself.
-        main_overlap = 0.1 * min(_wye_route_clearance(api, branch) for branch, _, _, _ in routes)
-        main_trim_start = api.copy_port(
-            main_center,
-            position=(api.port_position(main_center) - api.unit(api.port_direction(main_center)) * main_overlap),
-        )
-        trim_starts = [main_trim_start] + [route["ports"][0] for _, _, _, route in routes]
-        trim_sweeps = []
-        for port, trim_start, trim in zip(ports, trim_starts, trims):
-            trim_end = _trimmed(api, port, trim)
-            trim_reach = api.port_position(trim_end) - api.port_position(trim_start)
-            trim_tolerance = max(api.EPS, 1.0e-6 * _size(api, port))
-            if trim_reach.Length <= trim_tolerance:
-                trim_sweeps.append(None)
-                continue
-            trim_path = api.make_line(api.port_position(trim_start), api.port_position(trim_end))
-            try:
-                trim_sweeps.append(
-                    api.sweep(
-                        [api.profile_from_port(trim_start, offset), api.profile_from_port(trim_end, offset)],
-                        trim_path,
-                        solid=True,
-                    )
-                )
-            except Exception as exc:
-                edge_key = str(port.get("edge_key", "") or "?")
-                raise RuntimeError(
-                    "Wye trim sweep failed for port '{}' at {:.6f} mm: {}".format(edge_key, trim_reach.Length, exc)
-                ) from exc
-
-        # One fuse, in one fixed order (see _WYE_RADIUS_FUSE_ORDER).
-        named = {"main": trim_sweeps[0]}
-        for leg, side in enumerate("ab"):
-            named.update(
-                {
-                    "split_" + side: split_sweeps[leg],
-                    "bend_" + side: branch_sweeps[leg],
-                    "trim_" + side: trim_sweeps[leg + 1],
-                }
-            )
-        pieces = [named[name] for name in _WYE_RADIUS_FUSE_ORDER if named[name] is not None]
-        try:
-            shape = api.fuse(*pieces)
-        except Exception:
-            shape = None
-        if not _is_union_of(api, shape, pieces):
+        shape = _wye_envelope(api, layout, offset)
+        if shape is None:
             requested_radius = float(_props(context).get("BranchRadius") or 0.0)
-            effective_radii = ", ".join("{:.3f}".format(route["radius"]) for _, _, _, route in routes)
+            effective_radii = ", ".join("{:.3f}".format(leg["route"]["radius"]) for leg in layout["routes"])
             raise RuntimeError(
                 "Wye geometry could not be fused into one valid solid "
-                "(requested radius {:.3f} mm; effective branch radii {} mm): use the mitered wye".format(
-                    requested_radius, effective_radii
-                )
+                "(requested radius {:.3f} mm; effective branch radii {} mm)".format(requested_radius, effective_radii)
             )
         return shape
 

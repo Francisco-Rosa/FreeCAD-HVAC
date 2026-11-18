@@ -31,9 +31,11 @@ only to `HVACLibraryAPI` / `HVACLossAPI`.
 **Pending items (18 November 2026).** Everything still open in this plan, in one place.
 
 *Needs the owner*
-- GUI check of the pending-items pass of 18 November 2026 (below): the drawn vanes, tap damper, extractor, filter media and coil block; the radius wye on round ducts; radiussed offsets at length 0; the Friction section of the Size Ducts panel; the single BranchRadius on face-mounted radius and lateral tees.
-- Which "after the freeze" gap comes next (list below).
+- GUI check of design 6.6 (section 6): wyes (radius and mitered, the crotch plate of an uneven wye with a wall), lateral tees, double wyes, the mitered shoe and the centre radius tee.
+- Next (owner, 18 November 2026): review and document the API and the library framework. The "after the freeze" gaps below come after that.
 - Deferred by the owner: saving a custom fitting as a library type.
+
+*Owner's GUI check of the pending-items pass (18 November 2026):* drawn vanes, tap damper, extractor, filter media and coil block; radiussed offsets at length 0; the Friction section of the Size Ducts panel; the single BranchRadius: all passed. The radius wye on round ducts failed; fixed by design 6.6.
 
 *After the freeze (6.4 item 5)*
 - Fan curves and the fan's operating point.
@@ -53,7 +55,6 @@ only to `HVACLibraryAPI` / `HVACLossAPI`.
 - Charts: Fig. 14-4 (flex duct compression) was already in `analysis/friction.flex_compression_factor` and on `circular_flex`; Fig. 14-3 (roughness) and 14-5 (density) are what Darcy-Weisbach with the duct's roughness and the network's air properties computes directly; the nominal-size tables 14-2 to 14-5 are the equivalent-diameter equation, which is implemented. Nothing more to digitise.
 
 *Still open: geometry*
-- Branch geometry robustness, design 6.6 (for review): the radius wye fails on about half of a size and wall sweep on every profile (the pending-items pass overstated its round bullhead fix: the owner's GUI check failed it); the mitered wye, lateral tees, double wyes and mitered shoe fail when the branch is as large as the run, or with thick walls or insulation.
 - A radiussed offset with a user-set length too short for its arcs is refused (says how long it must be).
 
 *Still open: loss coverage*
@@ -66,8 +67,9 @@ only to `HVACLibraryAPI` / `HVACLossAPI`.
 - Draft snapping onto equipment snap points not tried by script (the owner's GUI check covered the port panel).
 
 *Testing*
-- Unit tests: 2240 pass on Linux. The 20 failures once seen on the Windows machine were never investigated.
-- Smoke run, 18 November 2026 (after the pending-items pass): 658 valid / 32 skipped / 3 errors, the radius wyes above (round wye, tall oval wye and bullhead, with a wall). Fixed since the run before: the round bullhead radius wye and the six steep radiussed offsets; no other build changed. The new features are valid wherever they are built (checked by bounding box for placement).
+- Unit tests: 2237 pass on Linux (the five split-rule tests went with the rule). The 20 failures once seen on the Windows machine were never investigated.
+- Smoke run, 18 November 2026 (after design 6.6): 661 valid / 32 skipped / 0 errors. No build lost; volumes and trims changed only on the types 6.6 rebuilt (and on face-mounted tees, from the single BranchRadius change before it).
+- Geometry sweep (`tools/geometry_sweep.py`, design 6.6), 18 November 2026: 1838 / 1838 valid, every type and case (the design's table had the radius wye at 76 / 144, the others failing on full-size branches and thick walls).
 
 Differences from the plan as written below:
 
@@ -374,9 +376,9 @@ fan connections. "Add Equipment from Library" is now "Add Equipment", in a
 "Fittings and Equipment" task group. The freeze is tagged `api-freeze-1`
 (geometry API 3, loss API 1, PartScript 3).
 
-**Next task:** the owner's GUI check of the pending-items pass (section 0,
-"Pending items"), then the "after the freeze" gaps of 6.4 item 5. Known open defect: the radius wye has no wall on round and tall
-oval ducts (above); the mitered wye is the automatic choice there anyway.
+**Next task:** the owner's GUI check of design 6.6, then (owner, 18 November
+2026) a review and documentation of the API and the library framework. The
+"after the freeze" gaps of 6.4 item 5 come after that.
 
 **Branch:** all roadmap work is on `roadmap-stage-0`. Work done in a
 worktree is committed there and `roadmap-stage-0` is then fast-forwarded to
@@ -1539,7 +1541,9 @@ Tests: `tests/test_equipment.py`.
 
 Written 18 November 2026 after the owner's GUI check found the round
 bullhead radius wye failing (and called the radius tee and wye "finicky").
-**For the owner's review; nothing implemented.**
+**Owner answers (18 November 2026):** (a) A, for both wyes, with the crotch plate; (b) B, with its margin; (c) yes, commit the sweep; (d) implement 6.6, and keep the radius wye in the Change Type list.
+
+**Status: done, 18 November 2026; needs the owner's GUI check.** See "Implementation" at the end of this section.
 
 **Evidence: a size and wall sweep.** The smoke run builds one node per
 family; it hid the problem (the pending-items pass reported the round
@@ -1673,3 +1677,10 @@ look in the GUI (the crotch plate in particular).
 - (d) Until this lands: leave the radius wye as it is (it fails on about
   half the sweep, on every profile), or take it out of the Change Type
   list for round ducts only?
+
+**Implementation (18 November 2026).**
+- A, `fittings/wyes.py`: `_wye_main_split` returns the half faces (they only place each leg's route) and the split plane. `_wye_leg_piece` builds a leg from the full common section: a straight piece to its bend's start, then a sweep (radius) or gores (mitered, `_mitered_bend` with `profile1`) into the branch, cut by the plane. A round section meeting one with corners is drawn as matching arcs (`_wye_matched_ends`). Both wyes share `_wye_envelope` (main straight, legs, plates, trims, one fuse, checked with `_is_union_of`). Removed: the split-half sweeps, the narrowed strip, `_wye_split_crosses_curve`, the radius wye's fixed fuse order (and its unit test, `tests/test_wye_split_rule.py`).
+- Found by the sweep, not in the design: on 30 degree wyes with large legs the branch end crosses the split plane, so the cut would take part of the leg. The layout now grows that leg's radius by 25 % per step (up to 16 steps) until its end section, grown by the wall, lies on its own side (`_wye_end_crosses_plane`); BranchRadius is a minimum, as it already was for the tangent clearance. Before, these legs simply overlapped.
+- Crotch plate (`_wye_crotch_plates`): needed where one leg's face on the plane minus the other's leaves a region at least a wall wide. Built as the leg's own face extruded one wall across the plane, minus the other leg's piece, so the plate shares the pieces' faces; a plate drawn from the 2D difference alone broke the fuse on most uneven wyes. Where that cut misfires (keeps more than 1.1 times what the faces allow), the 2D plate is used instead, left out when the other leg already holds it.
+- B, `_common._inset_bend_start`: the start section is scaled (same shape) to clear the run's inside face by the margin, checked in 24 directions. Used by `crosses._double_wye_bend` (double wyes and both lateral tees), the mitered shoe, and the centre radius tee's sweep end (its 1 % overlap is gone).
+- `tools/geometry_sweep.py`: the scratch sweep, committed; it adds an uneven wye (one leg at the ratio and 45 degrees, the other full size at 30 degrees) and the straight tee, taps and elbows. `tools/geometry_smoke.py` gained `build_entry` and `report_and_save` for it.

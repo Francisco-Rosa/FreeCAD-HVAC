@@ -13,6 +13,7 @@ from ._common import (
     _clip_junction_to_body,
     _extend_leg,
     _finish,
+    _inset_bend_start,
     _junction_minimums,
     _junction_shape_minimums,
     _junction_trims,
@@ -145,18 +146,24 @@ def _branch_bend_radius(api, requested, branch, from_leg, center, wall=0.0):
     return max(size, minimum, reach / math.tan(deflection / 2.0))
 
 
-def _double_wye_bend(api, branch, trunk_axis_port, radius, cuts, mitered, offset=0.0):
+def _double_wye_bend(api, branch, trunk_axis_port, run_port, radius, cuts, mitered, wall=0.0, offset=0.0):
     """
     One branch bend, from the trunk axis out to the branch. Returns
     (shape, trim along the branch from its port to where the bend ends).
-    The bend starts on the trunk axis with the branch's own section, so it
-    begins inside the trunk and emerges through its wall.
+
+    The bend starts on the trunk axis, inside the trunk, and emerges through
+    its wall. Its start section is the branch's own, scaled down where it
+    would reach the trunk's inside face (_inset_bend_start, design 6.6 B);
+    `run_port` gives the trunk's section and `wall` the total wall
+    thickness, which sets that margin the same for every wall layer.
     """
-    if mitered:
-        shape, trims = _mitered_bend(api, branch, trunk_axis_port, radius, cuts, offset=offset)
-        return shape, trims[0]
     route = api.make_elbow_path(branch, trunk_axis_port, radius)
-    ends = [api.profile_from_port(route["ports"][0], offset), api.profile_from_port(route["ports"][1], offset)]
+    start = _inset_bend_start(api, route["ports"][1], run_port, wall)
+    start_profile = api.profile_from_port(start, offset)
+    if mitered:
+        shape, trims = _mitered_bend(api, branch, trunk_axis_port, radius, cuts, profile1=start_profile, offset=offset)
+        return shape, trims[0]
+    ends = [api.profile_from_port(route["ports"][0], offset), start_profile]
     return api.sweep(ends, route["path"], solid=True), route["trim_lengths"][0]
 
 
@@ -171,6 +178,7 @@ def _double_wye_layout(context, mitered):
     ports = [run_a, run_b, roles["branch_a"], roles["branch_b"]]
     center = api.center_from_context(context)
     cuts = max(int(p.get("NumberOfCuts", 2) or 2), 1)
+    wall = _wall_thickness(context)
 
     bends = []
     for branch in ports[2:]:
@@ -178,15 +186,16 @@ def _double_wye_layout(context, mitered):
         # The branch turns away from the run leg it makes the wider angle
         # with (air coming from that leg takes the gentle turn into it).
         from_leg = min((run_a, run_b), key=lambda leg: branch_dir.dot(api.unit(api.port_direction(leg))))
-        radius = _branch_bend_radius(api, p.get("BranchRadius"), branch, from_leg, center, _wall_thickness(context))
+        radius = _branch_bend_radius(api, p.get("BranchRadius"), branch, from_leg, center, wall)
         # A port on the trunk axis, where the branch axis meets it, heading out along that run leg.
         trunk_axis_port = api.copy_port(
             branch, position=_port_axis_point(api, branch, center), direction=api.port_direction(from_leg)
         )
-        shape, branch_trim = _double_wye_bend(api, branch, trunk_axis_port, radius, cuts, mitered)
+        shape, branch_trim = _double_wye_bend(api, branch, trunk_axis_port, from_leg, radius, cuts, mitered, wall)
         bends.append(
             {
                 "branch": branch,
+                "from_leg": from_leg,
                 "trunk_axis_port": trunk_axis_port,
                 "radius": radius,
                 "shape": shape,
@@ -200,7 +209,7 @@ def _double_wye_layout(context, mitered):
     for index, bend in enumerate(bends, start=2):
         minimums[index] = max(minimums[index], bend["branch_trim"])
     trims = _junction_trims(api, p, ports, _CROSS_TRIM_NAMES, (0.4, 0.4, 0.6, 0.6), minimums)
-    return {"ports": ports, "center": center, "cuts": cuts, "bends": bends, "trims": trims}
+    return {"ports": ports, "center": center, "cuts": cuts, "wall": wall, "bends": bends, "trims": trims}
 
 
 def _build_double_wye(context, mitered):
@@ -216,7 +225,15 @@ def _build_double_wye(context, mitered):
             # only a wall envelope (offset > 0) needs it built again, larger.
             if offset > 0.0:
                 bend_shape, _trim = _double_wye_bend(
-                    api, bend["branch"], bend["trunk_axis_port"], bend["radius"], layout["cuts"], mitered, offset
+                    api,
+                    bend["branch"],
+                    bend["trunk_axis_port"],
+                    bend["from_leg"],
+                    bend["radius"],
+                    layout["cuts"],
+                    mitered,
+                    layout["wall"],
+                    offset,
                 )
             else:
                 bend_shape = bend["shape"]

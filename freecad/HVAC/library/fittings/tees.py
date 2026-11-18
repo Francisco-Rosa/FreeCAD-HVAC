@@ -11,6 +11,7 @@ from ._common import (
     _extend_leg,
     _extra_trim,
     _finish,
+    _inset_bend_start,
     _junction_minimums,
     _junction_shape_minimums,
     _junction_trims,
@@ -273,18 +274,18 @@ def _radius_tee(context, run_factor, branch_factor, branch_alignment):
     main_index = 0 if layout["main"] is run_a else 1
     minor_index = 1 - main_index
     main_inner_port = layout["main_inner_port"]
+    run_end = route["ports"][1]
     if branch_alignment == "center":
-        # Cross the shared tangent plane slightly so OCC fuses the three
-        # full-profile bodies by volume instead of a coincident face.
-        overlap = max(1.0, 0.01 * _size(api, layout["main"]))
-        main_inner_port = api.copy_port(
-            main_inner_port,
-            position=api.port_position(main_inner_port) - api.unit(api.port_direction(layout["main"])) * overlap,
-        )
+        # The sweep ends in the run on the main's full section, on the same
+        # plane the main and minor bodies meet on. Ending it slightly smaller
+        # (design 6.6 B) keeps its sides off the run walls, so it crosses the
+        # minor body's wall at an angle instead of running along it.
+        run_end = _inset_bend_start(api, run_end, layout["main"], _wall_thickness(context))
 
     def envelope(offset):
         # Build the curved body only here; measurement uses the shared layout.
-        stub = api.sweep([api.profile_from_port(port, offset) for port in route["ports"]], route["path"], solid=True)
+        ends = [api.profile_from_port(route["ports"][0], offset), api.profile_from_port(run_end, offset)]
+        stub = api.sweep(ends, route["path"], solid=True)
 
         # Start the branch extension at the sweep's actual end section. A trim
         # length can be clamped, so reconstructing that section can leave a gap.
@@ -415,8 +416,15 @@ def _tee_mitered_shoe_layout(context):
     lean = _lean_port(api, run_a, run_b, branch, reverse=bool(p.get("ReverseBranchBend", False)))
     inner_position = _port_axis_point(api, branch, center)
     trunk_axis_port = api.copy_port(branch, position=inner_position, direction=api.port_direction(lean))
+    # The bend starts on the trunk axis; where the branch section would reach the
+    # trunk's inside face there, it starts smaller (design 6.6 B).
+    wall = _wall_thickness(context)
+    route = api.make_elbow_path(branch, trunk_axis_port, radius)
+    start_port = _inset_bend_start(api, route["ports"][1], lean, wall)
 
-    bend_shape, route_trims = _mitered_bend(api, branch, trunk_axis_port, radius, cuts)
+    bend_shape, route_trims = _mitered_bend(
+        api, branch, trunk_axis_port, radius, cuts, profile1=api.profile_from_port(start_port)
+    )
     branch_route_trim, lean_route_trim = route_trims
 
     minimums = _junction_minimums(api, center, tee_ports)
@@ -435,6 +443,7 @@ def _tee_mitered_shoe_layout(context):
         "center": center,
         "lean": lean,
         "trunk_axis_port": trunk_axis_port,
+        "start_port": start_port,
         "radius": radius,
         "cuts": cuts,
         "bend_shape": bend_shape,
@@ -482,7 +491,13 @@ def build_tee_mitered_shoe(context):
         # wall envelope (offset > 0) needs the bend built again, larger.
         if offset > 0.0:
             bend_shape = _mitered_bend(
-                api, branch, layout["trunk_axis_port"], layout["radius"], layout["cuts"], offset=offset
+                api,
+                branch,
+                layout["trunk_axis_port"],
+                layout["radius"],
+                layout["cuts"],
+                profile1=api.profile_from_port(layout["start_port"], offset),
+                offset=offset,
             )[0]
         else:
             bend_shape = layout["bend_shape"]
@@ -650,11 +665,12 @@ def _lateral_bend_layout(context, mitered):
     # so air coming along the run takes the gentle turn into the branch.
     branch_dir = api.unit(api.port_direction(branch))
     from_leg = min((run_a, run_b), key=lambda leg: branch_dir.dot(api.unit(api.port_direction(leg))))
-    radius = _branch_bend_radius(api, p.get("BranchRadius"), branch, from_leg, center, _wall_thickness(context))
+    wall = _wall_thickness(context)
+    radius = _branch_bend_radius(api, p.get("BranchRadius"), branch, from_leg, center, wall)
     trunk_axis_port = api.copy_port(
         branch, position=_port_axis_point(api, branch, center), direction=api.port_direction(from_leg)
     )
-    bend_shape, branch_trim = _double_wye_bend(api, branch, trunk_axis_port, radius, cuts, mitered)
+    bend_shape, branch_trim = _double_wye_bend(api, branch, trunk_axis_port, from_leg, radius, cuts, mitered, wall)
 
     # Each port's body has to contain the other sections and the bend itself.
     minimums = _junction_minimums(api, center, ports)
@@ -666,6 +682,8 @@ def _lateral_bend_layout(context, mitered):
         "center": center,
         "cuts": cuts,
         "radius": radius,
+        "wall": wall,
+        "from_leg": from_leg,
         "trunk_axis_port": trunk_axis_port,
         "bend_shape": bend_shape,
         "branch_trim": branch_trim,
@@ -705,7 +723,15 @@ def _build_lateral_bend(context, mitered):
         # wall envelope (offset > 0) needs it built again, larger.
         if offset > 0.0:
             bend, _trim = _double_wye_bend(
-                api, branch, layout["trunk_axis_port"], layout["radius"], layout["cuts"], mitered, offset
+                api,
+                branch,
+                layout["trunk_axis_port"],
+                layout["from_leg"],
+                layout["radius"],
+                layout["cuts"],
+                mitered,
+                layout["wall"],
+                offset,
             )
         else:
             bend = layout["bend_shape"]

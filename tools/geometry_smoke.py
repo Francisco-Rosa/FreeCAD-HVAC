@@ -168,15 +168,25 @@ def _build_one(reg, library_id, type_def, family, profile, section):
     ports, pairs = _node(family, profile, section)
     if ports is None:
         return {"status": "skipped", "detail": "no synthetic node for family"}
+    return build_entry(reg, library_id, type_def, family.split(".", 1)[1].split(" ")[0], ports, pairs)
+
+
+def build_entry(reg, library_id, type_def, family, ports, pairs, properties=None):
+    """
+    Build one type on one synthetic node and report it: status (ok, invalid,
+    error, trim-mismatch), volumes per layer and feature, trims per port.
+    `family` is the classifier family without its topology (e.g. "wye").
+    Also used by tools/geometry_sweep.py.
+    """
     context = {
         "center_point": (0.0, 0.0, 0.0),
         "connected_ports": ports,
         "analysis": {"collinear_pairs": [{"a": a, "b": b} for a, b in pairs]},
-        "family": family.split(".", 1)[1].split(" ")[0],
+        "family": family,
         "topology": type_def.topology,
         "type_id": type_def.id,
         "library_id": library_id,
-        "properties": {},
+        "properties": dict(properties or {}),
     }
     try:
         result = reg.build_geometry(library_id, type_def, context)
@@ -247,8 +257,12 @@ def run():
     return report
 
 
-def main(argv):
-    report = run()
+def report_and_save(report, argv):
+    """
+    Print the problems in `report` (every build with --all in `argv`) and a
+    summary; save the full report to the first *.json argument, if any.
+    Also used by tools/geometry_sweep.py.
+    """
     show_all = "--all" in argv
     counts = {}
     for key, entry in report.items():
@@ -274,6 +288,10 @@ def main(argv):
         with open(out_path, "w", encoding="utf-8") as f:
             json.dump(report, f, indent=1, sort_keys=True)
         print("saved", out_path)
+
+
+def main(argv):
+    report_and_save(run(), argv)
 
 
 if __name__ == "__main__":

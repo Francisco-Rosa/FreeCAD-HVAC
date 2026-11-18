@@ -22,8 +22,12 @@ for in `library.json` (`"requires_api"`) and is refused by any other.
 - Radius tees and lateral tees have one radius: `ElbowRadius` is gone from them, and a face-mounted branch uses
   `BranchRadius` for its elbow. A document that set `ElbowRadius` on one of these types loses that value.
 
-- Radius wye: builds with a wall on a round bullhead and solid on a tall oval; a round wye with a wall still refuses
-  (use the mitered wye).
+- Branch geometry rebuilt for robustness (design 6.6). Wyes (radius and mitered) are split by a plane: each leg is
+  built from the full common section and cut by the split plane, with a flat wall plate in the crotch of an uneven wye.
+  Legs at a narrow angle get a larger bend radius until they part (`BranchRadius` is a minimum). Lateral tees, double
+  wyes, the mitered shoe and the centre radius tee start their bend smaller inside the run, so it crosses the run wall
+  at an angle. `tools/geometry_sweep.py` builds these fittings across sizes, angles, profiles and walls: every case
+  builds.
 - Radiussed offset: `OffsetLength` 0 (the new default) makes the offset as long as its arcs need.
 - Drawn as features: turning vanes, splitter vanes, the SMACNA tap dampers, extractor blades, filter media pleats and
   the coil block with its header connections.

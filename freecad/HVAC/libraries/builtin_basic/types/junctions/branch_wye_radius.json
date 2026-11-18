@@ -64,7 +64,7 @@
       "name": "BranchRadius",
       "prop_type": "App::PropertyLength",
       "group": "Dimensions",
-      "description": "Bend radius of each non-main branch as it curves into the main leg",
+      "description": "Bend radius of each non-main branch as it curves into the main leg (a minimum: legs at a narrow angle get a larger radius so they part)",
       "default": 150.0
     }
   ],
