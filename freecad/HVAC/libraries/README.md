@@ -702,6 +702,7 @@ and also when this table is out of date (regenerate it with
 | smacna | `branch_tee_straight` | Circular, Rectangular, Oval | model | `loss_tee_generic`; diverging, common_leg branch: `loss_branch_diverging_branch`; converging, common_leg branch: `loss_branch_converging_branch` |
 | smacna | `branch_wye_generic` | Circular, Rectangular, Oval, Generic | model | `loss_wye_generic`; diverging, common_leg run: `loss_branch_diverging_run`; converging, common_leg run: `loss_branch_converging_run`; diverging, common_leg branch: `loss_branch_diverging_branch`; converging, common_leg branch: `loss_branch_converging_branch` |
 | smacna | `branch_wye_mitered` | Circular, Rectangular, Oval | model | `loss_wye_generic`; diverging, common_leg branch: `loss_branch_diverging_branch`; converging, common_leg branch: `loss_branch_converging_branch` |
+| smacna | `branch_wye_radius` | Circular, Rectangular, Oval | model | `loss_wye_generic`; diverging, common_leg branch: `loss_branch_diverging_branch`; converging, common_leg branch: `loss_branch_converging_branch` |
 | smacna | `cross_double_wye_mitered` | Circular, Rectangular, Oval | model | `loss_cross_generic` |
 | smacna | `cross_double_wye_radius` | Circular, Rectangular, Oval | model | `loss_cross_generic` |
 | smacna | `cross_generic` | Circular, Rectangular, Oval, Generic | model | `loss_cross_generic` |

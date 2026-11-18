@@ -518,6 +518,22 @@ class DuctNetworkChangeObserver:
                 # the current calculation cycle has finished.
                 QtCore.QTimer.singleShot(0, lambda n=net: self._doSync(n))
 
+    # Property edits wait for their transaction (see _type_schema.request_sync_after_edit):
+    # the property editor commits it when a typed value is entered (Enter or
+    # leaving the field), and aborts it on Escape (the value goes back).
+    def slotCommitTransaction(self, doc):
+        self._flushEditSyncs(doc)
+
+    def slotAbortTransaction(self, doc):
+        self._flushEditSyncs(doc)
+
+    def _flushEditSyncs(self, doc):
+        for net in hvaclib.allHVACNetworks(doc):
+            proxy = getattr(net, "Proxy", None)
+            if proxy is not None and hasattr(proxy, "runEditSync"):
+                # After the commit/abort has finished, not inside it.
+                QtCore.QTimer.singleShot(0, proxy.runEditSync)
+
     def slotUndoDocument(self, doc):
         self._undo_redo_in_progress = True
         QtCore.QTimer.singleShot(0, lambda d=doc: self._resyncAllNetworks(d))

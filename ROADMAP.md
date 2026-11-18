@@ -32,8 +32,14 @@ only to `HVACLibraryAPI` / `HVACLossAPI`.
 
 *Needs the owner*
 - GUI check of design 6.6 (section 6): wyes (radius and mitered, the crotch plate of an uneven wye with a wall), lateral tees, double wyes, the mitered shoe and the centre radius tee.
+- GUI check of the 19 November 2026 fixes: SMACNA `branch_wye_radius`, curved and flexible SMACNA segments, and typing a value in the property editor (the network now syncs when the value is entered, not per keystroke; this relies on the property editor's own transaction, which a script cannot exercise).
 - Next (owner, 18 November 2026): review and document the API and the library framework. The "after the freeze" gaps below come after that.
 - Deferred by the owner: saving a custom fitting as a library type.
+
+*Done 19 November 2026 (owner: design 6.6 geometry good; SMACNA lags builtin; typing a value is slow):*
+- SMACNA checked against builtin_basic type by type (families, properties, geometry and loss functions). Missing and added: `branch_wye_radius` (sweep 120 / 120), curved segments `circular_generic` / `oval_generic` / `rectangular_generic` (a SMACNA network had no type for an arc) and `circular_flex` (no flanges). Left as they are, on purpose: SMACNA's `through_elbow_generic` in place of builtin's `through_elbow_radius` (same builder), its own fallbacks (`branch_tee_generic`, `branch_wye_generic` instead of `branch_generic`; no `through_straight_generic`), PartScript straights, the gored-elbow defaults, and the terminal face properties only SMACNA exposes.
+- A segment's flanges are placed square to its path tangents at both ends (`features._flange_ends`); on an arc they followed the chord.
+- Property edits: a type property typed into the property editor changed on every keystroke, and each change asked for a full network sync. Inside an open transaction (the property editor opens one per edit and commits it when the value is entered) `request_sync_after_edit` now only marks the network (`DuctNetwork.deferEditSync`); `DuctNetworkChangeObserver.slotCommitTransaction` / `slotAbortTransaction` run the one sync (`runEditSync`). Outside a transaction it syncs at once, as before.
 
 *Owner's GUI check of the pending-items pass (18 November 2026):* drawn vanes, tap damper, extractor, filter media and coil block; radiussed offsets at length 0; the Friction section of the Size Ducts panel; the single BranchRadius: all passed. The radius wye on round ducts failed; fixed by design 6.6.
 
@@ -67,7 +73,7 @@ only to `HVACLibraryAPI` / `HVACLossAPI`.
 - Draft snapping onto equipment snap points not tried by script (the owner's GUI check covered the port panel).
 
 *Testing*
-- Unit tests: 2237 pass on Linux (the five split-rule tests went with the rule). The 20 failures once seen on the Windows machine were never investigated.
+- Unit tests: 2255 pass on Linux. The 20 failures once seen on the Windows machine were never investigated.
 - Smoke run, 18 November 2026 (after design 6.6): 661 valid / 32 skipped / 0 errors. No build lost; volumes and trims changed only on the types 6.6 rebuilt (and on face-mounted tees, from the single BranchRadius change before it).
 - Geometry sweep (`tools/geometry_sweep.py`, design 6.6), 18 November 2026: 1838 / 1838 valid, every type and case (the design's table had the radius wye at 76 / 144, the others failing on full-size branches and thick walls).
 

@@ -1,0 +1,210 @@
+{
+  "id": "branch_wye_radius",
+  "label": "Wye - Radius",
+  "category": "junction",
+  "topology": "branch",
+  "family": [
+    "branch.wye",
+    "branch.wye.3d",
+    "branch.tee.bullhead",
+    "branch.tee.3d.bullhead"
+  ],
+  "profiles": [
+    "Circular",
+    "Rectangular",
+    "Oval"
+  ],
+  "selection": {
+    "kind": "model",
+    "priority": 17
+  },
+  "constraints": {
+    "degree": 3,
+    "qualifiers": {
+      "common_leg": {
+        "enum": [
+          "branch"
+        ]
+      }
+    }
+  },
+  "properties": [
+    {
+      "name": "Thickness",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Sheet metal thickness. 0 builds the air space as a solid body instead of a hollow shell",
+      "default": 0.8,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "InsulationThickness",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Insulation thickness wrapped around the outside of the fitting; 0 disables insulation",
+      "default": 0.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "TrimMain",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Additional trim beyond the intrinsic body on the common/main leg",
+      "default": 100.0
+    },
+    {
+      "name": "TrimBranchA",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Additional trim beyond the intrinsic body on branch A",
+      "default": 100.0
+    },
+    {
+      "name": "TrimBranchB",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Additional trim beyond the intrinsic body on branch B",
+      "default": 100.0
+    },
+    {
+      "name": "BranchRadius",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Bend radius of each non-main branch as it curves into the main leg (a minimum: legs at a narrow angle get a larger radius so they part)",
+      "default": 150.0
+    },
+    {
+      "name": "FlangeHeight",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Height of the transverse flange at each duct connection",
+      "default": 25.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "FlangeThickness",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Thickness of the transverse flange; 0 draws no flanges",
+      "default": 1.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "ShowFlangeMain",
+      "prop_type": "App::PropertyBool",
+      "group": "Options",
+      "description": "Include the flange at the main (common) duct",
+      "default": true
+    },
+    {
+      "name": "ShowFlangeBranchA",
+      "prop_type": "App::PropertyBool",
+      "group": "Options",
+      "description": "Include the flange at branch A",
+      "default": true
+    },
+    {
+      "name": "ShowFlangeBranchB",
+      "prop_type": "App::PropertyBool",
+      "group": "Options",
+      "description": "Include the flange at branch B",
+      "default": true
+    }
+  ],
+  "construction": {
+    "layers": [
+      {
+        "id": "casing",
+        "roles": [
+          "flow_surface",
+          "structural_shell"
+        ],
+        "default_material_role": "structural_shell",
+        "thickness_property": "Thickness"
+      },
+      {
+        "id": "insulation",
+        "roles": [
+          "thermal_insulation"
+        ],
+        "default_material_role": "thermal_insulation",
+        "thickness_property": "InsulationThickness"
+      }
+    ],
+    "features": [
+      {
+        "id": "transverse_flange",
+        "role": "transverse_joint",
+        "host_layer": "casing",
+        "module": "shared:features",
+        "generator": "transverse_flange",
+        "parameters": [
+          "FlangeHeight",
+          "FlangeThickness",
+          "ShowFlangeMain",
+          "ShowFlangeBranchA",
+          "ShowFlangeBranchB"
+        ]
+      }
+    ]
+  },
+  "geometry": {
+    "backend": "generator",
+    "module": "shared:wyes",
+    "function": "build_wye_radius"
+  },
+  "connection_lengths": {
+    "module": "shared:wyes",
+    "function": "measure_wye_radius"
+  },
+  "loss": {
+    "module": "shared:losses",
+    "function": "loss_wye_generic",
+    "variants": [
+      {
+        "constraints": {
+          "flow_class": {
+            "enum": [
+              "diverging"
+            ]
+          },
+          "qualifiers": {
+            "common_leg": {
+              "enum": [
+                "branch"
+              ]
+            }
+          }
+        },
+        "module": "shared:losses",
+        "function": "loss_branch_diverging_branch"
+      },
+      {
+        "constraints": {
+          "flow_class": {
+            "enum": [
+              "converging"
+            ]
+          },
+          "qualifiers": {
+            "common_leg": {
+              "enum": [
+                "branch"
+              ]
+            }
+          }
+        },
+        "module": "shared:losses",
+        "function": "loss_branch_converging_branch"
+      }
+    ]
+  }
+}

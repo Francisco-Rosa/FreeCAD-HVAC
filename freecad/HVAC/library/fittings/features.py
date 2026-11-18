@@ -74,15 +74,18 @@ def _flange_ends(api, ctx, params):
         return []
     start = api.vec(context["start_point"])
     end = api.vec(context["end_point"])
-    axis = api.unit(end - start)
+    # A curved segment's ends face along its path tangents, not along the chord.
+    chord = api.unit(end - start)
+    start_dir = api.unit(api.vec(context["start_direction"])) if context.get("start_direction") is not None else chord
+    end_dir = api.unit(api.vec(context["end_direction"])) if context.get("end_direction") is not None else chord
     start_port = {
         "position": start,
-        "direction": axis * -1.0,
+        "direction": start_dir * -1.0,
         "profile": context.get("profile", ""),
         "section_params": params,
         "profile_x_axis": context.get("profile_x_axis"),
     }
-    return [(start_port, None), (api.copy_port(start_port, position=end, direction=axis), None)]
+    return [(start_port, None), (api.copy_port(start_port, position=end, direction=end_dir), None)]
 
 
 def transverse_flange(api, ctx):

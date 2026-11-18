@@ -135,6 +135,9 @@ class _Owner:
 class _Doc:
     Restoring = False
 
+    def __init__(self):
+        self.HasPendingTransaction = False
+
 
 class _EditedObj:
     def __init__(self, executing=False, modes=None):
@@ -156,6 +159,38 @@ def test_a_user_edit_of_a_type_property_requests_a_sync(monkeypatch):
     owner = _Owner()
     assert _edit(monkeypatch, _EditedObj(), "Thickness", owner)
     assert owner.requests == [{"force_recompute": True}]
+
+
+class _DeferringOwner(_Owner):
+    """An owner network that can defer a sync until the open transaction closes (Network.deferEditSync)."""
+
+    def __init__(self):
+        super().__init__()
+        self.deferred = 0
+
+    def deferEditSync(self):
+        self.deferred += 1
+
+
+def test_an_edit_inside_an_open_transaction_waits_for_it_to_close(monkeypatch):
+    # The property editor applies every keystroke inside one transaction:
+    # nothing is synced until the value is entered (the transaction commits).
+    owner = _DeferringOwner()
+    obj = _EditedObj()
+    obj.Document.HasPendingTransaction = True
+    assert _edit(monkeypatch, obj, "Thickness", owner)
+    assert _edit(monkeypatch, obj, "Thickness", owner)
+    assert owner.requests == []
+    assert owner.deferred == 2
+
+
+def test_an_edit_outside_a_transaction_syncs_at_once(monkeypatch):
+    owner = _DeferringOwner()
+    obj = _EditedObj()
+    obj.Document.HasPendingTransaction = False
+    assert _edit(monkeypatch, obj, "Thickness", owner)
+    assert owner.requests == [{"force_recompute": True}]
+    assert owner.deferred == 0
 
 
 def test_a_listed_extra_property_requests_a_sync(monkeypatch):

@@ -1891,6 +1891,17 @@ class DuctNetwork:
             FreeCAD.Console.PrintMessage("HVAC - Sync requested.\n")
         QtCore.QTimer.singleShot(0, lambda force_recompute=force_recompute: self._runDeferredSync(force_recompute))
 
+    def deferEditSync(self):
+        """Note a property edit made inside an open transaction: runEditSync() syncs once it closes."""
+        self._edit_sync_pending = True
+
+    def runEditSync(self):
+        """Run the sync deferred by deferEditSync(), if any (the transaction it waited for has closed)."""
+        if not getattr(self, "_edit_sync_pending", False):
+            return
+        self._edit_sync_pending = False
+        self.requestSync(force_recompute=True)
+
     def suspendSync(self):
         self._sync_suspended = True
 

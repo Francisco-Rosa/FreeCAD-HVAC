@@ -224,3 +224,34 @@ def test_apply_material_selection_empty_dict_is_a_true_noop():
     network_mod.DuctNetwork.applyMaterialSelection([obj], {})
     assert obj.Layer_casing_Material.Name == "Keep1"
     assert obj.Layer_insulation_Material.Name == "Keep2"
+
+
+# ----------------------------------------------------------------------------
+# Deferred edit sync: a property edit inside an open transaction syncs once
+# the transaction closes (core/_type_schema.request_sync_after_edit).
+# ----------------------------------------------------------------------------
+
+
+def _syncing_network():
+    proxy = network_mod.DuctNetwork.__new__(network_mod.DuctNetwork)
+    proxy.requests = []
+    proxy.requestSync = lambda **kwargs: proxy.requests.append(kwargs)
+    return proxy
+
+
+def test_a_deferred_edit_syncs_once_when_its_transaction_closes():
+    proxy = _syncing_network()
+    proxy.deferEditSync()
+    proxy.deferEditSync()
+    assert proxy.requests == []
+    proxy.runEditSync()
+    assert proxy.requests == [{"force_recompute": True}]
+    # Nothing left over for the next transaction.
+    proxy.runEditSync()
+    assert proxy.requests == [{"force_recompute": True}]
+
+
+def test_a_transaction_closing_without_an_edit_syncs_nothing():
+    proxy = _syncing_network()
+    proxy.runEditSync()
+    assert proxy.requests == []

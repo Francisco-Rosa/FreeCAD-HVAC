@@ -242,6 +242,9 @@ def request_sync_after_edit(obj, prop, extra_names=()):
     lengths. Without a sync those stay stale (a duct still trimmed to the
     old fitting length, a fitting still sized for the old duct).
 
+    Inside an open transaction (the property editor's, while a value is
+    being typed) the sync is deferred until the transaction closes.
+
     Edits made while the network itself is syncing, while the document is
     loading, or by the object's own execute() (computed values) are left
     alone: they are part of a rebuild already under way.
@@ -261,7 +264,14 @@ def request_sync_after_edit(obj, prop, extra_names=()):
     if owner_proxy is None or getattr(owner_proxy, "_sync_in_progress", False):
         return False
     try:
-        owner_proxy.requestSync(force_recompute=True)
+        # The property editor applies a typed value on every keystroke, inside
+        # one open transaction it commits when the value is entered. Syncing
+        # per keystroke made typing slow: inside a transaction the sync waits
+        # for its commit (ui/Observer.py); outside one (a script) it runs now.
+        if getattr(doc, "HasPendingTransaction", False) and hasattr(owner_proxy, "deferEditSync"):
+            owner_proxy.deferEditSync()
+        else:
+            owner_proxy.requestSync(force_recompute=True)
     except Exception:
         return False
     return True

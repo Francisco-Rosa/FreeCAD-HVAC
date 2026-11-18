@@ -19,6 +19,14 @@ for in `library.json` (`"requires_api"`) and is refused by any other.
 
 ## Unreleased
 
+- SMACNA library brought in line with builtin_basic: `branch_wye_radius` is back (removed on 13 November 2026 when
+  its fuse hung; design 6.6 fixed that), and curved segments (`circular_generic`, `oval_generic`,
+  `rectangular_generic`) and the flexible duct (`circular_flex`) are added. Before, an arc drawn in a SMACNA network
+  had no segment type.
+- A segment's flanges face along its path at each end; on a curved segment they used to follow the chord.
+- A value typed in the property editor is synced when it is entered (Enter, or leaving the field), not on every
+  keystroke. A property set from a script, outside a transaction, still syncs at once.
+
 - Radius tees and lateral tees have one radius: `ElbowRadius` is gone from them, and a face-mounted branch uses
   `BranchRadius` for its elbow. A document that set `ElbowRadius` on one of these types loses that value.
 
