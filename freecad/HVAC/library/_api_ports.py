@@ -97,27 +97,6 @@ class _PortsMixin:
         return s * (1.0 / float(len(pts)))
 
     @staticmethod
-    def distance_between_lines(origin_i, dir_i, origin_j, dir_j):
-        """
-        Compute the perpendicular distance between two lines in 3D.
-        Each line is defined by a FreeCAD.Vector origin and direction.
-        Handles parallel/coincident lines as a special case.
-        """
-        u_i = FreeCAD.Vector(dir_i).normalize()
-        u_j = FreeCAD.Vector(dir_j).normalize()
-        w0 = FreeCAD.Vector(origin_i) - FreeCAD.Vector(origin_j)
-
-        cross = u_i.cross(u_j)
-        denom = cross.Length
-
-        if denom < 1e-10:
-            # Lines are parallel — distance is |w0 × u_i|
-            return w0.cross(u_i).Length
-
-        # Skew lines — |(w0 · (d_i × d_j))| / |d_i × d_j|
-        return abs(w0.dot(cross)) / denom
-
-    @staticmethod
     def closest_points_on_lines(p0, d0, p1, d1):
         """
         Return closest points c0 on L0 and c1 on L1 for:
@@ -155,33 +134,6 @@ class _PortsMixin:
         c0 = p0 + d0 * t
         c1 = p1 + d1 * s
         return c0, c1
-
-    @staticmethod
-    def virtual_corner_for_lines(p0, u0, p1, u1):
-        """
-        Compute the virtual corner from the two offset segment centerlines.
-        Lines starting from p0 with direction u0 and from p1 with direction u1.
-        """
-        d0 = FreeCAD.Vector(u0)
-        d1 = FreeCAD.Vector(u1)
-        d0.normalize()
-        d1.normalize()
-
-        # Lines traced back toward the junction
-        c0, c1 = HVACLibraryAPI.closest_points_on_lines(FreeCAD.Vector(p0), d0, FreeCAD.Vector(p1), d1)
-        if c0 is None or c1 is None:
-            raise ValueError("Failed to compute virtual corner")
-
-        # For clean coplanar cases c0 ~= c1; midpoint is robust
-        corner = (c0 + c1) * 0.5
-
-        # Sanity check
-        if (c0 - c1).Length > HVACLibraryAPI.EPS:
-            FreeCAD.Console.PrintWarning(
-                "HVAC: elbow centerlines do not intersect exactly; using midpoint of closest points\n"
-            )
-
-        return corner
 
     @staticmethod
     def arc_center_from_points_tangents_radius(p0, p1, u0, u1, radius):

@@ -6,6 +6,7 @@ keys for each kind of call, and library code reads only documented keys.
 import ast
 from pathlib import Path
 
+import conftest  # noqa: F401 -- installs FreeCAD/Part stubs
 from freecad.HVAC.library import contexts
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -36,7 +37,19 @@ def test_geometry_contexts_use_documented_keys():
     for name in ("Segment.py", "Component.py", "Junction.py"):
         keys += _context_literal_keys(HVAC / "core" / name)
     assert keys
-    assert set(keys) <= contexts.GEOMETRY_CONTEXT_KEYS, sorted(set(keys) - contexts.GEOMETRY_CONTEXT_KEYS)
+    allowed = contexts.GEOMETRY_CONTEXT_KEYS | contexts.CALLER_KEYS
+    assert set(keys) <= allowed, sorted(set(keys) - allowed)
+
+
+def test_the_registry_never_hands_the_freecad_object_to_library_code():
+    from freecad.HVAC.library.Library import HVACLibraryRegistry, HVACTypeDef
+
+    type_def = HVACTypeDef(
+        id="t", label="t", category="segment", topology="generic", family=["straight_segment"], profiles=["Circular"]
+    )
+    prepared = HVACLibraryRegistry()._prepare_geometry_context(type_def, {"obj": object(), "properties": {}})
+    assert not set(prepared) & contexts.CALLER_KEYS
+    assert set(prepared) <= contexts.GEOMETRY_CONTEXT_KEYS
 
 
 def test_loss_and_friction_contexts_use_documented_keys():

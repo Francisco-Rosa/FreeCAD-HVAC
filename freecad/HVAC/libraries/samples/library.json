@@ -1,7 +1,7 @@
 {
   "id": "samples",
   "label": "Samples",
-  "requires_api": {"geometry": 3, "loss": 1},
+  "requires_api": {"geometry": 4, "loss": 1},
   "generators_package": "freecad.HVAC.libraries.samples.generators",
   "default_construction": {
     "layers": [

@@ -1779,6 +1779,17 @@ names in `libraries/README.md` and `samples/README.md`.**
   members and call its booleans and queries; it builds new geometry only
   through the API.
 
+**Owner answers (19 November 2026):** A, B, C and D approved; the GUI
+checks of 6.6 and of the property-editor sync passed. (c) not answered
+separately: C applied as written (the listed names dropped, the rest kept).
+
+**Status.** C done (19 November 2026): geometry API 4, the names in C
+removed (internal helpers kept private: `_section_wire`, `_oval_wire`,
+`_arc_wire`), `make_face`, `translate`, `rotate`, `sample_path` added
+(`flex_ribs` now samples with it), `obj` taken out of every library
+context (core still passes it to the registry: `contexts.CALLER_KEYS`).
+Smoke run unchanged (665 valid, every volume and trim identical).
+
 **Owner input.**
 - (a) Approve A and B (docs only)?
 - (b) C: clean up now (API 4, a break before the first release), or only

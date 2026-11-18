@@ -799,7 +799,9 @@ class HVACLibraryRegistry:
         # (already resolved, or raw overrides) on top of the object's own
         # values and the type-def defaults. One key, "properties".
         supplied = dict(prepared.get("properties") or {})
-        resolved = self.resolve_params(type_def, obj=prepared.get("obj"), supplied=supplied) or {}
+        # The caller's FreeCAD object (contexts.CALLER_KEYS) is read here and
+        # never handed on: library code sees only the documented keys.
+        resolved = self.resolve_params(type_def, obj=prepared.pop("obj", None), supplied=supplied) or {}
         # Supplied values the type does not declare are passed through as given.
         prepared["properties"] = {**supplied, **resolved}
         validation.validate_context(type_def, prepared)
@@ -1072,7 +1074,7 @@ class HVACLibraryRegistry:
         """
         Call a segment type's friction model factory, or return None when
         the type declares none. The factory gets `context` (`properties`,
-        `obj`, `roughness_mm`, `base_model` -- the network's own model, which
+        `roughness_mm`, `base_model` -- the network's own model, which
         a factory can scale or wrap -- and `friction`, the
         analysis.friction module) and returns a friction model: anything
         with `rate_pa_per_m(flow_m3_s, area_m2, dh_m, roughness_m,

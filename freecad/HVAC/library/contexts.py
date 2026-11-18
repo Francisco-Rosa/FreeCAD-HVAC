@@ -13,6 +13,11 @@ Plain data, no FreeCAD.
 # Geometry builders and connection-length measurement (`geometry.backend`
 # generator / partscript / static, and `connection_lengths`). Keys every
 # call has, then the ones only junction components or only segments get.
+# Keys core passes to HVACLibraryRegistry.build_geometry() for the registry's
+# own use, removed before library code is called: "obj", the FreeCAD object
+# whose property values the registry reads (validation.resolve_params).
+CALLER_KEYS = frozenset({"obj"})
+
 GEOMETRY_CONTEXT_KEYS = frozenset(
     {
         # Added by HVACLibraryRegistry for every build.
@@ -22,7 +27,6 @@ GEOMETRY_CONTEXT_KEYS = frozenset(
         "loss_api_version",
         "construction_layers",
         "properties",
-        "obj",
         "type_id",
         "library_id",
         "family",
@@ -43,10 +47,11 @@ GEOMETRY_CONTEXT_KEYS = frozenset(
         "source_index",
         "path_kind",
         "path_edge",
-        # Set by a PartScript for its flange feature (fittings/features.py).
+        # Set by the shared fittings themselves, never by core:
+        # a PartScript elbow's flange ends, for fittings/features.py,
         "flange_ports",
-        # Set by fittings/taps.with_branch_jog for fittings/_common._finish: a side
-        # branch moved in to fit the run, and its offset piece back to its own axis.
+        # and, from fittings/taps.with_branch_jog for fittings/_common._finish, a
+        # side branch moved in to fit the run and its offset piece back to its axis.
         "branch_jog",
         # Read only as an optional fallback by the markers.
         "position",
@@ -64,7 +69,6 @@ LOSS_CONTEXT_KEYS = frozenset(
         "hvac_api_version",
         "loss_api",
         "loss_api_version",
-        "obj",
         "construction",
         "hydraulic_roughness_mm",
         "center_point",
@@ -84,8 +88,6 @@ LOSS_CONTEXT_KEYS = frozenset(
 )
 
 # Segment friction model factories (`friction`).
-FRICTION_CONTEXT_KEYS = frozenset(
-    {"friction", "obj", "properties", "roughness_mm", "base_model", "type_id", "library_id"}
-)
+FRICTION_CONTEXT_KEYS = frozenset({"friction", "properties", "roughness_mm", "base_model", "type_id", "library_id"})
 
 ALL_CONTEXT_KEYS = GEOMETRY_CONTEXT_KEYS | LOSS_CONTEXT_KEYS | FRICTION_CONTEXT_KEYS

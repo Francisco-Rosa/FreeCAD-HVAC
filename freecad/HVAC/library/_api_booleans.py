@@ -214,104 +214,12 @@ class _BooleansMixin:
     # Topology
     # ------------------------------------------------------------------
 
-    @classmethod
-    def boundary(cls, shape):
-        """Return groups of edges used by only one face.
-
-        Closed solids normally return an empty list. Open shells return the
-        free edges grouped into connectable edge sequences by Part.
-        """
-        edge_use = {}
-        for face in shape.Faces:
-            for edge in face.Edges:
-                key = edge.hashCode(1000003)
-                edge_use[key] = (edge_use.get(key, [edge, 0])[0], edge_use.get(key, [edge, 0])[1] + 1)
-        free = [edge for edge, count in edge_use.values() if count == 1]
-        if not free:
-            return []
-        try:
-            return Part.sortEdges(free)
-        except Exception:
-            return [Part.Wire(free)]
-
-    @classmethod
-    def sew(cls, shapes, tolerance=1.0e-6, require_closed=False):
-        """Sew faces from one or more shapes using the requested tolerance.
-
-        Returns OCC's sewed result. ``require_closed=True`` raises when that
-        result is not closed; inputs containing no faces are rejected.
-        """
-        faces = []
-        for shape in cls._flatten_shapes(shapes):
-            if getattr(shape, "ShapeType", "") == "Face":
-                faces.append(shape)
-            else:
-                faces.extend(shape.Faces)
-        if not faces:
-            raise ValueError("sew() received no faces")
-
-        tol = float(tolerance)
-        if tol <= 0.0:
-            raise ValueError("sew() tolerance must be positive")
-        result = Part.makeCompound(faces)
-        result.fixTolerance(tol)
-        sewed = result.sewShape()
-        # FreeCAD currently mutates the TopoShape and returns None, while
-        # accepting a returned shape keeps this compatible with other builds.
-        if sewed is not None:
-            result = sewed
-        if result is None or result.isNull():
-            raise RuntimeError("Sewing returned a null shape")
-        if require_closed and not result.isClosed():
-            raise ValueError("Sewn shell is not closed")
-        return result
-
-    @classmethod
-    def bridge_boundaries(cls, boundary_a, boundary_b):
-        """Create a face or ruled shell between two boundary wires.
-
-        Coplanar nested loops produce a planar rim. Other loop pairs fall
-        back to a ruled loft.
-        """
-        wa, wb = cls._wire(boundary_a), cls._wire(boundary_b)
-        # Preferred case: coplanar nested closed wires => planar annular/rim face.
-        try:
-            fa, fb = Part.Face(wa), Part.Face(wb)
-            if fa.Area >= fb.Area:
-                rim = fa.cut(fb)
-            else:
-                rim = fb.cut(fa)
-            if not rim.isNull() and rim.Area > _EPS:
-                return rim
-        except Exception:
-            pass
-        # General fallback for corresponding non-coplanar loops.
-        return Part.makeLoft([wa, wb], False, True, False)
-
     @staticmethod
     def reverse(shape):
         """Return a copy with reversed topology orientation."""
         out = shape.copy()
         out.reverse()
         return out
-
-    @classmethod
-    def solidify(cls, shell):
-        """Convert a closed shell to a validated solid.
-
-        Existing solids pass through unchanged. Null, open, or invalid inputs
-        raise ``ValueError``.
-        """
-        if shell.isNull():
-            raise ValueError("Cannot solidify a null shell")
-        if getattr(shell, "ShapeType", "") == "Solid":
-            result = shell
-        else:
-            if not shell.isClosed():
-                raise ValueError("Cannot solidify an open shell")
-            result = Part.Solid(shell)
-        cls.validate(result, raise_on_error=True, require_solid=True)
-        return result
 
     # ------------------------------------------------------------------
     # Finish / diagnostics / tiny common primitives

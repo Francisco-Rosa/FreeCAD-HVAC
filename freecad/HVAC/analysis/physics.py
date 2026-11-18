@@ -94,7 +94,7 @@ def oval_area(width_m, height_m):
     width_m / height_m = overall extents. Either one may be the longer
     side: the longer one is the major axis (along the straight sides), the
     shorter one is the minor axis (the diameter of the rounded end caps).
-    This matches library_api.HVACLibraryAPI.make_oval_wire.
+    This matches the oval section HVACLibraryAPI.make_profile draws.
     """
     major, minor = _oval_major_minor(width_m, height_m)
     r = minor / 2.0

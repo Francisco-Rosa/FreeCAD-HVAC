@@ -19,6 +19,15 @@ for in `library.json` (`"requires_api"`) and is refused by any other.
 
 ## Unreleased
 
+- **Geometry API 4** (design 6.7 C; libraries declare `"requires_api": {"geometry": 4, ...}`). Removed:
+  `make_section_wire`, `make_section_wire_from_port`, `make_section_face`, `make_section_face_from_port` (use
+  `make_profile` / `profile_from_port` and `make_face`), `arc_wire`, `make_oval_wire`, `boundary`,
+  `bridge_boundaries`, `sew`, `solidify`, `distance_between_lines`, `virtual_corner_for_lines`, `transform` (use
+  `translate` / `rotate`). Added: `make_face(profile)`, `translate(shape, vector)`,
+  `rotate(shape, origin, axis, degrees)`, `sample_path(path, spacing)`.
+- Context: library code no longer receives `obj` (the FreeCAD object). The registry still reads property values
+  from it (`contexts.CALLER_KEYS`).
+
 - SMACNA library brought in line with builtin_basic: `branch_wye_radius` is back (removed on 13 November 2026 when
   its fuse hung; design 6.6 fixed that), and curved segments (`circular_generic`, `oval_generic`,
   `rectangular_generic`) and the flexible duct (`circular_flex`) are added. Before, an arc drawn in a SMACNA network

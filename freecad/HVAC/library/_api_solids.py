@@ -42,7 +42,7 @@ class _SolidsMixin:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def arc_wire(p1, pm, p2):
+    def _arc_wire(p1, pm, p2):
         """A single-edge wire, a circular arc through p1 -> pm -> p2."""
         edge = Part.Arc(HVACLibraryAPI.vec(p1), HVACLibraryAPI.vec(pm), HVACLibraryAPI.vec(p2)).toShape()
         return Part.Wire([edge])
@@ -75,7 +75,7 @@ class _SolidsMixin:
         _, x_axis, y_axis, _ = cls.make_profile_frame(direction, profile_x_axis, center)
 
         if profile in {"Rectangular", "Circular", "Oval"}:
-            wire = cls.make_section_wire(profile, params, center, direction, x_axis)
+            wire = cls._section_wire(profile, params, center, direction, x_axis)
             return HVACProfile(profile, params, center, direction, x_axis, wire)
 
         if profile == "RoundedRectangle":
@@ -88,7 +88,7 @@ class _SolidsMixin:
                 raise ValueError("Rounded rectangle Radius must be between 0 and min(Width, Height)/2")
             if r <= _EPS:
                 normalized = {"Width": w, "Height": h}
-                wire = cls.make_section_wire("Rectangular", normalized, center, direction, x_axis)
+                wire = cls._section_wire("Rectangular", normalized, center, direction, x_axis)
                 return HVACProfile(
                     "RoundedRectangle", {"Width": w, "Height": h, "Radius": 0.0}, center, direction, x_axis, wire
                 )
@@ -417,6 +417,61 @@ class _SolidsMixin:
         return Part.makeLoft(wires, bool(solid), bool(ruled), bool(closed))
 
     @classmethod
+    def make_face(cls, profile):
+        """A flat face filling a closed profile or planar wire (its outline only, no holes)."""
+        face = Part.Face(cls._wire(profile))
+        if face.isNull() or face.Area <= _EPS:
+            raise ValueError("make_face() needs a closed, planar, non-degenerate wire")
+        return face
+
+    @classmethod
+    def translate(cls, shape, vector):
+        """A copy of ``shape`` moved by ``vector``."""
+        out = shape.copy()
+        out.translate(cls.vec(vector))
+        return out
+
+    @classmethod
+    def rotate(cls, shape, origin, axis, degrees):
+        """A copy of ``shape`` turned by ``degrees`` about the line through ``origin`` along ``axis``."""
+        out = shape.copy()
+        out.rotate(cls.vec(origin), cls.unit(axis), float(degrees))
+        return out
+
+    @classmethod
+    def sample_path(cls, path, spacing):
+        """
+        Points along a path edge (or a wire of edges), ``spacing`` apart, as
+        ``[(point, unit tangent), ...]``. The stations are centred: whatever
+        length is left over is split evenly between both ends, so a row of
+        ribs or hangers sits symmetrically. Fewer than one ``spacing`` of
+        path gives an empty list.
+        """
+        spacing = float(spacing)
+        if spacing <= _EPS:
+            raise ValueError("sample_path() needs a positive spacing")
+        edges = list(cls._wire(path).OrderedEdges)
+        length = sum(edge.Length for edge in edges)
+        count = int(length // spacing)
+        if count < 1:
+            return []
+        distance = 0.5 * (length - (count - 1) * spacing)
+        stations = []
+        walked = 0.0
+        for edge in edges:
+            # Every station that falls on this edge, measured from the edge's own start.
+            # An edge running against the wire's direction is walked from its far end.
+            reversed_edge = getattr(edge, "Orientation", "Forward") == "Reversed"
+            while len(stations) < count and distance <= walked + edge.Length + _EPS:
+                along = min(max(distance - walked, 0.0), edge.Length)
+                parameter = edge.getParameterByLength(edge.Length - along if reversed_edge else along)
+                tangent = cls.unit(edge.tangentAt(parameter))
+                stations.append((edge.valueAt(parameter), tangent * -1.0 if reversed_edge else tangent))
+                distance += spacing
+            walked += edge.Length
+        return stations
+
+    @classmethod
     def revolve(cls, profile, axis, angle=360.0, *, solid=False):
         """Revolve a profile around ``(origin, direction)`` by degrees.
 
@@ -431,18 +486,3 @@ class _SolidsMixin:
             origin, direction = cls.vec(origin), cls.unit(direction)
         base = Part.Face(cls._wire(profile)) if solid else cls._wire(profile)
         return base.revolve(origin, direction, float(angle))
-
-    @staticmethod
-    def transform(shape, transform):
-        """Return a transformed copy using a FreeCAD placement or matrix."""
-        out = shape.copy()
-        if isinstance(transform, FreeCAD.Placement):
-            out.Placement = transform.multiply(out.Placement)
-            return out
-        if isinstance(transform, FreeCAD.Matrix):
-            out.transformShape(transform, True)
-            return out
-        if hasattr(transform, "toMatrix"):
-            out.transformShape(transform.toMatrix(), True)
-            return out
-        raise TypeError("transform must be a FreeCAD.Placement or FreeCAD.Matrix")

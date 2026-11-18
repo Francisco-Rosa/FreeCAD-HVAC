@@ -48,11 +48,11 @@ class _RecipesMixin:
         if thickness <= 0.0 or height <= 0.0:
             raise ValueError("Flange thickness and height must be > 0")
         outer_port = HVACLibraryAPI.grow_port_section(port, height)
-        outer_face = HVACLibraryAPI.make_section_face_from_port(
-            HVACLibraryAPI.copy_port(outer_port, direction=inward_direction)
+        outer_face = HVACLibraryAPI.make_face(
+            HVACLibraryAPI.profile_from_port(HVACLibraryAPI.copy_port(outer_port, direction=inward_direction))
         )
-        inner_face = HVACLibraryAPI.make_section_face_from_port(
-            HVACLibraryAPI.copy_port(port, direction=inward_direction)
+        inner_face = HVACLibraryAPI.make_face(
+            HVACLibraryAPI.profile_from_port(HVACLibraryAPI.copy_port(port, direction=inward_direction))
         )
         extrusion = HVACLibraryAPI.unit(inward_direction) * thickness
         return outer_face.extrude(extrusion).cut(inner_face.extrude(extrusion))
@@ -86,7 +86,7 @@ class _RecipesMixin:
         bisector.normalize()
         midpoint = center - bisector * radius
         return {
-            "path": HVACLibraryAPI.arc_wire(s0, midpoint, s1),
+            "path": HVACLibraryAPI._arc_wire(s0, midpoint, s1),
             "ports": [HVACLibraryAPI.copy_port(port0, position=s0), HVACLibraryAPI.copy_port(port1, position=s1)],
             "trim_lengths": [max(0.0, (s0 - p0).dot(u0)), max(0.0, (s1 - p1).dot(u1))],
             "center": center,
@@ -258,7 +258,7 @@ class _RecipesMixin:
                 raise ValueError("Unable to determine arc midpoint")
             rm.normalize()
             midpoint = center + rm * radius
-            return HVACLibraryAPI.arc_wire(start, midpoint, end)
+            return HVACLibraryAPI._arc_wire(start, midpoint, end)
 
         arc0 = make_arc(a0, a1, d, diagonal)
         arc1 = make_arc(b0, b1, diagonal, d)

@@ -1,7 +1,7 @@
 {
   "id": "smacna",
   "label": "SMACNA",
-  "requires_api": {"geometry": 3, "loss": 1},
+  "requires_api": {"geometry": 4, "loss": 1},
   "generators_package": "freecad.HVAC.libraries.smacna.generators",
   "default_construction": {
     "layers": [

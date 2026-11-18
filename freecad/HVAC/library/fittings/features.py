@@ -115,32 +115,6 @@ def transverse_flange(api, ctx):
     return api.refine(api.fuse(*shapes)) if len(shapes) > 1 else shapes[0]
 
 
-def _path_stations(api, context, pitch):
-    """
-    (point, tangent) every `pitch` along a segment's path, from half a pitch in,
-    so the ribs sit evenly between both ends. Follows the path edge of a curved
-    segment, else the straight line from start to end.
-    """
-    start = api.vec(context["start_point"])
-    end = api.vec(context["end_point"])
-    edge = context.get("path_edge")
-    length = float(edge.Length) if edge is not None else (end - start).Length
-    count = int(length // pitch)
-    if count < 1:
-        return []
-    margin = 0.5 * (length - (count - 1) * pitch)
-    stations = []
-    for index in range(count):
-        distance = margin + index * pitch
-        if edge is not None:
-            parameter = edge.getParameterByLength(distance)
-            stations.append((edge.valueAt(parameter), api.unit(edge.tangentAt(parameter))))
-        else:
-            axis = api.unit(end - start)
-            stations.append((start + axis * distance, axis))
-    return stations
-
-
 def flex_ribs(api, ctx):
     """
     The wire-helix ribs of a flexible duct, drawn as rings: one every RibPitch
@@ -161,7 +135,9 @@ def flex_ribs(api, ctx):
     outer_offset = _host_outer_offset(ctx, params)
     section = {"Diameter": params["Diameter"]} if "Diameter" in params else dict(params)
     rings = []
-    for point, tangent in _path_stations(api, context, pitch):
+    # The segment's path edge when it is curved, else the straight line between its ends.
+    path = context.get("path_edge") or api.make_line(context["start_point"], context["end_point"])
+    for point, tangent in api.sample_path(path, pitch):
         # Each ring is centred on its station, square to the path there.
         port = {
             "position": point - tangent * (0.5 * width),

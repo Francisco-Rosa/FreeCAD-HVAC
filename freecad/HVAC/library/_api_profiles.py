@@ -189,7 +189,7 @@ class _ProfilesMixin:
         return Part.Wire(edges)
 
     @staticmethod
-    def make_oval_wire(center, x_axis, y_axis, width, height):
+    def _oval_wire(center, x_axis, y_axis, width, height):
         """
         Flat-oval / obround section.
 
@@ -256,7 +256,7 @@ class _ProfilesMixin:
         return Part.Wire(edges[start:] + edges[:start])
 
     @staticmethod
-    def make_section_wire(profile, section_params, center, direction, profile_x_axis=None):
+    def _section_wire(profile, section_params, center, direction, profile_x_axis=None):
         """Build a section wire (circular/rectangular/oval, by `profile`) at `center`, facing `direction`."""
         profile = str(profile or "")
         params = dict(section_params or {})
@@ -280,40 +280,6 @@ class _ProfilesMixin:
         if profile == "Oval":
             width = float(params.get("Width", 0.0) or 0.0)
             height = float(params.get("Height", 0.0) or 0.0)
-            return HVACLibraryAPI.make_oval_wire(center, x_axis, y_axis, width, height)
+            return HVACLibraryAPI._oval_wire(center, x_axis, y_axis, width, height)
 
         raise ValueError("Unsupported profile '{}'".format(profile))
-
-    @staticmethod
-    def make_section_wire_from_port(port):
-        """make_section_wire, reading profile/center/direction/section_params straight from a port dict."""
-        profile = HVACLibraryAPI.port_profile(port)
-        center = HVACLibraryAPI.port_position(port)
-        direction = HVACLibraryAPI.port_direction(port)
-        preferred_x = HVACLibraryAPI.port_profile_x_axis(port)
-        section_params = HVACLibraryAPI.port_section_params(port)
-
-        return HVACLibraryAPI.make_section_wire(profile, section_params, center, direction, profile_x_axis=preferred_x)
-
-    @staticmethod
-    def make_section_face(profile, section_params, center, direction, profile_x_axis=None):
-        """Same as make_section_wire, but returns a flat face instead of just the wire outline."""
-        wire = HVACLibraryAPI.make_section_wire(
-            profile=profile,
-            section_params=section_params,
-            center=center,
-            direction=direction,
-            profile_x_axis=profile_x_axis,
-        )
-        return Part.Face(wire)
-
-    @staticmethod
-    def make_section_face_from_port(port):
-        """make_section_face, reading profile/center/direction/section_params straight from a port dict."""
-        profile = HVACLibraryAPI.port_profile(port)
-        center = HVACLibraryAPI.port_position(port)
-        direction = HVACLibraryAPI.port_direction(port)
-        preferred_x = HVACLibraryAPI.port_profile_x_axis(port)
-        section_params = HVACLibraryAPI.port_section_params(port)
-
-        return HVACLibraryAPI.make_section_face(profile, section_params, center, direction, profile_x_axis=preferred_x)

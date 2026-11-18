@@ -365,7 +365,6 @@ def segment_friction_model(reg, seg_obj, base_model, seg_model):
     for pdef in getattr(type_def, "properties", []) or []:
         properties[pdef.name] = getattr(seg_obj, pdef.name, getattr(pdef, "default", None))
     context = {
-        "obj": seg_obj,
         "properties": properties,
         "roughness_mm": seg_model.roughness_mm,
         "base_model": base_model,
@@ -469,7 +468,6 @@ def build_loss_evaluator(
             connected_ports_ctx.append(p)
 
         context = {
-            "obj": comp_obj,
             "construction": construction,
             "hydraulic_roughness_mm": float(hydraulic_roughness_mm),
             "center_point": center_point,
