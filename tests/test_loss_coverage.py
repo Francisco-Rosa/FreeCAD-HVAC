@@ -3,8 +3,8 @@
 
 """
 Every selectable junction type of the shipped libraries has a loss wired,
-and the loss coverage matrix in freecad/HVAC/libraries/README.md is up to
-date (regenerate it with `python3 tools/loss_coverage.py --write`).
+and docs/loss-coverage.md is up to date (regenerate it with
+`python3 tools/loss_coverage.py --write`).
 """
 
 import importlib.util
@@ -30,13 +30,12 @@ def test_every_selectable_junction_type_has_a_loss():
     assert missing == [], "junction types with no loss wired: {}".format(missing)
 
 
-def test_readme_loss_coverage_matrix_is_up_to_date():
+def test_the_loss_coverage_page_is_up_to_date():
     tool = _tool()
-    with open(tool.README, encoding="utf-8") as f:
-        current = tool.readme_section(f.read())
-    assert current is not None, "README has no LOSS-COVERAGE markers"
-    assert current == tool.coverage_markdown(tool.load_registry()), (
-        "the loss coverage matrix is out of date: run `python3 tools/loss_coverage.py --write`"
+    with open(tool.OUTPUT, encoding="utf-8") as f:
+        current = f.read()
+    assert current == tool.coverage_page(tool.load_registry()), (
+        "docs/loss-coverage.md is out of date: run `python3 tools/loss_coverage.py --write`"
     )
 
 

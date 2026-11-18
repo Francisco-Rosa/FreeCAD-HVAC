@@ -20,7 +20,8 @@ definitions rather than being hard-coded. Three libraries ship today:
 `builtin_basic` (minimal generic types), `smacna` (SMACNA-based sheet-metal
 types, meant for day-to-day modeling), and `samples` (reference-only
 examples). New fitting types, profiles, and parameters can be added as
-library data without touching the core addon.
+library data without touching the core addon: see
+[Writing an HVAC library](docs/library-guide.md).
 
 Once a network is modeled, built-in tools can calculate airflow pressure
 drop across it and propose duct sizes (constant velocity, constant friction

@@ -14,7 +14,7 @@ plain arithmetic result, or (for a radiused/mitered branch fitting whose
 minimum body length genuinely depends on a swept bend's own extent) a
 lightweight intermediate bend-stub Shape -- so there is exactly one place
 each fitting's own dimensions/trims are computed, never two independently
-maintained copies of the same formula. See freecad/HVAC/libraries/README.md's
+maintained copies of the same formula. See docs/type-def-reference.md's
 "connection_lengths" section for the overall contract this supports
 (HVACLibraryRegistry.measure_connection_lengths()).
 """

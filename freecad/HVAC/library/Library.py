@@ -336,7 +336,7 @@ class HVACLibrary:
         """Types matching the given filters, best-suited first.
 
         Ordered by the same ranking `select_type` uses (see
-        freecad/HVAC/libraries/README.md's "Ranking" section): a
+        docs/library-guide.md's "Type selection" section): a
         `kind: "model"` type before a `kind: "placeholder"` one; among
         those, one that declares a concrete profile before one that only
         matches via the "Generic" wildcard; then `selection.priority`
@@ -506,7 +506,7 @@ class HVACLibrary:
         True if this type declares real, specific profiles (e.g.
         ["Circular", "Rectangular"]) rather than the "Generic" wildcard (or
         no profiles at all, treated the same as "Generic" -- see
-        validation.py/libraries/README.md).
+        validation.py, docs/library-guide.md).
 
         Used to rank a concrete-profile type ahead of a Generic-profile one
         among candidates that already passed _compatible() -- i.e. that
@@ -561,7 +561,7 @@ class HVACLibrary:
         profile-compatibility check, not duplicated here).
 
         Compatible candidates are then split into tiers, in priority order
-        (see freecad/HVAC/libraries/README.md):
+        (see docs/library-guide.md):
             1. model,       declares concrete profile(s)
             2. model,       Generic-profile (wildcard) match
             3. placeholder, declares concrete profile(s)
@@ -1369,7 +1369,7 @@ class HVACLibraryRegistry:
         flow_boundary_locked = bool(raw.get("flow_boundary_locked", False))
 
         # "construction" is an object with its own "layers"/"features"
-        # arrays (see freecad/HVAC/libraries/README.md's "Construction
+        # arrays (see docs/type-def-reference.md's "Construction
         # layers"/"Construction features" sections) -- both optional, a
         # type-def with no "construction" block at all keeps behaving as a
         # single, roleless implicit layer with no features.

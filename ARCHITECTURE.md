@@ -38,7 +38,7 @@ completely independent chain. See "Junction component composition" below.
 | Container | `freecad/HVAC/core/Network.py` (`DuctNetwork`) | Owns the network's Base/Geometry/Topology folders, network-wide defaults, and the sync loop that keeps everything below in step with the base geometry. |
 | Classifier | `freecad/HVAC/core/NetworkParser.py` (`DuctNetworkParser`) | Reads base sketches/wires, builds a connectivity graph, and classifies each node's `topology`/`family_key` and each edge's port profile. Never picks a type, never knows about components. See [`core/TOPOLOGY_CLASSIFICATION.md`](freecad/HVAC/core/TOPOLOGY_CLASSIFICATION.md). |
 | Generated objects | `freecad/HVAC/core/Segment.py`, `freecad/HVAC/core/Junction.py`, `freecad/HVAC/core/Component.py` | `DuctSegment`/`DuctComponent`: FreeCAD document objects that store `LibraryId`/`TypeId` and other metadata, and `execute()` by resolving that TypeId and asking the library layer to build geometry. `DuctJunction` itself holds no type/geometry — it composes its `DuctComponent` children's local ports each sync and aggregates their trim contributions. None of these classify or select a type themselves. |
-| Library | `freecad/HVAC/library/Library.py`, `freecad/HVAC/library/validation.py`, `freecad/HVAC/utils/hvaclib.py` (`HVACLibraryService`), `freecad/HVAC/libraries/**/*.json` | Loads type-defs from JSON, decides *which* type-def matches a request, and dispatches to the geometry backend (PartScript / static BREP / legacy generator). See [`freecad/HVAC/libraries/README.md`](freecad/HVAC/libraries/README.md). |
+| Library | `freecad/HVAC/library/Library.py`, `freecad/HVAC/library/validation.py`, `freecad/HVAC/utils/hvaclib.py` (`HVACLibraryService`), `freecad/HVAC/libraries/**/*.json` | Loads type-defs from JSON, decides *which* type-def matches a request, and dispatches to the geometry backend (PartScript / static BREP / generator). See [`docs/library-guide.md`](docs/library-guide.md). |
 
 ## Core modules
 
@@ -302,7 +302,7 @@ composeComponents()
 Each component's `execute()` (run via `touch()` + the next recompute) then
 calls `build_geometry` a second time with those final positions to build the
 real `Shape`. For a type that declares an independent `connection_lengths`
-function (see `freecad/HVAC/libraries/README.md`), the "peek" step above no
+function (see `docs/type-def-reference.md`), the "peek" step above no
 longer builds any geometry at all — `HVACLibraryRegistry.
 measure_connection_lengths()` calls that lightweight measurement function
 directly, so `build_geometry`/`execute()` only ever runs once per component
@@ -342,7 +342,7 @@ sync (`DuctComponent.execute()`'s `_syncFlowBoundary`), so a document
 reopen or a topology change always leaves it consistent, not just a live
 edit. A library type may prescribe (and optionally lock) a terminal's
 `FlowBoundary` via its own type-def `flow_boundary`/`flow_boundary_locked`
-fields (see `freecad/HVAC/libraries/README.md`) — a locked type (e.g. a
+fields (see `docs/type-def-reference.md`) — a locked type (e.g. a
 duct-closure/end-cap fitting) has its value re-asserted by
 `_syncFlowBoundary` every sync, tracked by the Primary's own
 `FlowBoundaryLocked` bookkeeping property, which the terminal popup
@@ -357,7 +357,7 @@ bare sheet-metal wall, a wall plus insulation, or a casing plus an acoustic
 fill plus a perforated liner. How many layers a type has, what each is
 called, and how they're built is entirely **library-defined data** (a
 type-def's own `"construction"` block -- see
-`freecad/HVAC/libraries/README.md`'s "Construction layers" section); core
+`docs/type-def-reference.md`'s "Construction layers" section); core
 only owns the standardized semantic **role** vocabulary
 (`library/construction.py`'s `LayerRole`: `flow_surface`,
 `structural_shell`, `thermal_insulation`, `acoustic_absorber`,
@@ -577,8 +577,8 @@ material each layer already had.
 
 This is the part most likely to need touching when adding a new fitting
 type or debugging "why did it pick that geometry." Full detail:
-[`freecad/HVAC/libraries/README.md`](freecad/HVAC/libraries/README.md) §"Type
-selection (automatic matching)".
+[`docs/library-guide.md`](docs/library-guide.md) §"Type selection
+(automatic matching)".
 
 ```
 classifier output (topology, family_key, profile)
@@ -621,9 +621,9 @@ Key rules (all enforced in `freecad/HVAC/library/Library.py`):
 - **How to write code here** (test policy, naming convention, layering
   rules, SPDX header) → [`AGENTS.md`](AGENTS.md).
 - **User-facing feature overview, design goals, status** → [`README.md`](README.md).
-- **Library/type-def JSON schema, naming convention, type-selection
-  details** → [`freecad/HVAC/libraries/README.md`](freecad/HVAC/libraries/README.md).
+- **Writing a library, type selection** → [`docs/library-guide.md`](docs/library-guide.md).
+- **Type-def JSON keys** → [`docs/type-def-reference.md`](docs/type-def-reference.md).
+- **Naming convention** → [`freecad/HVAC/libraries/README.md`](freecad/HVAC/libraries/README.md).
 - **How the parser classifies topology/family** → [`freecad/HVAC/core/TOPOLOGY_CLASSIFICATION.md`](freecad/HVAC/core/TOPOLOGY_CLASSIFICATION.md).
 - **Choosing a geometry backend (PartScript / static / generator)** → [`freecad/HVAC/libraries/samples/README.md`](freecad/HVAC/libraries/samples/README.md).
-- **Public geometry API for generator/PartScript authors** → `freecad/HVAC/library/library_api.py` (`HVACLibraryAPI`, supplied as `context["hvac_api"]`).
-- **Public fitting-loss API for loss modules** → `freecad/HVAC/library/loss_api.py` (`HVACLossAPI`, supplied as `context["loss_api"]`).
+- **Public geometry and loss APIs, context keys** → [`docs/library-api.md`](docs/library-api.md) (generated from `library_api.py`, `loss_api.py`, `contexts.py`).

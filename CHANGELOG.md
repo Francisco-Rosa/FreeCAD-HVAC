@@ -10,7 +10,7 @@ What a library may rely on is fixed and checked by tests:
 
 - the names in `HVACLibraryAPI.PUBLIC` and `HVACLossAPI.PUBLIC`;
 - the context keys in `freecad/HVAC/library/contexts.py`;
-- the type-def format described in `freecad/HVAC/libraries/README.md`
+- the type-def format described in `docs/type-def-reference.md`
   (`geometry.backend`, results as `{"layers": ...}`).
 
 A change to any of these raises `HVACLibraryAPI.API_VERSION` or

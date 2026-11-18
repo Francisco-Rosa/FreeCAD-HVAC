@@ -622,7 +622,7 @@ class DuctJunction:
         composeComponents, via touch() + recompute()) then builds the real
         Shape separately, using the exact same layout calculation its own
         build_geometry() shares with that measurement function -- see
-        freecad/HVAC/libraries/README.md's "connection_lengths" section.
+        docs/type-def-reference.md's "connection_lengths" section.
 
         TODO(migration): a type with no connection_lengths function
         declared yet falls back to the old peek-via-build_geometry() path

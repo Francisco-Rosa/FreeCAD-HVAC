@@ -3,7 +3,7 @@ Tests for the registry-driven library type-matching engine: descriptor
 selection metadata (HVACSelectionDef), per-library match indexes, automatic
 selection (select_type), compatibility checks (matches_type), and the sticky
 current-selection policy (resolve_sticky_type) -- see
-freecad/HVAC/library/Library.py and freecad/HVAC/libraries/README.md.
+freecad/HVAC/library/Library.py and docs/library-guide.md.
 """
 
 import json
@@ -218,7 +218,7 @@ def test_generic_profile_type_is_indexed_by_structure_only():
 
 def test_empty_profiles_list_still_indexed_by_structure_only():
     # Existing repo semantics: profiles=[] is profile-independent, same as
-    # ["Generic"] -- see validation.py / libraries/README.md. It doesn't
+    # ["Generic"] -- see validation.py / docs/library-guide.md. It doesn't
     # change how the type is indexed (still keyed by structure only).
     t = _type_def("multiport_generic", "junction", family=["multiport.multiport"], topology="multiport", profiles=[])
     lib = _library_with(t)
@@ -330,7 +330,7 @@ def test_list_types_includes_inline_kind_types_for_manual_primary_selection():
     # (the manual "change type" editor's listing) deliberately includes
     # inline-kind types -- a user may want to pick a damper/VAV directly as
     # a junction's Primary type, not just add one as a chained Inline
-    # component (see libraries/README.md "Inline components"). Here
+    # component (see docs/library-guide.md "Inline components"). Here
     # through_damper_generic's family ("through.straight.damper") is an
     # ancestor match for a requested family of "through.straight" (see
     # _family_match), so it shows up alongside the ordinary model.
@@ -640,7 +640,7 @@ def test_select_type_filters_by_qualifier_constraint():
 def test_select_type_filters_by_numeric_derived_value_constraint():
     # area_ratio (a JunctionAnalysis.derived_values entry) constrained with
     # plain minimum/maximum, exactly like the JSON example in
-    # freecad/HVAC/libraries/README.md.
+    # docs/library-guide.md.
     t = _type_def(
         "through_transition_moderate",
         "junction",
@@ -901,7 +901,7 @@ def test_match_profile_from_ports_empty_list():
 # ----------------------------------------------------------------------
 # Bundled library audit: no unresolved top-ranked ambiguity, and the two
 # real overlaps identified during descriptor priority auditing resolve to
-# the intended winner (see freecad/HVAC/libraries/README.md).
+# the intended winner (see docs/library-guide.md).
 # ----------------------------------------------------------------------
 
 
@@ -1231,7 +1231,7 @@ def test_bundled_mixed_profile_fix_does_not_disturb_exact_profile_ranking():
 # selection.kind == "inline": dampers/silencers/flex connectors -- never
 # reachable through automatic (topology, family, profile) matching, only
 # through HVACLibrary.list_inline_types() for the "Add Inline Component"
-# UI action. See freecad/HVAC/library/Library.py and libraries/README.md.
+# UI action. See freecad/HVAC/library/Library.py and docs/library-guide.md.
 # ----------------------------------------------------------------------
 
 
