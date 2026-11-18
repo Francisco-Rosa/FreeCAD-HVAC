@@ -113,3 +113,65 @@ def transverse_flange(api, ctx):
     if not shapes:
         return None
     return api.refine(api.fuse(*shapes)) if len(shapes) > 1 else shapes[0]
+
+
+def _path_stations(api, context, pitch):
+    """
+    (point, tangent) every `pitch` along a segment's path, from half a pitch in,
+    so the ribs sit evenly between both ends. Follows the path edge of a curved
+    segment, else the straight line from start to end.
+    """
+    start = api.vec(context["start_point"])
+    end = api.vec(context["end_point"])
+    edge = context.get("path_edge")
+    length = float(edge.Length) if edge is not None else (end - start).Length
+    count = int(length // pitch)
+    if count < 1:
+        return []
+    margin = 0.5 * (length - (count - 1) * pitch)
+    stations = []
+    for index in range(count):
+        distance = margin + index * pitch
+        if edge is not None:
+            parameter = edge.getParameterByLength(distance)
+            stations.append((edge.valueAt(parameter), api.unit(edge.tangentAt(parameter))))
+        else:
+            axis = api.unit(end - start)
+            stations.append((start + axis * distance, axis))
+    return stations
+
+
+def flex_ribs(api, ctx):
+    """
+    The wire-helix ribs of a flexible duct, drawn as rings: one every RibPitch
+    along the segment's path, RibWidth wide, standing RibHeight proud of the
+    host layer's outer face. Drawn as a feature so the duct body stays a plain
+    sweep (cheap to build and to fuse) and the ribs can be hidden with Layer
+    Visibility. Needs RibPitch, RibWidth and RibHeight above zero.
+    """
+    params = _params(ctx)
+    pitch = float(params.get("RibPitch", 0.0) or 0.0)
+    width = float(params.get("RibWidth", 0.0) or 0.0)
+    height = float(params.get("RibHeight", 0.0) or 0.0)
+    context = ctx.context
+    if min(pitch, width, height) <= _EPS or context.get("start_point") is None or context.get("end_point") is None:
+        return None
+    width = min(width, 0.9 * pitch)
+
+    outer_offset = _host_outer_offset(ctx, params)
+    section = {"Diameter": params["Diameter"]} if "Diameter" in params else dict(params)
+    rings = []
+    for point, tangent in _path_stations(api, context, pitch):
+        # Each ring is centred on its station, square to the path there.
+        port = {
+            "position": point - tangent * (0.5 * width),
+            "direction": tangent * -1.0,
+            "profile": context.get("profile", ""),
+            "section_params": section,
+            "profile_x_axis": context.get("profile_x_axis"),
+        }
+        rings.append(api.make_flange(api.grow_port_section(port, outer_offset), tangent, width, height))
+    if not rings:
+        return None
+    # A compound, not a fuse: the rings never touch, and fusing hundreds of them would be slow.
+    return api.compound(rings)

@@ -153,7 +153,7 @@ A factory that only corrects the network's model should wrap `base_model`
 table still applies underneath.
 
 Shipped: `shared:friction` / `friction_flex_compressed`, used by
-`builtin_basic/circular_flex` (manual only): the network's model times the
+`builtin_basic/circular_flex` and `smacna/circular_flex` (manual only): the network's model times the
 SMACNA Fig. 14-4 correction for `CompressionPercent`.
 
 ### `connection_lengths`: independent trim measurement
@@ -536,6 +536,10 @@ type-def's `"construction"` block, as a sibling `"features"` array:
   Flanges are always this feature, never fused into a layer: a type that
   declares `FlangeThickness` and construction layers must declare it
   (`tests/test_shipped_type_references.py`).
+  It also provides `flex_ribs`: the rings of a flexible duct's wire helix,
+  one every `RibPitch` along a segment's path (straight or curved),
+  `RibWidth` wide and `RibHeight` proud of `host_layer`'s outer face
+  (`smacna/circular_flex`).
 - `generator`: the name of a function inside that module (see `module`
   above), with the signature
   `generate_<name>(api, ctx) -> Part.Shape | None`. `api` is
