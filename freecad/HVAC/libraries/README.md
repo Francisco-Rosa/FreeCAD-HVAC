@@ -995,7 +995,7 @@ After the topology, two further tokens narrow it down:
   `topology_sub_classification`) when the type is generic across every
   family in its topology rather than one specific fitting -- e.g.
   `through_generic` covers straight/bend/offset alike, vs.
-  `through_elbow_generic` which is bend-specific.
+  `through_straight_generic` which is straight-specific.
 - **`sub_classification`** -- the implementation nature of the type:
   - `generic` -- a real, parametric geometry generator, usable for any
     configuration within its family.
@@ -1010,10 +1010,11 @@ Worked examples (from `smacna/types/junctions/`):
 
 | id | topology | family | sub_classification |
 |---|---|---|---|
-| `branch_tee_generic` | branch | tee | generic |
-| `branch_wye_generic` | branch | wye | generic |
+| `branch_tee_straight` | branch | tee | straight (its construction; `radius_center`, `radius_edge` alike) |
+| `branch_wye_mitered` | branch | wye | mitered (`radius` alike) |
 | `branch_generic` / `branch_marker` | branch | *(all)* | generic / marker |
-| `through_elbow_generic` | through | elbow | generic |
+| `through_elbow_radius` | through | elbow | radius (`mitered`, `vaned`, `rectangular` alike) |
+| `through_straight_generic` | through | straight | generic |
 | `through_transition_concentric` | through | transition | concentric (its alignment; `eccentric`, `offset` alike) |
 | `branch_tap_straight_damper` | branch | tap | straight_damper (a SMACNA-only variant, manual choice) |
 | `through_damper_generic` | through | damper | generic |
@@ -1039,9 +1040,8 @@ A type's model file(s) under `models/` must be named after the type-def
 `id`, not invented independently -- `models/<id>.py` for a PartScript,
 `models/<id>.FCStd` for an FCStd-template, `models/<id>.json`/`models/<id>.step`
 for a static descriptor + its source geometry. This applies regardless of
-geometry backend: `smacna/types/segments/circular_straight.json` pairs with
-`smacna/models/circular_straight.py`, `smacna/types/segments/rectangular_straight.json`
-pairs with `smacna/models/rectangular_straight.FCStd`, and
+geometry backend: `smacna/types/junctions/through_elbow_rectangular.json` pairs with
+`smacna/models/through_elbow_rectangular.py`, and
 `samples/types/junctions/end_diffuser_static.json` pairs with
 `samples/models/static_diffuser.json`/`.step` (a static descriptor may point
 at a differently-named source file, but the descriptor JSON itself should

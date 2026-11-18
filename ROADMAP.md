@@ -1692,3 +1692,96 @@ look in the GUI (the crotch plate in particular).
 - Crotch plate (`_wye_crotch_plates`): needed where one leg's face on the plane minus the other's leaves a region at least a wall wide. Built as the leg's own face extruded one wall across the plane, minus the other leg's piece, so the plate shares the pieces' faces; a plate drawn from the 2D difference alone broke the fuse on most uneven wyes. Where that cut misfires (keeps more than 1.1 times what the faces allow), the 2D plate is used instead, left out when the other leg already holds it.
 - B, `_common._inset_bend_start`: the start section is scaled (same shape) to clear the run's inside face by the margin, checked in 24 directions. Used by `crosses._double_wye_bend` (double wyes and both lateral tees), the mitered shoe, and the centre radius tee's sweep end (its 1 % overlap is gone).
 - `tools/geometry_sweep.py`: the scratch sweep, committed; it adds an uneven wye (one leg at the ratio and 45 degrees, the other full size at 30 degrees) and the straight tee, taps and elbows. `tools/geometry_smoke.py` gained `build_entry` and `report_and_save` for it.
+
+### 6.7 Review and documentation of the API and the library framework
+
+Written 19 November 2026 at the owner's request ("review, document API and
+library framework"). **For the owner's review; nothing changed but stale
+names in `libraries/README.md` and `samples/README.md`.**
+
+**What a library author has today.**
+- `freecad/HVAC/libraries/README.md` (1050 lines): directory layout,
+  `library.json`, the type-def format, friction, connection lengths, flow
+  constraints and loss variants, construction layers and features, the
+  generated loss coverage matrix (about 150 lines), type selection, naming.
+  One long page mixing a guide, a reference and generated data.
+- `libraries/samples/README.md`: the four geometry backends.
+- `ARCHITECTURE.md`: core flow, for people working on the addon itself.
+- `CHANGELOG.md`: the compatibility policy (`PUBLIC`, `contexts.py`,
+  `requires_api`).
+- Docstrings: every one of the 86 `HVACLibraryAPI.PUBLIC` and 26
+  `HVACLossAPI.PUBLIC` names has one. No page lists them: only 24 geometry
+  and 8 loss names are named anywhere in the docs.
+
+**Findings.**
+1. *No API reference.* The public surface is frozen and tested, but an
+   author has to read `_api_*.py` to find what exists.
+2. *Overlapping entry points in the geometry API.*
+   - Two section vocabularies: `make_section_wire`, `make_section_face` and
+     their `_from_port` forms, beside `make_profile` / `profile_from_port` /
+     `offset_profile` (what every shipped fitting uses). The `make_section_*`
+     four are not used by any shipped library.
+   - Four ways to finish a fitting: `build_layered_geometry`,
+     `single_layer`, `build_envelopes` + `envelopes_to_layers`, and
+     `build_fitting` / `build_layered_fitting` / `measure_fitting` (the
+     last three are for external libraries; unused by shipped ones).
+3. *Unused public names* (21 geometry, not counting `API_VERSION`,
+   `PUBLIC`, `STANDARD_FITTINGS`): `arc_wire`, `boundary`,
+   `bridge_boundaries`, `distance_between_lines`, `make_oval_wire`, `offset_wire`
+   (used by wyes now), `sew`, `solidify`, `transform`, `trim`,
+   `virtual_corner_for_lines`, the four `make_section_*`, the
+   `build_*`/`measure_fitting` group above. Unused is not wrong (they are
+   for external libraries), but each needs a stated purpose or should go.
+4. *Gaps found while writing fittings.*
+   - No face from a wire: the crotch plate (6.6) reads the face back off a
+     thin extrusion (`section_face(extrude(...))`).
+   - `transform` needs a `FreeCAD.Placement` or `Matrix`, which library
+     code cannot build without importing FreeCAD (against "library code
+     uses only the API"). No translate / rotate by vectors.
+   - No sampling along a path: `flex_ribs` calls the edge's own
+     `getParameterByLength` / `valueAt` / `tangentAt`.
+   - The rule itself is unstated for shapes: library code freely uses a
+     shape's own members (`Volume`, `Faces`, `OuterWire`, `fuse`, `cut`,
+     ...). The docs should say which are fair to use.
+5. *Context keys* (`contexts.py`): `obj` hands library code the FreeCAD
+   object itself (no shipped library reads it); `flange_ports` and
+   `branch_jog` are set and read by the shared fittings only, not by core,
+   yet sit in the frozen public list; `position` is a marker-only fallback.
+6. *Stale names in the docs*: three type ids renamed or removed on 19
+   November (fixed with this review).
+7. *Loss API*: consistent (`<fitting>_loss` functions plus the status
+   constants); no finding beyond the missing reference.
+
+**Proposal.**
+- A. *Generated API reference*, `docs/library-api.md`: every `PUBLIC` name
+  of both APIs with its signature and docstring, grouped (ports, profiles,
+  solids, booleans, recipes and paths, finishing, losses), from a tool
+  (`tools/api_reference.py --write`) with a test that fails when it is
+  stale, like the loss coverage matrix. Context keys from `contexts.py`
+  with one line each.
+- B. *Split `libraries/README.md`* into a guide and references under
+  `docs/`: `library-guide.md` (writing a library, start to finish: layout,
+  `library.json`, a type-def, choosing a backend, construction layers and
+  features, losses and friction, selection, naming, checking with the smoke
+  run and the sweep), `type-def-reference.md` (every key), and the loss
+  coverage matrix in its own generated file. `libraries/README.md` keeps a
+  short index. `samples/README.md` folds into the guide's backend chapter.
+- C. *API clean-up* (raises geometry API to 4; libraries declare
+  `requires_api` 4): drop the four `make_section_*`, `arc_wire`,
+  `make_oval_wire`, `boundary` / `bridge_boundaries` / `sew` / `solidify`,
+  `distance_between_lines`, `virtual_corner_for_lines` unless the owner
+  wants them kept for external libraries; add `make_face(wire)`,
+  `translate(shape, vector)`, `rotate(shape, origin, axis, degrees)` and
+  `sample_path(edge, spacing)`; replace `transform`. Context: drop `obj`;
+  keep `flange_ports` / `branch_jog` but mark them "set by shared
+  fittings".
+- D. *State the shape rule*: library code may read a `Part.Shape`'s
+  members and call its booleans and queries; it builds new geometry only
+  through the API.
+
+**Owner input.**
+- (a) Approve A and B (docs only)?
+- (b) C: clean up now (API 4, a break before the first release), or only
+  document the current surface and leave the clean-up for later?
+- (c) If C: keep any of the unused names for external libraries?
+- (d) D as written?
