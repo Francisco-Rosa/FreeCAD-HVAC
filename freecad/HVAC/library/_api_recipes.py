@@ -470,9 +470,10 @@ class _RecipesMixin:
         """
         Build one of the standard fittings (see STANDARD_FITTINGS) for the
         given geometry context: its hollow, layered shape plus its trims,
-        as the usual `{"layers"|"shape": ..., "connection_lengths": ...}`
-        dict. The wall build-up and flanges come from the context's own
-        type (construction layers, Thickness, FlangeThickness, ...).
+        as the usual `{"layers": ..., "connection_lengths": ...}` dict. The
+        wall build-up comes from the context's construction layers and their
+        thickness properties; flanges are the type's construction feature,
+        not part of this result.
         """
         return cls._standard_fitting_function(name, 1)(context)
 
