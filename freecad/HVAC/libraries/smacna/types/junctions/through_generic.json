@@ -78,10 +78,26 @@
       "group": "Dimensions",
       "description": "Insulation thickness wrapped around the outside of the fitting; 0 disables insulation",
       "default": 0.0
+    },
+    {
+      "name": "LinerThickness",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Acoustic liner thickness inside the fitting wall; the sizes given are the clear airway inside the liner; 0 disables the liner",
+      "default": 0.0
     }
   ],
   "construction": {
     "layers": [
+      {
+        "id": "liner",
+        "roles": [
+          "flow_surface",
+          "acoustic_absorber"
+        ],
+        "default_material_role": "acoustic_absorber",
+        "thickness_property": "LinerThickness"
+      },
       {
         "id": "casing",
         "roles": [

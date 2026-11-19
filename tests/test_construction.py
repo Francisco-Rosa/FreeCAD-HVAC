@@ -189,6 +189,26 @@ def test_hydraulic_roughness_reads_only_the_flow_surface_layer():
     assert construction.hydraulic_roughness(0.09) == 0.12
 
 
+def test_a_liner_of_zero_thickness_leaves_the_casing_facing_the_air():
+    liner = _PhysicalMaterial(HydraulicRoughness=0.9)
+    sheet = _PhysicalMaterial(HydraulicRoughness=0.09)
+
+    def construction(liner_mm):
+        return construction_mod.Construction([
+            construction_mod.ConstructionLayer(
+                id="liner", roles=["flow_surface", "acoustic_absorber"], material=liner, thickness_mm=liner_mm,
+            ),
+            construction_mod.ConstructionLayer(
+                id="casing", roles=["flow_surface", "structural_shell"], material=sheet, thickness_mm=0.8,
+            ),
+        ])
+
+    assert construction(0.0).flow_surface().id == "casing"
+    assert construction(0.0).hydraulic_roughness(0.15) == 0.09
+    assert construction(25.0).flow_surface().id == "liner"
+    assert construction(25.0).hydraulic_roughness(0.15) == 0.9
+
+
 def test_construction_for_a_not_yet_migrated_type_has_no_roles(monkeypatch):
     # Empty construction list -- construction_for() still builds one layer
     # per obj.ConstructionLayerIds (populated by apply_construction_schema's

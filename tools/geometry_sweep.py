@@ -50,7 +50,11 @@ TYPE_IDS = (
 # Wall build-ups per library: property overrides (an empty dict is the type's default wall).
 WALLS = {
     "builtin_basic": [("no wall", {"Thickness": 0.0}), ("default wall", {}), ("3 mm", {"Thickness": 3.0})],
-    "smacna": [("default wall", {}), ("25 mm insulation", {"InsulationThickness": 25.0})],
+    "smacna": [
+        ("default wall", {}),
+        ("25 mm insulation", {"InsulationThickness": 25.0}),
+        ("25 mm liner", {"LinerThickness": 25.0}),
+    ],
 }
 
 # (label, profile, tall): a tall oval stands on its narrow side.
