@@ -23,9 +23,12 @@
 
 """This module implements HVAC duct description classes."""
 
+import traceback
+
 import FreeCAD
+import Part
 import FreeCADGui as Gui
-from PySide import QtWidgets, QtCore
+from PySide import QtWidgets, QtCore, QtGui
 from PySide.QtCore import QT_TRANSLATE_NOOP
 translate = FreeCAD.Qt.translate
 
@@ -230,13 +233,30 @@ class CommandCreateVirtualJunction:
                 if point:
                     points.add(hvaclib.vec_to_xyz(point))
 
-            # Case 2: Terminal Junction selected
+            # Case 2: Terminal Junction selected (e.g. from the tree view,
+            # where the logical DuctJunction node is still selectable even
+            # though it has no shape of its own)
             if hvaclib.isDuctJunction(sel.Object):
                 ana_nid = sel.Object.NodeId
                 geo_points = parser.node_group_members_xyz(ana_nid)
                 if geo_points:
                     points.add(geo_points[0])
-                
+
+            # Case 3: A junction's fitting geometry selected in the 3D view.
+            # DuctJunction itself is purely logical and has no Shape (see
+            # Junction.py), so the only thing a user can actually click on
+            # at a junction is one of its DuctComponent fittings -- resolve
+            # back to the owning junction via ParentJunctionName.
+            if hvaclib.isDuctComponent(sel.Object):
+                doc = sel.Object.Document
+                parent_name = getattr(sel.Object, "ParentJunctionName", "")
+                parent_junction = doc.getObject(parent_name) if parent_name else None
+                if parent_junction is not None and hvaclib.isDuctJunction(parent_junction):
+                    ana_nid = parent_junction.NodeId
+                    geo_points = parser.node_group_members_xyz(ana_nid)
+                    if geo_points:
+                        points.add(geo_points[0])
+
         return list(points)
 
     def Activated(self):
@@ -919,18 +939,165 @@ class CommandEditType:
         if not selected_geom:
             return
 
+        # A DuctJunction has no type of its own -- retarget to its Primary
+        # DuctComponent so picking a junction node in the tree still lets
+        # you edit "its" fitting type directly.
+        resolved = []
+        for o in selected_geom:
+            if hvaclib.isDuctJunction(o):
+                primary = o.Proxy.getPrimaryComponent()
+                if primary is not None:
+                    resolved.append(primary)
+                continue
+            resolved.append(o)
+        selected_geom = resolved
+        if not selected_geom:
+            return
+
         # Keep selection homogeneous for the first version
         has_segments = any(hvaclib.isDuctSegment(o) for o in selected_geom)
-        has_junctions = any(hvaclib.isDuctJunction(o) for o in selected_geom)
-        if has_segments and has_junctions:
+        has_components = any(hvaclib.isDuctComponent(o) for o in selected_geom)
+        if has_segments and has_components:
             FreeCAD.Console.PrintWarning(
-                "HVAC - Please select only segments or only junctions.\n"
+                "HVAC - Please select only segments or only junctions/components.\n"
             )
             return
 
         self.task_panel = TaskPanelTypeEditor(
             selected_geom,
             apply_callback=Network.DuctNetwork.applyTypeSelection,
+        )
+        Gui.Control.showDialog(self.task_panel)
+
+
+class CommandEditMaterial:
+    """
+    Assign native FreeCAD materials to each of the selected duct
+    segment(s)/component(s)' own construction layers, via one TaskPanel
+    covering every layer present on the selection (see
+    ui/TaskPanel.py:TaskPanelEditMaterial) -- FreeCAD's generic property
+    editor has no interactive picker for Materials::PropertyMaterial on an
+    arbitrary object (confirmed: no shipped FreeCAD workbench relies on
+    inline editing for it either -- CAM's own "Assign Material" feature
+    builds its own dialog the same way).
+    """
+
+    def __init__(self):
+        self.task_panel = None
+
+    def GetResources(self):
+        return {
+            'Pixmap': hvaclib.get_icon_path("EditMaterial.svg"),
+            'MenuText': QT_TRANSLATE_NOOP('HVAC_EditMaterial', 'Edit Material'),
+            'ToolTip': QT_TRANSLATE_NOOP(
+                'HVAC_EditMaterial',
+                'Assign native FreeCAD materials to each construction layer of the selected duct segment(s)/component(s)'
+            ),
+            'CmdType': 'ForEdit',
+        }
+
+    def IsActive(self):
+        if Gui.ActiveDocument is None:
+            return False
+        return bool(self._resolveTargets())
+
+    @staticmethod
+    def _resolveTargets():
+        # A DuctJunction has no material of its own -- retarget to its
+        # Primary DuctComponent, same convention as CommandEditType.
+        selected_geom = hvaclib.selectedGeometryObjects() or []
+        targets = []
+        for o in selected_geom:
+            if hvaclib.isDuctJunction(o):
+                primary = o.Proxy.getPrimaryComponent()
+                if primary is not None:
+                    targets.append(primary)
+                continue
+            if hvaclib.isDuctSegment(o) or hvaclib.isDuctComponent(o):
+                targets.append(o)
+        return targets
+
+    def Activated(self):
+        from ..ui.TaskPanel import TaskPanelEditMaterial
+
+        targets = self._resolveTargets()
+        if not targets:
+            return
+
+        self.task_panel = TaskPanelEditMaterial(
+            targets,
+            apply_callback=Network.DuctNetwork.applyMaterialSelection,
+        )
+        Gui.Control.showDialog(self.task_panel)
+
+
+class CommandEditInlineComponents:
+    """
+    Manage a junction's Inline devices (dampers, silencers, ...) from one
+    TaskPanel: list what's already there (selecting an entry highlights it
+    in the 3D view), delete any of them, and add a new one to a chosen
+    edge -- replaces the previous separate Add/Remove Inline Component
+    commands (see ui/TaskPanel.py:TaskPanelEditInlineComponents).
+    """
+
+    @staticmethod
+    def _eligibleJunction():
+        # A DuctJunction has no Shape any more, so it can't be picked in the
+        # 3D view -- a user naturally selects the fitting itself (its
+        # Primary/Inline DuctComponent) instead. Accept either: a directly
+        # selected junction, or a component, retargeted to its parent.
+        selected_geom = hvaclib.selectedGeometryObjects() or []
+        junction = None
+        for o in selected_geom:
+            if hvaclib.isDuctJunction(o):
+                candidate = o
+            elif hvaclib.isDuctComponent(o):
+                parent_name = getattr(o, "ParentJunctionName", "")
+                candidate = o.Document.getObject(parent_name) if parent_name else None
+            else:
+                continue
+            if candidate is None:
+                continue
+            if junction is not None and junction is not candidate:
+                return None  # selection implicates more than one junction
+            junction = candidate
+
+        if junction is None:
+            return None
+        if int(getattr(junction, "Degree", 0) or 0) < 1:
+            return None
+        return junction
+
+    def __init__(self):
+        self.task_panel = None
+
+    def GetResources(self):
+        return {
+            'Pixmap': hvaclib.get_icon_path("EditInlineComponent.svg"),
+            'MenuText': QT_TRANSLATE_NOOP('HVAC_EditInlineComponents', 'Edit Inline Components'),
+            'ToolTip': QT_TRANSLATE_NOOP(
+                'HVAC_EditInlineComponents',
+                'View, add, or remove inline devices (dampers, silencers, ...) on a junction'
+            ),
+            'CmdType': 'ForEdit',
+        }
+
+    def IsActive(self):
+        if Gui.ActiveDocument is None:
+            return False
+        return self._eligibleJunction() is not None
+
+    def Activated(self):
+        from ..ui.TaskPanel import TaskPanelEditInlineComponents
+
+        junction = self._eligibleJunction()
+        if junction is None:
+            return
+
+        self.task_panel = TaskPanelEditInlineComponents(
+            junction,
+            add_callback=Network.DuctNetwork.applyAddInlineComponent,
+            remove_callback=Network.DuctNetwork.applyRemoveInlineComponent,
         )
         Gui.Control.showDialog(self.task_panel)
 
@@ -1005,6 +1172,192 @@ class CommandEditNetworkTypeDefaults:
         Gui.Control.showDialog(self.task_panel)
 
 
+class CommandCalculateAirflow:
+    """Solve airflow and pressure drop for the active network."""
+
+    def __init__(self):
+        self.task_panel = None
+
+    def GetResources(self):
+        return {
+            'Pixmap': hvaclib.get_icon_path("CalculateAirflow.svg"),
+            'MenuText': QT_TRANSLATE_NOOP('HVAC_CalculateAirflow', 'Calculate Airflow'),
+            'ToolTip': QT_TRANSLATE_NOOP(
+                'HVAC_CalculateAirflow',
+                'Solve airflow and pressure drop for the active network'
+            ),
+            'CmdType': 'ForEdit',
+        }
+
+    def IsActive(self):
+        if Gui.ActiveDocument is None:
+            return False
+        return hvaclib.activeHVACNetwork() is not None
+
+    def Activated(self):
+        from ..core.AirflowSolver import AirflowSolver
+        from ..ui.TaskPanel import TaskPanelAirflowResults
+
+        net = hvaclib.activeHVACNetwork()
+        if net is None:
+            return
+
+        try:
+            result = AirflowSolver(net).solve()
+        except Exception as e:
+            FreeCAD.Console.PrintWarning(
+                "HVAC - CalculateAirflow - Error solving network '{}': {}\n".format(net.Label, e)
+            )
+            FreeCAD.Console.PrintMessage(traceback.format_exc())
+            return
+
+        net.Document.recompute()
+
+        self.task_panel = TaskPanelAirflowResults(net, result)
+        Gui.Control.showDialog(self.task_panel)
+
+
+class CommandSizeDucts:
+    """
+    Compute proposed duct sizes for the active network (preview before
+    applying). Opens one task panel covering both the network's own sizing
+    parameters (SizingMethod/TargetVelocity/etc -- previously only
+    reachable through the raw property editor) and the results/warnings of
+    the last "Run Duct Sizing" click -- see
+    ui/TaskPanel.py:TaskPanelSizeDucts.
+    """
+
+    def __init__(self):
+        self.task_panel = None
+
+    def GetResources(self):
+        return {
+            'Pixmap': hvaclib.get_icon_path("SizeDucts.svg"),
+            'MenuText': QT_TRANSLATE_NOOP('HVAC_SizeDucts', 'Size Ducts'),
+            'ToolTip': QT_TRANSLATE_NOOP(
+                'HVAC_SizeDucts',
+                'Compute proposed duct sizes for the active network from a target velocity or friction rate'
+            ),
+            'CmdType': 'ForEdit',
+        }
+
+    def IsActive(self):
+        if Gui.ActiveDocument is None:
+            return False
+        return hvaclib.activeHVACNetwork() is not None
+
+    def Activated(self):
+        from ..ui.TaskPanel import TaskPanelSizeDucts
+
+        net = hvaclib.activeHVACNetwork()
+        if net is None:
+            return
+
+        self.task_panel = TaskPanelSizeDucts(net)
+        Gui.Control.showDialog(self.task_panel)
+
+
+class CommandRenumberNetwork:
+    """Renumber the active/selected HVAC Duct Network's segments/junctions/components."""
+
+    def GetResources(self):
+        return {
+            'Pixmap': hvaclib.get_icon_path("RenumberNetwork.svg"),
+            'MenuText': QT_TRANSLATE_NOOP('HVAC_RenumberNetwork', 'Renumber Network'),
+            'ToolTip': QT_TRANSLATE_NOOP(
+                'HVAC_RenumberNetwork',
+                'Assign documentation numbers (D.../J...) to the network\'s segments, '
+                'junctions and components, walking outward from a source terminal'
+            ),
+            'CmdType': 'ForEdit',
+        }
+
+    def IsActive(self):
+        if Gui.ActiveDocument is None:
+            return False
+        return bool(hvaclib.selectedHVACNetworks()) or hvaclib.activeHVACNetwork() is not None
+
+    def Activated(self):
+        from ..core.Numbering import renumber_network
+
+        selected_hvac_networks = hvaclib.selectedHVACNetworks()
+        net = selected_hvac_networks[0] if selected_hvac_networks else hvaclib.activeHVACNetwork()
+        if net is None:
+            return
+
+        doc = net.Document
+        doc.openTransaction("Renumber Network")
+        try:
+            result = renumber_network(net)
+            doc.commitTransaction()
+        except Exception:
+            doc.abortTransaction()
+            raise
+
+        for warning in result.warnings:
+            FreeCAD.Console.PrintWarning("HVAC - RenumberNetwork - {}\n".format(warning))
+
+        FreeCAD.Console.PrintMessage(
+            "HVAC - Renumbered {} segment(s), {} junction(s), {} component(s) in '{}'.\n".format(
+                result.segment_count, result.junction_count, result.component_count, net.Label
+            )
+        )
+
+        net.Document.recompute()
+
+
+class CommandSelectAllSegments:
+    """Select every duct segment in the active/selected HVAC Duct Network."""
+
+    def GetResources(self):
+        return {
+            'Pixmap': hvaclib.get_icon_path("SelectSegments.svg"),
+            'MenuText': QT_TRANSLATE_NOOP('HVAC_SelectAllSegments', 'Select All Segments'),
+            'ToolTip': QT_TRANSLATE_NOOP(
+                'HVAC_SelectAllSegments', 'Select every duct segment in the network'
+            ),
+            'CmdType': 'ForEdit',
+        }
+
+    def IsActive(self):
+        if Gui.ActiveDocument is None:
+            return False
+        return bool(hvaclib.selectedHVACNetworks()) or hvaclib.activeHVACNetwork() is not None
+
+    def Activated(self):
+        selected_hvac_networks = hvaclib.selectedHVACNetworks()
+        net = selected_hvac_networks[0] if selected_hvac_networks else hvaclib.activeHVACNetwork()
+        if net is None:
+            return
+        net.Proxy.selectAllSegments()
+
+
+class CommandSelectAllComponents:
+    """Select every junction fitting (Primary and Inline) in the active/selected HVAC Duct Network."""
+
+    def GetResources(self):
+        return {
+            'Pixmap': hvaclib.get_icon_path("SelectComponents.svg"),
+            'MenuText': QT_TRANSLATE_NOOP('HVAC_SelectAllComponents', 'Select All Components'),
+            'ToolTip': QT_TRANSLATE_NOOP(
+                'HVAC_SelectAllComponents', 'Select every junction fitting (Primary and Inline) in the network'
+            ),
+            'CmdType': 'ForEdit',
+        }
+
+    def IsActive(self):
+        if Gui.ActiveDocument is None:
+            return False
+        return bool(hvaclib.selectedHVACNetworks()) or hvaclib.activeHVACNetwork() is not None
+
+    def Activated(self):
+        selected_hvac_networks = hvaclib.selectedHVACNetworks()
+        net = selected_hvac_networks[0] if selected_hvac_networks else hvaclib.activeHVACNetwork()
+        if net is None:
+            return
+        net.Proxy.selectAllComponents()
+
+
 class CommandResetTypesToNetworkDefaults:
     """Reset selected HVAC geometry objects to their network defaults."""
 
@@ -1054,8 +1407,313 @@ class CommandReloadHVACLibraries:
     def Activated(self):
         hvaclib.reload_hvac_libraries()
         hvaclib.debug_print_loaded_libraries()
+        # Library code may have changed: rebuild every fitting (a normal sync only rebuilds what changed).
+        for net in hvaclib.allHVACNetworks() or []:
+            proxy = getattr(net, "Proxy", None)
+            if proxy is not None:
+                proxy.requestSync(rebuild_all=True)
         
         
+def _is_hvac_object(obj):
+    """A network object or base geometry: never a model to turn into equipment or a custom fitting."""
+    checks = (
+        hvaclib.isDuctNetwork,
+        hvaclib.isDuctSegment,
+        hvaclib.isDuctJunction,
+        hvaclib.isDuctComponent,
+        hvaclib.isDuctJunctionVirtual,
+        hvaclib.isDuctManagedFolder,
+        hvaclib.isSketch,
+        hvaclib.isWire,
+    )
+    return any(check(obj) for check in checks)
+
+
+def _has_solid(obj):
+    shape = getattr(obj, "Shape", None)
+    try:
+        return shape is not None and not shape.isNull() and len(shape.Solids) > 0
+    except Exception:
+        return False
+
+
+def _selected_part():
+    """
+    The model the selection points at: the first App::Part in the selection
+    (picking a face or a body inside it counts too), else a selected solid
+    (a Part cube, a PartDesign body, ...) that sits in no App::Part, which
+    _container_for() wraps in a new App::Part on use. None when nothing
+    usable is selected.
+    """
+    for sel in Gui.Selection.getSelectionEx("", 0) or []:
+        obj = sel.Object
+        if obj.TypeId == "App::Part":
+            return obj
+        parent = obj.getParentGeoFeatureGroup() if hasattr(obj, "getParentGeoFeatureGroup") else None
+        if parent is not None and parent.TypeId == "App::Part":
+            return parent
+        if parent is None and not _is_hvac_object(obj) and _has_solid(obj):
+            return obj
+    return None
+
+
+def _container_for(obj, name):
+    """`obj` itself when it is an App::Part, else a new App::Part (named `name`) that `obj` is moved into."""
+    if obj.TypeId == "App::Part":
+        return obj
+    part = obj.Document.addObject("App::Part", name)
+    part.Label = obj.Label + " " + name
+    part.addObject(obj)
+    return part
+
+
+def _is_port_container(part):
+    """True when `part` is already HVAC equipment or a custom fitting (its ports are edited with Edit Ports)."""
+    from ..core import Equipment, _custom_fitting
+
+    return Equipment.is_equipment(part) or _custom_fitting.is_custom_fitting(part)
+
+
+class CommandCreateEquipment:
+    """Make HVAC equipment from a modelled unit, an App::Part or a plain solid (ROADMAP 6.5)."""
+
+    def GetResources(self):
+        return {
+            'Pixmap': hvaclib.get_icon_path("CreateEquipment.svg"),
+            'MenuText': QT_TRANSLATE_NOOP('HVAC_CreateEquipment', 'Create Custom Equipment'),
+            'ToolTip': QT_TRANSLATE_NOOP(
+                'HVAC_CreateEquipment',
+                'Make the selected App::Part or solid (a modelled AHU, fan, ...) an HVAC equipment, then add its ports '
+                '(supply, return, outdoor air, exhaust) on picked faces. A duct drawn to end on a port is connected to '
+                'it automatically. Use Edit Ports to change the ports later',
+            ),
+            'CmdType': 'ForEdit',
+        }
+
+    def IsActive(self):
+        if Gui.ActiveDocument is None or Gui.Control.activeDialog():
+            return False
+        part = _selected_part()
+        return part is not None and not _is_port_container(part)
+
+    def Activated(self):
+        from ..core import Equipment
+        from ..ui.TaskPanel import TaskPanelPortContainer
+
+        selected = _selected_part()
+        doc = selected.Document
+        doc.openTransaction("Create Equipment")
+        try:
+            part = _container_for(selected, "Equipment")
+            Equipment.make_equipment(part)
+        finally:
+            doc.commitTransaction()
+        FreeCAD.Console.PrintMessage("HVAC - '{}' is now HVAC equipment\n".format(part.Label))
+        # Straight on to adding its ports.
+        self.task_panel = TaskPanelPortContainer(part, kind="equipment")
+        Gui.Control.showDialog(self.task_panel)
+
+
+class CommandAddEquipment:
+    """Add a library equipment model (air handling unit, fan, ...) as HVAC equipment."""
+
+    def __init__(self):
+        self.task_panel = None
+
+    def GetResources(self):
+        return {
+            'Pixmap': hvaclib.get_icon_path("AddEquipment.svg"),
+            'MenuText': QT_TRANSLATE_NOOP('HVAC_AddEquipment', 'Add Equipment'),
+            'ToolTip': QT_TRANSLATE_NOOP(
+                'HVAC_AddEquipment',
+                'Add a ready-made unit from the library (an air handling unit, a fan): pick the model, set its sizes '
+                'and position. It comes with its ports and their snap points; a duct drawn to end on a port is '
+                'connected to it automatically',
+            ),
+            'CmdType': 'ForEdit',
+        }
+
+    def IsActive(self):
+        return FreeCAD.ActiveDocument is not None and not Gui.Control.activeDialog()
+
+    def Activated(self):
+        from ..core import Equipment
+        from ..ui.TaskPanel import TaskPanelAddEquipment
+
+        self.task_panel = TaskPanelAddEquipment(FreeCAD.ActiveDocument, Equipment.library_models())
+        Gui.Control.showDialog(self.task_panel)
+
+
+class CommandCreateCustomFitting:
+    """Make a custom fitting from a modelled App::Part or a plain solid (ROADMAP 6.3)."""
+
+    def GetResources(self):
+        return {
+            'Pixmap': hvaclib.get_icon_path("CreateCustomFitting.svg"),
+            'MenuText': QT_TRANSLATE_NOOP('HVAC_CreateCustomFitting', 'Create Custom Fitting'),
+            'ToolTip': QT_TRANSLATE_NOOP(
+                'HVAC_CreateCustomFitting',
+                'Use the selected App::Part or solid (a modelled fitting) as a custom junction fitting, then add its '
+                'ports on picked faces. Ducts drawn to end on its ports become one junction that uses the fitting '
+                'where it is modelled. Use Edit Ports to change the ports later',
+            ),
+            'CmdType': 'ForEdit',
+        }
+
+    def IsActive(self):
+        if Gui.ActiveDocument is None or Gui.Control.activeDialog():
+            return False
+        part = _selected_part()
+        return part is not None and not _is_port_container(part)
+
+    def Activated(self):
+        from ..core import _custom_fitting
+        from ..ui.TaskPanel import TaskPanelPortContainer
+
+        selected = _selected_part()
+        doc = selected.Document
+        # Mark the part, so ducts drawn to its ports attach to it (a bare solid is first put in an App::Part).
+        doc.openTransaction("Create Custom Fitting")
+        try:
+            part = _container_for(selected, "CustomFitting")
+            _custom_fitting.make_custom_fitting(part)
+        finally:
+            doc.commitTransaction()
+        FreeCAD.Console.PrintMessage("HVAC - '{}' is now an HVAC custom fitting\n".format(part.Label))
+        # Straight on to adding its ports.
+        self.task_panel = TaskPanelPortContainer(part, kind="fitting")
+        Gui.Control.showDialog(self.task_panel)
+
+
+def _selected_port_container():
+    """
+    The HVAC equipment or custom fitting the selection points at, with the
+    port panel kind it needs: (part, "equipment" or "fitting"), or (None,
+    None). Picking the part, a face of it, one of its port markers, or the
+    duct fitting a custom fitting stands in for all count.
+    """
+    from ..core import Equipment, _custom_fitting
+
+    part = _selected_part()
+    if part is None:
+        # A junction fitting that uses a custom fitting points at its model.
+        for obj in Gui.Selection.getSelection() or []:
+            if hvaclib.isDuctComponent(obj) and _custom_fitting.is_custom(obj):
+                part = getattr(obj, "CustomFitting", None)
+                break
+    if part is None or getattr(part, "TypeId", "") != "App::Part":
+        return None, None
+    if Equipment.is_equipment(part):
+        return part, "equipment"
+    if _custom_fitting.is_custom_fitting(part):
+        return part, "fitting"
+    return None, None
+
+
+class CommandEditPorts:
+    """Edit the ports of the selected HVAC equipment or custom fitting, in the panel that suits it."""
+
+    def __init__(self):
+        self.task_panel = None
+
+    def GetResources(self):
+        return {
+            'Pixmap': hvaclib.get_icon_path("EditPorts.svg"),
+            'MenuText': QT_TRANSLATE_NOOP('HVAC_EditPorts', 'Edit Ports'),
+            'ToolTip': QT_TRANSLATE_NOOP(
+                'HVAC_EditPorts',
+                'Edit the ports of the selected equipment (by kind: supply, return, outdoor air, exhaust; and its '
+                'internal pressure drop) or custom fitting (and the junctions it fits): add a port on a picked face, '
+                'move, rename or remove one',
+            ),
+            'CmdType': 'ForEdit',
+        }
+
+    def IsActive(self):
+        if Gui.ActiveDocument is None or Gui.Control.activeDialog():
+            return False
+        return _selected_port_container()[0] is not None
+
+    def Activated(self):
+        from ..ui.TaskPanel import TaskPanelPortContainer
+
+        part, kind = _selected_port_container()
+        if part is None:
+            return
+        self.task_panel = TaskPanelPortContainer(part, kind=kind)
+        Gui.Control.showDialog(self.task_panel)
+
+
+class CommandLayerVisibility:
+    """
+    Layer visibility of the active network (Stage 9): the network's
+    ShowLayer_<Role> / ShowFeatures switches (display only, applied at once,
+    no recompute). Run from the menu, the context menu or the Tasks pane it
+    opens the Layer Visibility panel; its toolbar button is a drop-down with
+    the same switches (populate_layer_visibility_menu, attached by the
+    workbench through Toolbar.attach_dropdown).
+    """
+
+    def __init__(self):
+        self.task_panel = None
+
+    def GetResources(self):
+        return {
+            'Pixmap': hvaclib.get_icon_path("LayerVisibility.svg"),
+            'MenuText': QT_TRANSLATE_NOOP('HVAC_LayerVisibility', 'Layer Visibility'),
+            'ToolTip': QT_TRANSLATE_NOOP(
+                'HVAC_LayerVisibility',
+                'Show or hide construction layers (by role) and construction features of the active network. '
+                'Display only, applied at once',
+            ),
+            'CmdType': 'ForEdit',
+        }
+
+    def IsActive(self):
+        net = hvaclib.activeHVACNetwork()
+        return net is not None and net.Document == FreeCAD.ActiveDocument
+
+    def Activated(self):
+        from ..ui.TaskPanel import TaskPanelLayerVisibility
+
+        net = hvaclib.activeHVACNetwork()
+        if net is None:
+            return
+        self.task_panel = TaskPanelLayerVisibility(net)
+        Gui.Control.showDialog(self.task_panel)
+
+
+def populate_layer_visibility_menu(menu):
+    """
+    Fill the Layer Visibility toolbar drop-down for the active network: one
+    checkbox per switch, then "Show All". Checkboxes inside the menu
+    (QWidgetAction) keep it open, so several layers can be switched in one go.
+    """
+    from ..ui.TaskPanel import layer_visibility_entries, set_layer_visibility
+
+    net = hvaclib.activeHVACNetwork()
+    entries = layer_visibility_entries(net) if net is not None else []
+    if not entries:
+        menu.addAction(translate("HVAC_LayerVisibility", "No active network")).setEnabled(False)
+        return
+    checks = []
+    for prop_name, label in entries:
+        check = QtWidgets.QCheckBox(label)
+        check.setChecked(bool(getattr(net, prop_name, True)))
+        check.toggled.connect(lambda checked, prop_name=prop_name: set_layer_visibility(net, prop_name, checked))
+        holder = QtWidgets.QWidget()
+        row = QtWidgets.QHBoxLayout(holder)
+        row.setContentsMargins(8, 3, 8, 3)
+        row.addWidget(check)
+        action = QtWidgets.QWidgetAction(menu)
+        action.setDefaultWidget(holder)
+        menu.addAction(action)
+        checks.append(check)
+    menu.addSeparator()
+    show_all = menu.addAction(translate("HVAC_LayerVisibility", "Show All"))
+    show_all.triggered.connect(lambda: [check.setChecked(True) for check in checks])
+
+
 #=================================================
 # Register Commands
 #=================================================
@@ -1073,7 +1731,19 @@ if FreeCAD.GuiUp:
     FreeCAD.Gui.addCommand("HVAC_CreateLine", CommandCreateLine())
     FreeCAD.Gui.addCommand("HVAC_CreateSpline", CommandCreateSpline())
     FreeCAD.Gui.addCommand('HVAC_EditType', CommandEditType())
+    FreeCAD.Gui.addCommand('HVAC_EditMaterial', CommandEditMaterial())
+    FreeCAD.Gui.addCommand('HVAC_EditInlineComponents', CommandEditInlineComponents())
     FreeCAD.Gui.addCommand('HVAC_EditPlacement', CommandEditPlacement())
     FreeCAD.Gui.addCommand('HVAC_EditNetworkTypeDefaults', CommandEditNetworkTypeDefaults())
+    FreeCAD.Gui.addCommand('HVAC_CalculateAirflow', CommandCalculateAirflow())
+    FreeCAD.Gui.addCommand('HVAC_SizeDucts', CommandSizeDucts())
     FreeCAD.Gui.addCommand('HVAC_ResetTypesToDefaults', CommandResetTypesToNetworkDefaults())
+    FreeCAD.Gui.addCommand('HVAC_RenumberNetwork', CommandRenumberNetwork())
+    FreeCAD.Gui.addCommand('HVAC_SelectAllSegments', CommandSelectAllSegments())
+    FreeCAD.Gui.addCommand('HVAC_SelectAllComponents', CommandSelectAllComponents())
+    FreeCAD.Gui.addCommand('HVAC_CreateEquipment', CommandCreateEquipment())
+    FreeCAD.Gui.addCommand('HVAC_AddEquipment', CommandAddEquipment())
+    FreeCAD.Gui.addCommand('HVAC_LayerVisibility', CommandLayerVisibility())
+    FreeCAD.Gui.addCommand('HVAC_CreateCustomFitting', CommandCreateCustomFitting())
+    FreeCAD.Gui.addCommand('HVAC_EditPorts', CommandEditPorts())
     FreeCAD.Gui.addCommand('HVAC_ReloadLibraries', CommandReloadHVACLibraries())  # Debug method

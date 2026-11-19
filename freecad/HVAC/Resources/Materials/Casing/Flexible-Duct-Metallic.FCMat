@@ -1,0 +1,32 @@
+---
+General:
+  UUID: "395b6a7b-31f6-4888-891e-3b17b4dd5fc2"
+  Author: "FreeCAD-HVAC"
+  License: "CC0-1.0"
+  Name: "Flexible Duct - Metallic"
+  Description: >-
+    Corrugated metallic flexible duct. Physical values represent an aluminium
+    construction; use manufacturer data for other alloys or composite walls.
+Models:
+  Father:
+    UUID: '9cdda8b6-b606-4778-8f13-3934d8668e67'
+    Father: "Metal"
+  Density:
+    UUID: '454661e5-265b-4320-8e6f-fcf6223ac3af'
+    Density: "2700 kg/m^3"
+  Thermal:
+    UUID: '9959d007-a970-4ea7-bae4-3eb1b8b883c7'
+    SpecificHeat: "900 J/kg/K"
+    ThermalConductivity: "205 W/m/K"
+  Hydraulic:
+    UUID: 'bbfee379-96b0-4995-80e2-e1725b3adfde'
+    HydraulicRoughness: "3.0 mm"
+AppearanceModels:
+  BasicRendering:
+    UUID: 'f006c7e4-35b7-43d5-bbf9-c5d572309e6e'
+    AmbientColor: "(0.5800, 0.5800, 0.6000, 1.0)"
+    DiffuseColor: "(0.7600, 0.7700, 0.7900, 1.0)"
+    EmissiveColor: "(0.0000, 0.0000, 0.0000, 1.0)"
+    Shininess: "0.4500"
+    SpecularColor: "(0.9000, 0.9000, 0.9200, 1.0)"
+    Transparency: "0.0"

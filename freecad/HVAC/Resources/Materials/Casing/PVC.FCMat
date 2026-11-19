@@ -1,0 +1,32 @@
+---
+General:
+  UUID: "58ccbafd-e04e-473d-b02a-44d3c59355ed"
+  Author: "FreeCAD-HVAC"
+  License: "CC0-1.0"
+  Name: "PVC"
+  Description: >-
+    Rigid polyvinyl chloride sheet used for corrosion-resistant HVAC duct
+    casing. Physical values are representative of general-purpose rigid PVC.
+Models:
+  Father:
+    UUID: '9cdda8b6-b606-4778-8f13-3934d8668e67'
+    Father: "Thermoplast"
+  Density:
+    UUID: '454661e5-265b-4320-8e6f-fcf6223ac3af'
+    Density: "1380 kg/m^3"
+  Thermal:
+    UUID: '9959d007-a970-4ea7-bae4-3eb1b8b883c7'
+    SpecificHeat: "1000 J/kg/K"
+    ThermalConductivity: "0.150 W/m/K"
+  Hydraulic:
+    UUID: 'bbfee379-96b0-4995-80e2-e1725b3adfde'
+    HydraulicRoughness: "0.046 mm"
+AppearanceModels:
+  BasicRendering:
+    UUID: 'f006c7e4-35b7-43d5-bbf9-c5d572309e6e'
+    AmbientColor: "(0.7000, 0.7000, 0.7200, 1.0)"
+    DiffuseColor: "(0.8600, 0.8600, 0.8800, 1.0)"
+    EmissiveColor: "(0.0000, 0.0000, 0.0000, 1.0)"
+    Shininess: "0.2500"
+    SpecularColor: "(0.4000, 0.4000, 0.4200, 1.0)"
+    Transparency: "0.0"

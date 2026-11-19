@@ -1,0 +1,34 @@
+---
+General:
+  UUID: "4f16dfeb-1bc6-41a8-8a40-30942e30cd2a"
+  Author: "FreeCAD-HVAC"
+  License: "CC0-1.0"
+  Name: "Nitrile Rubber"
+  Description: >-
+    Closed-cell flexible elastomeric (nitrile rubber/NBR-PVC) foam
+    insulation, as used for condensate/chilled-duct wrap. Typical values
+    for a standard closed-cell HVAC-grade sheet; actual density/
+    conductivity varies by manufacturer and grade.
+Models:
+  Father:
+    UUID: '9cdda8b6-b606-4778-8f13-3934d8668e67'
+    Father: "Insulation"
+  Density:
+    UUID: '454661e5-265b-4320-8e6f-fcf6223ac3af'
+    Density: "50 kg/m^3"
+  Thermal:
+    UUID: '9959d007-a970-4ea7-bae4-3eb1b8b883c7'
+    SpecificHeat: "1400 J/kg/K"
+    ThermalConductivity: "0.036 W/m/K"
+  Hydraulic:
+    UUID: 'bbfee379-96b0-4995-80e2-e1725b3adfde'
+    HydraulicRoughness: "0.9 mm"
+AppearanceModels:
+  BasicRendering:
+    UUID: 'f006c7e4-35b7-43d5-bbf9-c5d572309e6e'
+    AmbientColor: "(0.0500, 0.0500, 0.0500, 1.0)"
+    DiffuseColor: "(0.0800, 0.0800, 0.0800, 1.0)"
+    EmissiveColor: "(0.0000, 0.0000, 0.0000, 1.0)"
+    Shininess: "0.1000"
+    SpecularColor: "(0.2000, 0.2000, 0.2000, 1.0)"
+    Transparency: "0.6"

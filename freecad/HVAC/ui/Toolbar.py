@@ -91,6 +91,31 @@ def create_toolbar(toolbar_struct):
     toolbar.setVisible(False)
     return toolbar
 
+def attach_dropdown(command_name, populate):
+    """
+    Turn every toolbar button of a command into a drop-down: clicking the
+    button opens a menu under it instead of running the command, so the same
+    command run from a menu or the Tasks pane still does its own thing.
+    populate(menu) fills the (cleared) menu each time it opens.
+
+    FreeCAD names a command's QAction after the command and rebuilds the
+    toolbar buttons when the workbench is activated, so call this after each
+    activation; a button that already has the menu is left alone.
+    """
+    mw = Gui.getMainWindow()
+    for toolbar in mw.findChildren(QToolBar):
+        for action in toolbar.actions():
+            if action.objectName() != command_name:
+                continue
+            button = toolbar.widgetForAction(action)
+            if not isinstance(button, QtWidgets.QToolButton) or button.property("hvac_dropdown"):
+                continue
+            menu = QtWidgets.QMenu(button)
+            menu.aboutToShow.connect(lambda menu=menu: (menu.clear(), populate(menu)))
+            button.setMenu(menu)
+            button.setPopupMode(QtWidgets.QToolButton.InstantPopup)
+            button.setProperty("hvac_dropdown", True)
+
 def show_toolbar(toolbar_struct):
     toolbar_name, _ = toolbar_struct
     mw = Gui.getMainWindow()

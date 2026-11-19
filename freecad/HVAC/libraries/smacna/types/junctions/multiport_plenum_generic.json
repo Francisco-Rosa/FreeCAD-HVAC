@@ -1,0 +1,181 @@
+{
+  "id": "multiport_plenum_generic",
+  "label": "Plenum - Generic",
+  "category": "junction",
+  "topology": "multiport",
+  "family": [
+    "multiport.multiport.plenum",
+    "multiport.multiport.3d.plenum"
+  ],
+  "profiles": [
+    "Circular",
+    "Rectangular",
+    "Oval"
+  ],
+  "selection": {
+    "kind": "model",
+    "priority": 5
+  },
+  "constraints": {
+    "degree_min": 5
+  },
+  "properties": [
+    {
+      "name": "Thickness",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Sheet metal thickness. 0 builds the air space as a solid body instead of a hollow shell",
+      "default": 0.8,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "InsulationThickness",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Insulation thickness wrapped around the outside of the fitting; 0 disables insulation",
+      "default": 0.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "BoxLength",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Casing length. 0: automatic, twice the largest duct size, made larger where a duct would not fit on its face",
+      "default": 0.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "BoxWidth",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Casing width. 0: automatic, twice the largest duct size, made larger where a duct would not fit on its face",
+      "default": 0.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "BoxHeight",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Casing height. 0: automatic, twice the largest duct size, made larger where a duct would not fit on its face",
+      "default": 0.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "CentreOffsetX",
+      "prop_type": "App::PropertyDistance",
+      "group": "Dimensions",
+      "description": "Moves the box from the node along its length",
+      "default": 0.0
+    },
+    {
+      "name": "CentreOffsetY",
+      "prop_type": "App::PropertyDistance",
+      "group": "Dimensions",
+      "description": "Moves the box from the node along its width",
+      "default": 0.0
+    },
+    {
+      "name": "CentreOffsetZ",
+      "prop_type": "App::PropertyDistance",
+      "group": "Dimensions",
+      "description": "Moves the box from the node along its height",
+      "default": 0.0
+    },
+    {
+      "name": "TrimLength",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Collar length of each port, beyond the box face. 0 uses a quarter of that duct's size",
+      "default": 0.0,
+      "per_port": true,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "FlangeHeight",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Height of the transverse flange at each duct connection",
+      "default": 25.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "FlangeThickness",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Thickness of the transverse flange; 0 draws no flanges",
+      "default": 1.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "ShowFlange",
+      "prop_type": "App::PropertyBool",
+      "group": "Options",
+      "description": "Include the flange at every duct connection",
+      "default": true
+    }
+  ],
+  "construction": {
+    "layers": [
+      {
+        "id": "casing",
+        "roles": [
+          "flow_surface",
+          "structural_shell"
+        ],
+        "default_material_role": "structural_shell",
+        "thickness_property": "Thickness"
+      },
+      {
+        "id": "insulation",
+        "roles": [
+          "thermal_insulation"
+        ],
+        "default_material_role": "thermal_insulation",
+        "thickness_property": "InsulationThickness"
+      }
+    ],
+    "features": [
+      {
+        "id": "transverse_flange",
+        "role": "transverse_joint",
+        "host_layer": "casing",
+        "module": "shared:features",
+        "generator": "transverse_flange",
+        "parameters": [
+          "FlangeHeight",
+          "FlangeThickness",
+          "ShowFlange"
+        ]
+      }
+    ]
+  },
+  "geometry": {
+    "backend": "generator",
+    "module": "shared:boxes",
+    "function": "build_plenum"
+  },
+  "connection_lengths": {
+    "module": "shared:boxes",
+    "function": "measure_plenum"
+  },
+  "loss": {
+    "module": "shared:losses",
+    "function": "loss_plenum"
+  }
+}

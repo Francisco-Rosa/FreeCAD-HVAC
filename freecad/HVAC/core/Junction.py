@@ -22,50 +22,93 @@
 ################################################################################
 
 """This module implements HVAC duct description classes."""
+
 import json
 import traceback
 
-import FreeCAD, Part
 import FreeCADGui as Gui
-from PySide import QtWidgets, QtCore
+import Part
+from PySide import QtCore, QtWidgets
 from PySide.QtCore import QT_TRANSLATE_NOOP
+
+import FreeCAD
+
 translate = FreeCAD.Qt.translate
 
+from ..library.library_api import HVACLibraryAPI
 from ..utils import hvaclib
+from . import Equipment, _custom_fitting, _terminal_function
+
+
+def _fallback_trims(ports):
+    """{(edge_key, segment_end): trim} of the fallback drawn for a fitting that fails (markers.fallback_trims)."""
+    from ..library.fittings import markers
+
+    try:
+        trims = markers.fallback_trims(HVACLibraryAPI, list(ports or []))
+    except Exception:
+        return {}
+    return {(port.get("edge_key"), port.get("segment_end")): trim for port, trim in zip(ports, trims)}
+
+
+def _set_if_changed(obj, name, value):
+    """Write a property only when its value differs: every write marks the object for recompute."""
+    if getattr(obj, name, None) != value:
+        setattr(obj, name, value)
+
+
+def _json_safe_port(port):
+    """
+    Return a copy of a port dict safe to json.dumps: any FreeCAD.Vector
+    field (as produced by HVACLibraryAPI.copy_port) is converted back to a
+    plain (x, y, z) tuple. Fields that already came straight out of
+    AnalysisJson (parsed JSON) are plain lists/tuples already and pass
+    through unchanged.
+    """
+    out = dict(port)
+    for key in ("position", "direction", "profile_x_axis", "user_offset", "flow_direction"):
+        value = out.get(key)
+        if value is not None and hasattr(value, "x"):
+            out[key] = HVACLibraryAPI.xyz(value)
+    return out
 
 
 class DuctJunction:
-    """Derived per-node duct junction created from network base geometry."""
+    """
+    Derived per-node network junction: a purely logical/connectivity
+    container. It holds no library type or geometry of its own -- each
+    physical fitting it represents is a separate DuctComponent child (see
+    core/Component.py), found via getComponents()/getPrimaryComponent()/
+    getPortChains().
+
+    A junction's only "compute" job is composing its component chain: one
+    Primary component always gets every one of the junction's real ports
+    unchanged, and independently, each real edge may additionally carry its
+    own chain of zero-or-more Inline components between the Primary and
+    that edge's own external segment. composeComponents() works out every
+    component's local inlet/outlet ports and writes them to that
+    component's LocalPortsJson (see below).
+    """
 
     TYPE = "DuctJunction"
 
-    def __init__(
-        self,
-        obj,
-        owner=None,
-        node_id=0,
-        node_key="",
-        center_point=None,
-        degree=0,
-        topology=""
-    ):
+    def __init__(self, obj, owner=None, node_id=0, node_key="", center_point=None, degree=0, topology=""):
         obj.Proxy = self
         self.Object = obj
         self._allow_delete = False
+        self._mirroring_design_flow_rate = False
+        self._mirroring_flow_boundary = False
         self.setProperties(obj)
         self.updateMetadata(
-            owner=owner,
-            node_id=node_id,
-            node_key=node_key,
-            center_point=center_point,
-            degree=degree,
-            topology=topology
+            owner=owner, node_id=node_id, node_key=node_key, center_point=center_point, degree=degree, topology=topology
         )
 
     def onDocumentRestored(self, obj):
         obj.Proxy = self
         self.Object = obj
         self._allow_delete = False
+        self._mirroring_design_flow_rate = False
+        self._mirroring_flow_boundary = False
         self.setProperties(obj)
 
     def dumps(self):
@@ -75,86 +118,185 @@ class DuctJunction:
         pass
 
     def execute(self, obj):
-        center_point = getattr(obj, "CenterPoint", None)
-        if center_point is None:
-            return
+        # A DuctJunction has no geometry of its own -- every physical
+        # fitting is generated independently by its DuctComponent children
+        # (see Component.py's own execute()). Nothing to do here.
+        pass
 
-        library_id = getattr(obj, "LibraryId", "")
-        type_id = getattr(obj, "TypeId", "")
-        if not library_id or not type_id:
+    def _requestOwnerSync(self, obj):
+        """Re-classify after an edit that changes this terminal's function (6.5)."""
+        doc = getattr(obj, "Document", None)
+        if doc is None or getattr(doc, "Restoring", False) or getattr(obj, "Topology", "") != "end":
             return
-
+        owner = hvaclib.getOwnerNetwork(obj)
+        proxy = getattr(owner, "Proxy", None) if owner is not None else None
+        # A sync already running (it is creating or updating this junction)
+        # re-classifies it anyway.
+        if proxy is None or getattr(proxy, "_sync_in_progress", False):
+            return
         try:
-            reg = hvaclib.HVACLibraryService.get_hvac_library_registry()
-            type_def = reg.resolve_type(library_id, type_id)
-            if type_def is None:
-                raise ValueError(
-                    "Unknown junction type '{}' in library '{}'".format(
-                        type_id, library_id
-                    )
-                )
+            proxy.requestSync()
+        except Exception:
+            pass
 
-            props = {}
-            for pdef in getattr(type_def, "properties", []) or []:
-                if hasattr(obj, pdef.name):
-                    props[pdef.name] = getattr(obj, pdef.name)
-                else:
-                    props[pdef.name] = getattr(pdef, "default", None)
+    def onChanged(self, obj, prop):
+        if prop == "TerminalFunction" or (
+            prop == "FlowBoundary" and str(getattr(obj, "TerminalFunction", "Auto") or "Auto") == "Auto"
+        ):
+            self._requestOwnerSync(obj)
+        # DesignFlowRate/FlowBoundary each have a two-way mirror onto the
+        # Primary component's own copy (see Component.py's onChanged) -- a
+        # junction has no Shape and can't be picked in the 3D view, so a
+        # user needs to be able to set/see these from the visible terminal
+        # fitting too. Each guard flag stops its own pair of onChanged
+        # handlers from bouncing the same edit back and forth forever.
+        if prop == "FlowBoundary" and not self._mirroring_flow_boundary:
+            boundary = str(getattr(obj, "FlowBoundary", "Auto") or "Auto")
 
-            connected_ports = []
-            raw_analysis = getattr(obj, "AnalysisJson", "") or "{}"
-            try:
-                analysis = json.loads(raw_analysis)
-                connected_ports = list(analysis.get("connected_ports", []) or [])
-            except Exception:
-                connected_ports = []
-            
-            context = {
-                "obj": obj,
-                "center_point": center_point,
-                "properties": props,
-                "connected_ports": connected_ports,
-                "family": getattr(obj, "Family", ""),
-                "type_id": type_id,
-                "library_id": library_id,
-            }
+            # A terminal forced to "Closed" always carries zero flow (see
+            # analysis/flow.py) -- snap DesignFlowRate to match so the
+            # property state never shows a stale nonzero value for a
+            # sealed terminal.
+            if boundary == "Closed" and float(getattr(obj, "DesignFlowRate", 0.0) or 0.0) != 0.0:
+                obj.DesignFlowRate = 0.0
 
-            result = reg.call_generator(library_id, type_def, context)
-            shape = result.get("shape", None)
-            lengths = result.get("connection_lengths", [])
+            # DesignFlowRate is only meaningful (and editable) when Fixed.
+            if getattr(obj, "Topology", "") == "end":
+                try:
+                    obj.setEditorMode("DesignFlowRate", 0 if boundary == "Fixed" else 1)
+                except Exception:
+                    pass
 
-            if shape is not None:
-                obj.Shape = shape
+            primary = self.getPrimaryComponent()
+            if primary is not None and "FlowBoundary" in primary.PropertiesList:
+                value = str(getattr(obj, "FlowBoundary", "Auto") or "Auto")
+                if str(getattr(primary, "FlowBoundary", "Auto") or "Auto") != value:
+                    self._mirroring_flow_boundary = True
+                    try:
+                        primary.FlowBoundary = value
+                    finally:
+                        self._mirroring_flow_boundary = False
+            return
 
-            lengths_json = json.dumps(lengths)
-            if getattr(obj, "ConnectionLengthsJson", "") != lengths_json:
-                obj.ConnectionLengthsJson = lengths_json
-
-        except Exception as e:
-            FreeCAD.Console.PrintWarning(
-                "HVAC - DuctJunction - Execute Error generating junction '{}': {}\n".format(obj.Label, e)
-            )
-            FreeCAD.Console.PrintMessage(traceback.format_exc())
+        if prop != "DesignFlowRate" or self._mirroring_design_flow_rate:
+            return
+        primary = self.getPrimaryComponent()
+        if primary is None or "DesignFlowRate" not in primary.PropertiesList:
+            return
+        value = float(getattr(obj, "DesignFlowRate", 0.0) or 0.0)
+        if float(getattr(primary, "DesignFlowRate", 0.0) or 0.0) == value:
+            return
+        self._mirroring_design_flow_rate = True
+        try:
+            primary.DesignFlowRate = value
+        finally:
+            self._mirroring_design_flow_rate = False
 
     def setProperties(self, obj):
         self._addProperty(obj, "App::PropertyString", "OwnerNetworkName", "HVAC", "Owning duct network")
         self._addProperty(obj, "App::PropertyInteger", "NodeId", "HVAC", "Parser node id")
         self._addProperty(obj, "App::PropertyString", "NodeKey", "HVAC", "Persistent snapped node key")
+        # Prop_NoRecompute -- documentation only, never affects geometry.
+        self._addProperty(
+            obj,
+            "App::PropertyString",
+            "Number",
+            "HVAC",
+            "Documentation number assigned by Renumber Network (e.g. 'J007'), blank until first renumbered",
+            attr=16,
+        )
         self._addProperty(obj, "App::PropertyVector", "CenterPoint", "HVAC", "Junction center point")
         self._addProperty(obj, "App::PropertyInteger", "Degree", "HVAC", "Node degree")
         self._addProperty(obj, "App::PropertyString", "Topology", "HVAC", "Junction topology")
         self._addProperty(obj, "App::PropertyString", "Family", "HVAC", "Classified fitting family")
 
-        self._addProperty(obj, "App::PropertyString", "LibraryId", "HVAC", "HVAC library id")
-        self._addProperty(obj, "App::PropertyString", "TypeId", "HVAC", "Selected fitting type id")
         self._addProperty(obj, "App::PropertyStringList", "ConnectedEdgeKeys", "HVAC", "Connected segment keys")
-        self._addProperty(obj, "App::PropertyString", "ConnectionLengthsJson", "HVAC", "Per-edge connection lengths")
+        self._addProperty(
+            obj,
+            "App::PropertyString",
+            "ConnectionLengthsJson",
+            "HVAC",
+            "Aggregate per-edge connection lengths (from the outermost component on each side)",
+        )
         self._addProperty(obj, "App::PropertyString", "AnalysisJson", "HVAC", "Serialized topology analysis")
 
-        if not getattr(obj, "LibraryId", ""):
-            lib = hvaclib.HVACLibraryService.get_active_hvac_library()
-            if lib:
-                obj.LibraryId = lib.id
+        if "FlowBoundary" not in obj.PropertiesList:
+            obj.addProperty(
+                "App::PropertyEnumeration",
+                "FlowBoundary",
+                "Airflow",
+                "Terminal flow condition: Auto (solved by mass balance -- exactly one terminal per "
+                "sub-network), Fixed (use Design Flow Rate as-is, 0 included), or Closed (sealed "
+                "termination, always 0 flow)",
+            )
+            obj.FlowBoundary = ["Auto", "Fixed", "Closed"]
+            obj.FlowBoundary = "Auto"
+        if "TerminalFunction" not in obj.PropertiesList:
+            obj.addProperty(
+                "App::PropertyEnumeration",
+                "TerminalFunction",
+                "Airflow",
+                "What this terminal does: Auto (from the network's SystemType; the balancing terminal is "
+                "the Source), Supply outlet, Return / Exhaust inlet, OutdoorAir intake, Discharge to "
+                "outside, or Source (where the system meets its fan or equipment)",
+            )
+            obj.TerminalFunction = list(_terminal_function.TERMINAL_FUNCTIONS)
+            obj.TerminalFunction = "Auto"
+        self._addProperty(
+            obj,
+            "App::PropertyFloat",
+            "DesignFlowRate",
+            "Airflow",
+            "User-specified design flow rate for this terminal (L/s), used when Flow Boundary is 'Fixed' -- 0 is a valid value. Ignored when Flow Boundary is 'Auto' or 'Closed'.",
+        )
+        self._addProperty(
+            obj,
+            "App::PropertyFloat",
+            "CalcTotalFlowRate",
+            "Airflow",
+            "Computed through-flow at this junction (L/s) -- max(total inflow, total outflow) across its connected ports, not the sum of every leg's own flow (see analysis/pressure.py's Phase G)",
+        )
+        self._addProperty(
+            obj,
+            "App::PropertyFloat",
+            "CalcStaticPressure",
+            "Airflow",
+            "Computed relative static pressure (Pa), referenced to 0 Pa at this sub-network's balancing terminal",
+        )
+        self._addProperty(
+            obj,
+            "App::PropertyBool",
+            "IsFlowSource",
+            "Airflow",
+            "True if flow physically leaves the system at this terminal (a supply/source opening) -- meaningless off a terminal, see updateMetadata()'s own topology-based editor mode",
+        )
+        self._addProperty(
+            obj,
+            "App::PropertyString",
+            "CalcLossWarning",
+            "Airflow",
+            "Non-fatal warning from the last calculation (e.g. fallback loss coefficient used)",
+        )
+        if "AllowSizeChange" not in obj.PropertiesList:
+            obj.addProperty(
+                "App::PropertyBool",
+                "AllowSizeChange",
+                "HVAC Duct Sizing",
+                "Whether Size Ducts may change the duct size where air passes straight through this junction "
+                "(a reducer at an in-line node, a reducing run at a tee or cross). Off keeps them one size. "
+                "Used by the network's SizeChangePolicy AtStraightJunctions (in-line nodes and runs) and "
+                "AtInlineNodesOnly (in-line nodes)",
+            )
+            obj.AllowSizeChange = True
+
+        for prop in ("CalcTotalFlowRate", "CalcStaticPressure", "CalcLossWarning"):
+            try:
+                obj.setEditorMode(prop, 1)
+            except Exception:
+                pass
+        # IsFlowSource's own editor mode is topology-gated (terminal only) --
+        # left unset here, corrected by the very next updateMetadata() call,
+        # same as FlowBoundary/DesignFlowRate just below.
 
         if not getattr(obj, "ConnectionLengthsJson", ""):
             obj.ConnectionLengthsJson = "[]"
@@ -162,64 +304,20 @@ class DuctJunction:
         if not getattr(obj, "AnalysisJson", ""):
             obj.AnalysisJson = "{}"
 
-        for prop in (
-            "OwnerNetworkName",
-            "NodeId",
-            "NodeKey",
-            "CenterPoint",
-            "Degree",
-            "Topology",
-            "Family",
-            "ConnectedEdgeKeys",
-            "ConnectionLengthsJson",
-            "AnalysisJson",
-        ):
+        for prop in ("NodeKey", "CenterPoint", "Degree", "Topology", "Family"):
             try:
                 obj.setEditorMode(prop, 1)
             except Exception:
                 pass
 
-    def applyTypeSchema(self):
-        obj = self.Object
-        reg = hvaclib.HVACLibraryService.get_hvac_library_registry()
-        lib_id = getattr(obj, "LibraryId", "")
-        type_id = getattr(obj, "TypeId", "")
-        if not lib_id or not type_id:
-            return False
-    
-        type_def = reg.resolve_type(lib_id, type_id)
-        if type_def is None:
-            return False
-    
-        changed = False
-        for pdef in getattr(type_def, "properties", []) or []:
-            prop_added = False
-    
-            if pdef.name not in obj.PropertiesList:
-                obj.addProperty(pdef.prop_type, pdef.name, pdef.group, pdef.description)
-                changed = True
-                prop_added = True
-    
+        # Internal bookkeeping/JSON blobs -- kept (never removed) for the
+        # addon's own use, just hidden from the property editor since a
+        # user never needs to read or edit them directly.
+        for prop in ("OwnerNetworkName", "NodeId", "ConnectedEdgeKeys", "ConnectionLengthsJson", "AnalysisJson"):
             try:
-                current = getattr(obj, pdef.name)
-            except Exception:
-                current = None
-    
-            if getattr(pdef, "default", None) is not None:
-                should_apply_default = prop_added or current in (None, "")
-                if should_apply_default:
-                    try:
-                        setattr(obj, pdef.name, pdef.default)
-                        changed = True
-                    except Exception:
-                        pass
-    
-            try:
-                obj.setEditorMode(pdef.name, 0)
+                obj.setEditorMode(prop, 2)
             except Exception:
                 pass
-    
-        return changed
 
     def updateMetadata(
         self,
@@ -230,11 +328,8 @@ class DuctJunction:
         degree=0,
         topology="",
         family="",
-        type_id="",
-        library_id="",
         connected_edge_keys=None,
         analysis_json="{}",
-        connection_lengths_json=None,
     ):
         obj = self.Object
         changed = False
@@ -256,34 +351,43 @@ class DuctJunction:
             if obj.CenterPoint != center_vec:
                 obj.CenterPoint = center_vec
                 changed = True
-                
+
         if getattr(obj, "Degree", None) != int(degree):
             obj.Degree = int(degree)
             changed = True
-            
+
         if getattr(obj, "Topology", "") != str(topology):
             obj.Topology = str(topology)
-            # If topology changes, set TypeId to default for the topology
-            obj.TypeId = hvaclib.HVACLibraryService.default_topology_type_id(obj.Topology)
             changed = True
+
+        try:
+            # FlowBoundary/DesignFlowRate/IsFlowSource only have meaning on a
+            # terminal ("end") node -- fully hidden (mode 2), not merely
+            # read-only, everywhere else, so a through/branch/cross/
+            # multiport junction's property editor doesn't show controls
+            # that don't apply to it at all.
+            is_terminal = getattr(obj, "Topology", "") == "end"
+            boundary = str(getattr(obj, "FlowBoundary", "Auto") or "Auto")
+            obj.setEditorMode("FlowBoundary", 0 if is_terminal else 2)
+            if "TerminalFunction" in getattr(obj, "PropertiesList", []):
+                obj.setEditorMode("TerminalFunction", 0 if is_terminal else 2)
+            # DesignFlowRate is only meaningful (and editable) when Fixed;
+            # still shown read-only for Auto/Closed on a terminal.
+            if is_terminal:
+                obj.setEditorMode("DesignFlowRate", 0 if boundary == "Fixed" else 1)
+            else:
+                obj.setEditorMode("DesignFlowRate", 2)
+            obj.setEditorMode("IsFlowSource", 1 if is_terminal else 2)
+            # Only a junction air passes straight through can change size: an in-line node or a tee/cross run.
+            if "AllowSizeChange" in obj.PropertiesList:
+                straight_through = getattr(obj, "Topology", "") in ("through", "branch", "cross")
+                obj.setEditorMode("AllowSizeChange", 0 if straight_through else 2)
+        except Exception:
+            pass
 
         if family and getattr(obj, "Family", "") != str(family):
             obj.Family = str(family)
-            # If family changes, set TypeId to default for the topology
-            obj.TypeId = hvaclib.HVACLibraryService.default_topology_type_id(obj.Topology)
             changed = True
-        
-        if library_id and getattr(obj, "LibraryId", "") != str(library_id):
-            obj.LibraryId = str(library_id)
-            changed = True
-
-        if type_id and getattr(obj, "TypeId", "") != str(type_id):
-            _library = getattr(obj, "LibraryId", "")
-            _family = getattr(obj, "Family", "")
-            valid_type_ids = hvaclib.HVACLibraryService.all_junction_type_defs(library_id=_library, family=_family)
-            if type_id in valid_type_ids:
-                obj.TypeId = str(type_id)
-                changed = True
 
         if connected_edge_keys is not None:
             edge_keys = [str(k) for k in connected_edge_keys]
@@ -295,16 +399,345 @@ class DuctJunction:
             obj.AnalysisJson = str(analysis_json)
             changed = True
 
-        if connection_lengths_json is not None:
-            if getattr(obj, "ConnectionLengthsJson", "") != str(connection_lengths_json):
-                obj.ConnectionLengthsJson = str(connection_lengths_json)
-                changed = True
-
         return changed
+
+    # ------------------------------------------------------------------
+    # Component chain: lookup, composition, trim aggregation
+    # ------------------------------------------------------------------
+
+    def getComponents(self):
+        """
+        This junction's DuctComponent children: Primary first, then Inline
+        components grouped by their attached edge and PortSequence-ascending
+        within each group. Convenience accessor only -- composeComponents()
+        never relies on this ordering for correctness, it always groups by
+        AttachedEdgeKey itself (see getPortChains()).
+        """
+        obj = self.Object
+        net = hvaclib.getOwnerNetwork(obj)
+        geometry = getattr(net, "Geometry", None) if net is not None else None
+        if geometry is None:
+            return []
+        out = [
+            c
+            for c in geometry.OutList
+            if hvaclib.isDuctComponent(c) and getattr(c, "ParentJunctionName", "") == obj.Name
+        ]
+        out.sort(
+            key=lambda c: (
+                0 if getattr(c, "ComponentRole", "") == "Primary" else 1,
+                getattr(c, "AttachedEdgeKey", ""),
+                int(getattr(c, "PortSequence", 0)),
+                c.Name,
+            )
+        )
+        return out
+
+    def getPrimaryComponent(self):
+        for c in self.getComponents():
+            if getattr(c, "ComponentRole", "") == "Primary":
+                return c
+        return None
+
+    def getPortChains(self):
+        """
+        {edge_key: [Inline components]}, each list Primary-outward (i.e.
+        PortSequence-ascending) -- the independent chain of Inline devices
+        attached to that one real edge. Edges with no Inline components are
+        simply absent from this dict.
+        """
+        chains = {}
+        for c in self.getComponents():
+            if getattr(c, "ComponentRole", "") != "Inline":
+                continue
+            edge_key = getattr(c, "AttachedEdgeKey", "")
+            if edge_key:
+                chains.setdefault(edge_key, []).append(c)
+        for lst in chains.values():
+            lst.sort(key=lambda c: int(getattr(c, "PortSequence", 0)))
+        return chains
+
+    def getInlineComponents(self, edge_key=None):
+        """All Inline components, or (if edge_key is given) just that edge's own chain."""
+        if edge_key is None:
+            return [c for c in self.getComponents() if getattr(c, "ComponentRole", "") == "Inline"]
+        return self.getPortChains().get(edge_key, [])
+
+    def composeComponents(self):
+        """
+        Work out every child component's local inlet/outlet ports and write
+        them to each component's LocalPortsJson. Called once per sync
+        (Network.syncJunctionComponents), before the recompute that runs
+        each component's own execute().
+
+        Everything stays in absolute world coordinates -- DuctJunction/
+        DuctSegment never use Placement, and this keeps that convention
+        rather than introducing a local frame.
+
+        The Primary always gets every one of the junction's real ports
+        unchanged, no matter the topology/degree -- exactly the context a
+        single fitting always received. Independently of that, each real
+        edge may additionally carry its own chain of zero-or-more Inline
+        components between the Primary and that edge's own external
+        segment (see getPortChains()) -- a tee's branch leg and one of its
+        run legs can each grow a completely independent chain, evaluated
+        with that leg's own geometry alone.
+
+        Every 2-port geometry backend (elbow, transition, damper, VAV)
+        treats its two given ports as coincident at one shared anchor point
+        and independently pushes each one outward, in that port's own
+        direction, by a trim length that depends only on the component's
+        own properties/profile -- never on where that anchor happens to sit
+        in space. That position-independence is what makes this
+        composition possible: for a given edge, the Primary's own trim on
+        that port (peeked once, from its real multi-port geometry) plus
+        each chain component's own (inner trim, outer trim) (each peeked
+        once too) are summed into a running anchor per component -- see
+        _peekConnectionLengths.
+        """
+        obj = self.Object
+        try:
+            analysis = json.loads(getattr(obj, "AnalysisJson", "") or "{}")
+        except Exception:
+            analysis = {}
+        ports = list(analysis.get("connected_ports", []) or [])
+        ports_by_edge = {p.get("edge_key"): p for p in ports}
+        node_key = getattr(obj, "NodeKey", "")
+
+        primary = self.getPrimaryComponent()
+        if primary is None or not ports:
+            return
+
+        # Primary always gets every real port, unchanged. (Written only when
+        # different: writing a property marks the component for recompute.)
+        _set_if_changed(primary, "LocalPortsJson", json.dumps([_json_safe_port(p) for p in ports]))
+        _set_if_changed(primary, "Profile", hvaclib.HVACLibraryService.match_profile_from_ports(ports))
+
+        chains = {
+            edge_key: chain for edge_key, chain in self.getPortChains().items() if edge_key in ports_by_edge and chain
+        }
+        if not chains:
+            return
+
+        # Peek the Primary's own trim on every real port ONCE -- using the
+        # junction's REAL topology/family, since the Primary can now be a
+        # branch/cross tee with a chain on just one of its legs.
+        primary_trims = self._peekConnectionLengths(
+            primary,
+            ports,
+            topology=getattr(obj, "Topology", "through"),
+            family=getattr(obj, "Family", ""),
+            analysis=analysis,
+        )
+
+        chained_lengths = {}
+        for edge_key, chain in chains.items():
+            real_port = ports_by_edge[edge_key]
+            pos = HVACLibraryAPI.vec(real_port["position"])
+            dir_e = HVACLibraryAPI.unit(real_port["direction"])
+            into_e = real_port.get("flow_into_junction")
+            trim_primary = primary_trims.get((edge_key, real_port.get("segment_end")), 0.0)
+
+            # Build each chain component's own coincident inner/outer
+            # templates -- inner always faces the Primary (direction -d),
+            # outer always faces the segment (direction +d), regardless of
+            # where the component sits in the chain -- and peek its own
+            # (trim_in, trim_out).
+            k = len(chain)
+            inner_tpls, outer_tpls, trims_in, trims_out = [], [], [], []
+            for j, comp_obj in enumerate(chain):
+                inner_tpl = HVACLibraryAPI.copy_port(
+                    real_port,
+                    direction=dir_e * -1.0,
+                    edge_key="{}#{}_seam{}".format(node_key, edge_key, j),
+                    segment_end="end",
+                )
+                inner_tpl["flow_into_junction"] = not into_e
+                inner_tpl["flow_role"] = "inlet" if not into_e else "outlet"
+
+                if j == k - 1:
+                    outer_tpl = dict(real_port)  # outermost: the real external interface
+                else:
+                    outer_tpl = HVACLibraryAPI.copy_port(
+                        real_port,
+                        direction=dir_e,
+                        edge_key="{}#{}_seam{}".format(node_key, edge_key, j + 1),
+                        segment_end="start",
+                    )
+                outer_tpl["flow_into_junction"] = into_e
+                outer_tpl["flow_role"] = "outlet" if not into_e else "inlet"
+
+                inner_tpls.append(inner_tpl)
+                outer_tpls.append(outer_tpl)
+                trims = self._peekConnectionLengths(
+                    comp_obj, [inner_tpl, outer_tpl], topology="through", family="", analysis=analysis
+                )
+                trims_in.append(trims.get((inner_tpl["edge_key"], inner_tpl["segment_end"]), 0.0))
+                trims_out.append(trims.get((outer_tpl["edge_key"], outer_tpl["segment_end"]), 0.0))
+
+            # Running-sum anchors, always stepping outward along dir_e: the
+            # first chain component's anchor is where the Primary's own
+            # face ends AND where the first component's own body begins
+            # (primary_trim + trims_in[0]); every later anchor adds the
+            # previous component's own outward push to this one's own
+            # inward push.
+            anchors = [pos + dir_e * (trim_primary + trims_in[0])]
+            for j in range(1, k):
+                anchors.append(anchors[j - 1] + dir_e * (trims_out[j - 1] + trims_in[j]))
+
+            for j, comp_obj in enumerate(chain):
+                local_ports = [
+                    HVACLibraryAPI.copy_port(inner_tpls[j], position=anchors[j]),
+                    HVACLibraryAPI.copy_port(outer_tpls[j], position=anchors[j]),
+                ]
+                _set_if_changed(comp_obj, "LocalPortsJson", json.dumps([_json_safe_port(p) for p in local_ports]))
+                _set_if_changed(comp_obj, "Profile", str(local_ports[1].get("profile", "") or ""))
+
+            last_face = anchors[-1] + dir_e * trims_out[-1]
+            chained_lengths[edge_key] = max(0.0, (last_face - pos).dot(dir_e))
+
+        # Write ConnectionLengthsJson, merging this pass's chained-edge
+        # entries into whatever was already there -- non-chained edges are
+        # left for aggregateConnectionLengths() to fill from the Primary's
+        # own post-execute report.
+        try:
+            existing = {
+                item["edge_key"]: item for item in json.loads(getattr(obj, "ConnectionLengthsJson", "") or "[]")
+            }
+        except Exception:
+            existing = {}
+        for edge_key, length in chained_lengths.items():
+            real_port = ports_by_edge[edge_key]
+            existing[edge_key] = {"edge_key": edge_key, "segment_end": real_port.get("segment_end"), "length": length}
+        obj.ConnectionLengthsJson = json.dumps(list(existing.values()))
+
+    def _peekConnectionLengths(self, comp_obj, local_ports, topology, family, analysis):
+        """
+        Ask this component's own type how far it pushes out past each of
+        its given (coincident) ports, purely to learn its own per-port
+        trims -- via the type's own independently-declared
+        connection_lengths measurement function (HVACLibraryRegistry.
+        measure_connection_lengths()) when it has one, which measures
+        without building any Shape at all. execute() (run right after
+        composeComponents, via touch() + recompute()) then builds the real
+        Shape separately, using the exact same layout calculation its own
+        build_geometry() shares with that measurement function -- see
+        docs/type-def-reference.md's "connection_lengths" section.
+
+        TODO(migration): a type with no connection_lengths function
+        declared yet falls back to the old peek-via-build_geometry() path
+        (building and discarding a full Shape, exactly as this method
+        always did) -- remove this fallback branch once every library type
+        that produces non-zero trims has migrated to an independent
+        measurement function.
+
+        local_ports can be an N-port list (the Primary, given its real
+        ports) or a 2-port list (an Inline component's own inner/outer
+        templates) -- both are handled identically here, and both go
+        through this one dispatch regardless.
+
+        Returns {(edge_key, segment_end): trim_length}; empty if the
+        component has no type selected yet, or its type's measurement/
+        geometry backend fails/reports nothing.
+        """
+        if _custom_fitting.is_custom(comp_obj) and getattr(comp_obj, "ComponentRole", "") == "Primary":
+            try:
+                return _custom_fitting.measure(comp_obj, local_ports)
+            except Exception:
+                return _fallback_trims(local_ports)
+
+        library_id = getattr(comp_obj, "LibraryId", "")
+        type_id = getattr(comp_obj, "TypeId", "")
+        if not library_id or not type_id:
+            return {}
+
+        try:
+            reg = hvaclib.HVACLibraryService.get_hvac_library_registry()
+            type_def = reg.resolve_type(library_id, type_id)
+            if type_def is None:
+                return {}
+            params = reg.resolve_params(type_def, obj=comp_obj)
+            context = {
+                "obj": comp_obj,
+                "center_point": HVACLibraryAPI.average_point([p["position"] for p in local_ports]),
+                "properties": params,
+                "connected_ports": local_ports,
+                # Real topology analysis of this junction (unaffected by
+                # chain composition) -- harmless/correct to pass through
+                # even though no current through-topology generator reads
+                # it, for consistency with DuctComponent.execute()'s own
+                # context (see there for why this matters, e.g. build_tee).
+                "analysis": analysis,
+                "family": family,
+                "topology": topology,
+                "type_id": type_id,
+                "library_id": library_id,
+            }
+            equipment_port = Equipment.port_context(comp_obj)
+            if equipment_port is not None:
+                context["equipment_port"] = equipment_port
+            records = reg.measure_connection_lengths(library_id, type_def, context)
+            if records is None:
+                # Migration fallback (see TODO above) -- no independent
+                # measurement function declared, so build (and discard)
+                # the full geometry the same way this method always did.
+                result = reg.build_geometry(library_id, type_def, context)
+                records = reg.normalize_connection_lengths(result.connection_lengths, type_id)
+        except Exception:
+            # The fitting cannot be laid out: execute() will draw the fallback, with these trims.
+            return _fallback_trims(local_ports)
+
+        return {(item["edge_key"], item.get("segment_end")): item["length"] for item in records}
+
+    def aggregateConnectionLengths(self):
+        """
+        Build the external trim contract (spec: DuctJunction.
+        ConnectionLengthsJson is the only network-facing trimming contact),
+        independently per real edge:
+
+        - A chained edge's value was already computed and written by
+          composeComponents() (needs the exact cumulative chain anchor
+          geometry, not recoverable from any single component's own
+          post-execute ConnectionLengthsJson) -- left untouched here.
+        - A non-chained edge's value is a straight passthrough of the
+          Primary's own reported trim on that port.
+        """
+        obj = self.Object
+        primary = self.getPrimaryComponent()
+        if primary is None:
+            return
+
+        real_edge_keys = set(getattr(obj, "ConnectedEdgeKeys", []) or [])
+        chained_edge_keys = set(self.getPortChains().keys())
+
+        try:
+            primary_lengths = {
+                item["edge_key"]: item for item in json.loads(getattr(primary, "ConnectionLengthsJson", "") or "[]")
+            }
+        except Exception:
+            primary_lengths = {}
+        try:
+            existing = {
+                item["edge_key"]: item for item in json.loads(getattr(obj, "ConnectionLengthsJson", "") or "[]")
+            }
+        except Exception:
+            existing = {}
+
+        out = {}
+        for edge_key in real_edge_keys:
+            if edge_key in chained_edge_keys:
+                if edge_key in existing:
+                    out[edge_key] = existing[edge_key]
+            elif edge_key in primary_lengths:
+                out[edge_key] = primary_lengths[edge_key]
+
+        lengths_json = json.dumps(list(out.values()))
+        if getattr(obj, "ConnectionLengthsJson", "") != lengths_json:
+            obj.ConnectionLengthsJson = lengths_json
 
     @classmethod
     def create(cls, doc, name, owner, node_id, node_key, center_point, degree, topology):
-        junction = doc.addObject("Part::FeaturePython", name)
+        junction = doc.addObject("App::FeaturePython", name)
         cls(
             junction,
             owner=owner,
@@ -312,20 +745,20 @@ class DuctJunction:
             node_key=node_key,
             center_point=center_point,
             degree=degree,
-            topology=topology
+            topology=topology,
         )
         DuctJunctionViewProvider(junction.ViewObject)
         return junction
-    
+
     @staticmethod
     def labelFor(family, node_id):
         family_label = str(family).capitalize() if family else "Junction"
         return "{} [{}]".format(family_label, int(node_id))
 
     @staticmethod
-    def _addProperty(obj, prop_type, prop_name, group, description):
+    def _addProperty(obj, prop_type, prop_name, group, description, attr=0):
         if prop_name not in obj.PropertiesList:
-            obj.addProperty(prop_type, prop_name, group, description)
+            obj.addProperty(prop_type, prop_name, group, description, attr)
 
 
 class DuctJunctionViewProvider:
@@ -347,16 +780,32 @@ class DuctJunctionViewProvider:
         return hvaclib.get_icon_path("DuctsIcon.svg")
 
     def onDelete(self, vobj, subelements):
+        # Permit direct deletion from the tree -- e.g. of a stale junction
+        # left over from an older schema that the owning network's own
+        # sync loop never picked up for cleanup. Remove this junction's own
+        # DuctComponent children first (found by ParentJunctionName rather
+        # than through the owner network, since a genuinely orphaned
+        # junction may have no resolvable owner) so they aren't left behind
+        # as their own dangling orphans; then, if a live network still owns
+        # this junction, ask it to resync afterwards, so anything still
+        # topologically required gets regenerated fresh from library
+        # defaults (see DuctNetwork.syncJunctions/syncJunctionComponents).
         obj = vobj.Object
         owner = hvaclib.getOwnerNetwork(obj)
-        if getattr(obj.Proxy, "_allow_delete", False):
-            return True
-        if owner and getattr(owner.Proxy, "_allow_internal_delete", False):
-            return True
-        FreeCAD.Console.PrintWarning(
-            "HVAC - Internal junction '{}' cannot be deleted directly.\n".format(obj.Label)
-        )
-        return False
+        doc = obj.Document
+        for comp in list(doc.Objects):
+            if hvaclib.isDuctComponent(comp) and getattr(comp, "ParentJunctionName", "") == obj.Name:
+                if doc.getObject(comp.Name) is not None:
+                    doc.removeObject(comp.Name)
+        if owner and getattr(owner, "Proxy", None):
+            owner.Proxy.requestSync(force_recompute=True)
+        return True
+
+    def claimChildren(self):
+        try:
+            return self.Object.Proxy.getComponents()
+        except Exception:
+            return []
 
     def canDropObjects(self):
         return False
@@ -374,10 +823,7 @@ class DuctJunctionVirtual:
         obj.Proxy = self
         self.Object = obj
         self.setProperties(obj)
-        self.updateMetadata(
-            owner=owner, 
-            member_node_keys=member_node_keys or [],
-            member_points=member_points or [] )
+        self.updateMetadata(owner=owner, member_node_keys=member_node_keys or [], member_points=member_points or [])
 
     def onDocumentRestored(self, obj):
         obj.Proxy = self
@@ -408,15 +854,16 @@ class DuctJunctionVirtual:
 
         if not getattr(obj, "MemberNodeKeys", []):
             obj.MemberNodeKeys = []
-            
+
         if not getattr(obj, "MemberPoints", []):
             obj.MemberPoints = []
-            
 
-    def updateMetadata(self, owner=None, member_node_keys=[], member_points=[]):
+    def updateMetadata(self, owner=None, member_node_keys=None, member_points=None):
+        member_node_keys = list(member_node_keys or [])
+        member_points = list(member_points or [])
         obj = self.Object
         changed = False
-        
+
         def compare_vector_lists(list1, list2, tol=1e-6):
             if len(list1) != len(list2):
                 return False
@@ -433,7 +880,7 @@ class DuctJunctionVirtual:
         if getattr(obj, "MemberNodeKeys", []) != member_node_keys:
             obj.MemberNodeKeys = member_node_keys
             changed = True
-                
+
         member_points_vecs = [FreeCAD.Vector(t) for t in member_points]
         if compare_vector_lists(getattr(obj, "MemberPoints", []), member_points_vecs) is False:
             obj.MemberPoints = member_points_vecs
@@ -443,7 +890,7 @@ class DuctJunctionVirtual:
         try:
             keys = list(member_node_keys or [])
             if keys:
-                obj.Label = "Virtual Junction ({})".format(len(keys))
+                hvaclib.set_label(obj, "Virtual Junction ({})".format(len(keys)))
         except Exception:
             pass
 
@@ -458,7 +905,7 @@ class DuctJunctionVirtual:
 
     def getMemberNodeKeys(self):
         return getattr(self.Object, "MemberNodeKeys", [])
-        
+
     def getMemberPoints(self):
         points = getattr(self.Object, "MemberPoints", "")
         return [tuple(x) for x in points]
@@ -467,7 +914,7 @@ class DuctJunctionVirtual:
     def _addProperty(obj, prop_type, prop_name, group, description):
         if prop_name not in obj.PropertiesList:
             obj.addProperty(prop_type, prop_name, group, description)
-            
+
 
 class DuctJunctionVirtualViewProvider:
     def __init__(self, vobj):
@@ -483,7 +930,7 @@ class DuctJunctionVirtualViewProvider:
         pass
 
     def getIcon(self):
-        return hvaclib.get_icon_path("Junction.svg")
+        return hvaclib.get_icon_path("DuctsIcon.svg")
 
     def onDelete(self, vobj, subelements):
         # User must be able to delete these directly from the tree.

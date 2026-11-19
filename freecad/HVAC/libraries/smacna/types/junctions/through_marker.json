@@ -3,8 +3,12 @@
   "label": "Through - Marker",
   "category": "junction",
   "topology": "through",
-  "family": ["through"],
+  "family": ["through.straight", "through.offset", "through.transition", "through.bend", "through.bend.3d", "through.bend_90", "through.bend_90.3d"],
   "profiles": ["Generic"],
+  "selection": {
+    "kind": "placeholder",
+    "priority": 0
+  },
   "constraints": {
     "degree": 2
   },
@@ -17,8 +21,9 @@
       "default": 240.0
     }
   ],
-  "generator": {
-    "module": "junctions",
+  "geometry": {
+    "backend": "generator",
+    "module": "shared:markers",
     "function": "build_transition_marker"
   }
 }

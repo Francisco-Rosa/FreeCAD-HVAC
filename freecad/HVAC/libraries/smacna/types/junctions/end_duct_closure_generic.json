@@ -1,0 +1,41 @@
+{
+  "id": "end_duct_closure_generic",
+  "label": "Duct Closure / End Cap - Generic",
+  "category": "junction",
+  "topology": "end",
+  "family": [
+    "end.terminal.duct_closure"
+  ],
+  "profiles": [
+    "Circular",
+    "Rectangular",
+    "Oval"
+  ],
+  "selection": {
+    "kind": "model",
+    "priority": 50
+  },
+  "constraints": {
+    "degree": 1
+  },
+  "flow_boundary": "Closed",
+  "flow_boundary_locked": true,
+  "properties": [
+    {
+      "name": "PlateThickness",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Blanking plate/end cap thickness",
+      "default": 3.0
+    }
+  ],
+  "geometry": {
+    "backend": "generator",
+    "module": "shared:terminals",
+    "function": "build_duct_closure_generic"
+  },
+  "connection_lengths": {
+    "module": "shared:terminals",
+    "function": "measure_duct_closure_generic"
+  }
+}

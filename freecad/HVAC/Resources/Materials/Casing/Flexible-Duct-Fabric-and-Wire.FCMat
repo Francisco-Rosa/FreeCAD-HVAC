@@ -1,0 +1,32 @@
+---
+General:
+  UUID: "62572e99-2f5f-43d8-b05f-a3785605ce68"
+  Author: "FreeCAD-HVAC"
+  License: "CC0-1.0"
+  Name: "Flexible Duct - Fabric and Wire"
+  Description: >-
+    Flexible fabric duct reinforced with a helical wire. Composite physical
+    values are representative only; use manufacturer data for mass or heat flow.
+Models:
+  Father:
+    UUID: '9cdda8b6-b606-4778-8f13-3934d8668e67'
+    Father: "Composite"
+  Density:
+    UUID: '454661e5-265b-4320-8e6f-fcf6223ac3af'
+    Density: "1200 kg/m^3"
+  Thermal:
+    UUID: '9959d007-a970-4ea7-bae4-3eb1b8b883c7'
+    SpecificHeat: "1000 J/kg/K"
+    ThermalConductivity: "0.200 W/m/K"
+  Hydraulic:
+    UUID: 'bbfee379-96b0-4995-80e2-e1725b3adfde'
+    HydraulicRoughness: "0.9 mm"
+AppearanceModels:
+  BasicRendering:
+    UUID: 'f006c7e4-35b7-43d5-bbf9-c5d572309e6e'
+    AmbientColor: "(0.1800, 0.1800, 0.1900, 1.0)"
+    DiffuseColor: "(0.3000, 0.3000, 0.3200, 1.0)"
+    EmissiveColor: "(0.0000, 0.0000, 0.0000, 1.0)"
+    Shininess: "0.0800"
+    SpecularColor: "(0.1800, 0.1800, 0.2000, 1.0)"
+    Transparency: "0.0"

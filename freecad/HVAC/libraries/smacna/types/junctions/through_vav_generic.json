@@ -1,0 +1,196 @@
+{
+  "id": "through_vav_generic",
+  "label": "VAV Box - Generic",
+  "category": "junction",
+  "topology": "through",
+  "family": [
+    "through.straight.vav"
+  ],
+  "profiles": [
+    "Circular",
+    "Rectangular",
+    "Oval"
+  ],
+  "selection": {
+    "kind": "inline",
+    "priority": 50
+  },
+  "constraints": {
+    "degree": 2
+  },
+  "properties": [
+    {
+      "name": "Thickness",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Sheet metal thickness. 0 builds the air space as a solid body instead of a hollow shell",
+      "default": 0.8,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "InsulationThickness",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Insulation thickness wrapped around the outside of the fitting; 0 disables insulation",
+      "default": 0.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "BoxLength",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Casing length along the duct. 0 uses twice the duct size",
+      "default": 0.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "BoxWidth",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Casing width. 0 uses 1.5 times the duct size",
+      "default": 0.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "BoxHeight",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Casing height. 0 uses 1.5 times the duct size",
+      "default": 0.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "CollarLength",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Length of the inlet and outlet collars. 0 uses a quarter of the duct size",
+      "default": 0.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "LossMode",
+      "prop_type": "App::PropertyEnumeration",
+      "group": "Parameters",
+      "description": "How the loss is given: a coefficient K, or a fixed pressure drop from the maker's data",
+      "default": "Coefficient",
+      "validation": {
+        "enum": [
+          "Coefficient",
+          "Fixed pressure drop"
+        ]
+      }
+    },
+    {
+      "name": "LossCoefficient",
+      "prop_type": "App::PropertyFloat",
+      "group": "Parameters",
+      "description": "Pressure-loss coefficient K, referenced to the connecting duct's own velocity (nominal value; box modulation/controls are not modeled)",
+      "default": 1.5
+    },
+    {
+      "name": "PressureDrop",
+      "prop_type": "App::PropertyFloat",
+      "group": "Parameters",
+      "description": "Pressure drop in Pa at the design flow, used when LossMode is Fixed pressure drop",
+      "default": 0.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "FlangeHeight",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Height of the transverse flange at each duct connection",
+      "default": 25.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "FlangeThickness",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Thickness of the transverse flange; 0 draws no flanges",
+      "default": 1.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "ShowFlange1",
+      "prop_type": "App::PropertyBool",
+      "group": "Options",
+      "description": "Include the flange at port 1",
+      "default": true
+    },
+    {
+      "name": "ShowFlange2",
+      "prop_type": "App::PropertyBool",
+      "group": "Options",
+      "description": "Include the flange at port 2",
+      "default": true
+    }
+  ],
+  "construction": {
+    "layers": [
+      {
+        "id": "casing",
+        "roles": [
+          "flow_surface",
+          "structural_shell"
+        ],
+        "default_material_role": "structural_shell",
+        "thickness_property": "Thickness"
+      },
+      {
+        "id": "insulation",
+        "roles": [
+          "thermal_insulation"
+        ],
+        "default_material_role": "thermal_insulation",
+        "thickness_property": "InsulationThickness"
+      }
+    ],
+    "features": [
+      {
+        "id": "transverse_flange",
+        "role": "transverse_joint",
+        "host_layer": "casing",
+        "module": "shared:features",
+        "generator": "transverse_flange",
+        "parameters": [
+          "FlangeHeight",
+          "FlangeThickness",
+          "ShowFlange1",
+          "ShowFlange2"
+        ]
+      }
+    ]
+  },
+  "geometry": {
+    "backend": "generator",
+    "module": "shared:inline",
+    "function": "build_vav_box"
+  },
+  "connection_lengths": {
+    "module": "shared:inline",
+    "function": "measure_vav_box"
+  },
+  "loss": {
+    "module": "shared:losses",
+    "function": "loss_vav_generic"
+  }
+}

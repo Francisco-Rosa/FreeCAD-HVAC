@@ -5,6 +5,10 @@
   "topology": "multiport",
   "family": ["multiport.multiport", "multiport.multiport.3d"],
   "profiles": ["Generic"],
+  "selection": {
+    "kind": "placeholder",
+    "priority": 0
+  },
   "constraints": {
     "degree_min": 5
   },
@@ -17,8 +21,14 @@
       "default": 320.0
     }
   ],
-  "generator": {
-    "module": "junctions",
+  "construction": {
+    "layers": [
+      {"id": "shape", "roles": ["flow_surface", "structural_shell"], "default_material_role": "flow_surface"}
+    ]
+  },
+  "geometry": {
+    "backend": "generator",
+    "module": "shared:markers",
     "function": "build_manifold_marker"
   }
 }

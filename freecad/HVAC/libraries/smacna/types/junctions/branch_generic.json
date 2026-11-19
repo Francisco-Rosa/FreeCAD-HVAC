@@ -1,0 +1,199 @@
+{
+  "id": "branch_generic",
+  "label": "Branch - Generic",
+  "category": "junction",
+  "topology": "branch",
+  "family": [
+    "branch.wye",
+    "branch.tee",
+    "branch.lateral_tee",
+    "branch.wye.3d",
+    "branch.tee.3d",
+    "branch.lateral_tee.3d",
+    "branch.generic"
+  ],
+  "profiles": [
+    "Circular",
+    "Rectangular",
+    "Oval",
+    "Generic"
+  ],
+  "selection": {
+    "kind": "model",
+    "priority": 10
+  },
+  "constraints": {
+    "degree": 3
+  },
+  "properties": [
+    {
+      "name": "Thickness",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Sheet metal thickness",
+      "default": 0.8
+    },
+    {
+      "name": "TrimLength",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Trim length of each port, measured from the node. 0 uses a size-based default",
+      "default": 100.0,
+      "per_port": true,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "FlangeHeight",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Flange height",
+      "default": 25.0
+    },
+    {
+      "name": "FlangeThickness",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Flange thickness",
+      "default": 1.0
+    },
+    {
+      "name": "ShowFlange",
+      "prop_type": "App::PropertyBool",
+      "group": "Options",
+      "description": "Include the flange at each port",
+      "default": true,
+      "per_port": true
+    },
+    {
+      "name": "InsulationThickness",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Insulation thickness wrapped around the outside of the fitting; 0 disables insulation",
+      "default": 0.0
+    }
+  ],
+  "geometry": {
+    "backend": "generator",
+    "module": "shared:stars",
+    "function": "build_branch_generic"
+  },
+  "connection_lengths": {
+    "module": "shared:stars",
+    "function": "measure_branch_generic"
+  },
+  "loss": {
+    "module": "shared:losses",
+    "function": "loss_wye_generic",
+    "variants": [
+      {
+        "constraints": {
+          "flow_class": {
+            "enum": [
+              "diverging"
+            ]
+          },
+          "qualifiers": {
+            "common_leg": {
+              "enum": [
+                "run"
+              ]
+            }
+          }
+        },
+        "module": "shared:losses",
+        "function": "loss_branch_diverging_run"
+      },
+      {
+        "constraints": {
+          "flow_class": {
+            "enum": [
+              "converging"
+            ]
+          },
+          "qualifiers": {
+            "common_leg": {
+              "enum": [
+                "run"
+              ]
+            }
+          }
+        },
+        "module": "shared:losses",
+        "function": "loss_branch_converging_run"
+      },
+      {
+        "constraints": {
+          "flow_class": {
+            "enum": [
+              "diverging"
+            ]
+          },
+          "qualifiers": {
+            "common_leg": {
+              "enum": [
+                "branch"
+              ]
+            }
+          }
+        },
+        "module": "shared:losses",
+        "function": "loss_branch_diverging_branch"
+      },
+      {
+        "constraints": {
+          "flow_class": {
+            "enum": [
+              "converging"
+            ]
+          },
+          "qualifiers": {
+            "common_leg": {
+              "enum": [
+                "branch"
+              ]
+            }
+          }
+        },
+        "module": "shared:losses",
+        "function": "loss_branch_converging_branch"
+      }
+    ]
+  },
+  "construction": {
+    "layers": [
+      {
+        "id": "casing",
+        "roles": [
+          "flow_surface",
+          "structural_shell"
+        ],
+        "default_material_role": "structural_shell",
+        "thickness_property": "Thickness"
+      },
+      {
+        "id": "insulation",
+        "roles": [
+          "thermal_insulation"
+        ],
+        "default_material_role": "thermal_insulation",
+        "thickness_property": "InsulationThickness"
+      }
+    ],
+    "features": [
+      {
+        "id": "transverse_flange",
+        "role": "transverse_joint",
+        "host_layer": "casing",
+        "module": "shared:features",
+        "generator": "transverse_flange",
+        "parameters": [
+          "FlangeHeight",
+          "FlangeThickness",
+          "ShowFlange"
+        ]
+      }
+    ]
+  }
+}

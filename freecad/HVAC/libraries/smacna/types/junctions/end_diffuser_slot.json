@@ -1,0 +1,290 @@
+{
+  "id": "end_diffuser_slot",
+  "label": "Diffuser - Slot",
+  "category": "junction",
+  "topology": "end",
+  "family": [
+    "end.terminal.diffuser"
+  ],
+  "profiles": [
+    "Circular",
+    "Rectangular",
+    "Oval"
+  ],
+  "selection": {
+    "kind": "model",
+    "priority": 87
+  },
+  "constraints": {
+    "degree": 1,
+    "qualifiers": {
+      "terminal_function": {
+        "enum": [
+          "Supply",
+          "Return",
+          "Exhaust",
+          "OutdoorAir",
+          "Discharge"
+        ]
+      }
+    }
+  },
+  "properties": [
+    {
+      "name": "Thickness",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Sheet metal thickness. 0 builds the air space as a solid body instead of a hollow shell",
+      "default": 0.8,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "InsulationThickness",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Insulation thickness wrapped around the outside of the fitting; 0 disables insulation",
+      "default": 0.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "TrimNeck",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Length of the straight collar between the fitting and the duct",
+      "default": 50.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "SlotLength",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Length of the slot face. 0 uses four times the duct size",
+      "default": 1200.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "SlotWidth",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Width of the slot face. 0 uses half the duct size",
+      "default": 100.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "BodyLength",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Length of the boot from the duct to the face. 0 uses the duct size",
+      "default": 250.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "LossMode",
+      "prop_type": "App::PropertyEnumeration",
+      "group": "Parameters",
+      "description": "How the loss is given: a coefficient K, or a fixed pressure drop from the maker's data",
+      "default": "Coefficient",
+      "validation": {
+        "enum": [
+          "Coefficient",
+          "Fixed pressure drop"
+        ]
+      }
+    },
+    {
+      "name": "LossCoefficient",
+      "prop_type": "App::PropertyFloat",
+      "group": "Parameters",
+      "description": "Pressure-loss coefficient K, referenced to velocity at the neck",
+      "default": 1.5,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "NeckSize",
+      "prop_type": "App::PropertyLength",
+      "group": "Parameters",
+      "description": "Equivalent neck diameter the loss coefficient refers to. Used for the loss only, not for the shape",
+      "default": 200.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "PressureDrop",
+      "prop_type": "App::PropertyFloat",
+      "group": "Parameters",
+      "description": "Pressure drop in Pa at the design flow, used when LossMode is Fixed pressure drop",
+      "default": 0.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "FlangeHeight",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Height of the transverse flange at each duct connection",
+      "default": 25.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "FlangeThickness",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Thickness of the transverse flange; 0 draws no flanges",
+      "default": 1.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "ShowFlange1",
+      "prop_type": "App::PropertyBool",
+      "group": "Options",
+      "description": "Include the flange at the duct connection",
+      "default": true
+    },
+    {
+      "name": "FacePattern",
+      "prop_type": "App::PropertyEnumeration",
+      "group": "Face",
+      "description": "How the face is drawn: slots with a deflector blade each, or plain slots",
+      "default": "Slots with deflectors",
+      "validation": {
+        "enum": [
+          "Slots with deflectors",
+          "Plain slots"
+        ]
+      }
+    },
+    {
+      "name": "FaceBorder",
+      "prop_type": "App::PropertyLength",
+      "group": "Face",
+      "description": "Width of the face border round the slots (0 = worked out from the face size)",
+      "default": 0.0
+    },
+    {
+      "name": "FaceThickness",
+      "prop_type": "App::PropertyLength",
+      "group": "Face",
+      "description": "Thickness of the face sheet (0 = worked out from the face size)",
+      "default": 0.0
+    },
+    {
+      "name": "SlotCount",
+      "prop_type": "App::PropertyInteger",
+      "group": "Face",
+      "description": "Number of slots across the face",
+      "default": 2,
+      "validation": {
+        "minimum": 1
+      }
+    },
+    {
+      "name": "DividerWidth",
+      "prop_type": "App::PropertyLength",
+      "group": "Face",
+      "description": "Width of the bars between slots (0 = worked out from the face size)",
+      "default": 0.0
+    },
+    {
+      "name": "BladeDepth",
+      "prop_type": "App::PropertyLength",
+      "group": "Face",
+      "description": "Depth of the bars and deflectors (0 = worked out from the face size)",
+      "default": 0.0
+    },
+    {
+      "name": "BladeAngle",
+      "prop_type": "App::PropertyAngle",
+      "group": "Face",
+      "description": "Slots with deflectors: deflector angle from straight through",
+      "default": 30.0,
+      "validation": {
+        "minimum": -60.0,
+        "maximum": 60.0
+      }
+    }
+  ],
+  "construction": {
+    "layers": [
+      {
+        "id": "casing",
+        "roles": [
+          "flow_surface",
+          "structural_shell"
+        ],
+        "default_material_role": "structural_shell",
+        "thickness_property": "Thickness"
+      },
+      {
+        "id": "insulation",
+        "roles": [
+          "thermal_insulation"
+        ],
+        "default_material_role": "thermal_insulation",
+        "thickness_property": "InsulationThickness"
+      }
+    ],
+    "features": [
+      {
+        "id": "transverse_flange",
+        "role": "transverse_joint",
+        "host_layer": "casing",
+        "module": "shared:features",
+        "generator": "transverse_flange",
+        "parameters": [
+          "FlangeHeight",
+          "FlangeThickness",
+          "ShowFlange1"
+        ]
+      },
+      {
+        "id": "terminal_face",
+        "role": "terminal_face",
+        "host_layer": "casing",
+        "module": "shared:faces",
+        "generator": "slot_diffuser_face",
+        "parameters": [
+          "FacePattern",
+          "FaceBorder",
+          "FaceThickness",
+          "SlotCount",
+          "DividerWidth",
+          "BladeDepth",
+          "BladeAngle"
+        ]
+      }
+    ]
+  },
+  "geometry": {
+    "backend": "generator",
+    "module": "shared:terminals",
+    "function": "build_terminal_slot"
+  },
+  "connection_lengths": {
+    "module": "shared:terminals",
+    "function": "measure_terminal_slot"
+  },
+  "loss": {
+    "module": "shared:losses",
+    "function": "loss_diffuser_generic"
+  }
+}

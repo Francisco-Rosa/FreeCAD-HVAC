@@ -1,0 +1,51 @@
+{
+  "id": "circular_flex",
+  "label": "Circular Flexible Duct",
+  "category": "segment",
+  "family": [
+    "straight_segment.flex",
+    "curved_segment.flex"
+  ],
+  "profiles": [
+    "Circular"
+  ],
+  "selection": {
+    "kind": "model",
+    "priority": 50
+  },
+  "properties": [
+    {
+      "name": "Thickness",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Wall thickness. 0 builds the air space as a solid body instead of a hollow shell",
+      "default": 1.0,
+      "validation": {"minimum": 0.0}
+    },
+    {
+      "name": "Diameter",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Clear-air duct diameter",
+      "default": 100.0,
+      "validation": {"exclusiveMinimum": 0.0}
+    },
+    {
+      "name": "CompressionPercent",
+      "prop_type": "App::PropertyFloat",
+      "group": "Friction",
+      "description": "How much shorter than fully extended the duct is installed, in percent of its extended length (0 to 30). Friction is multiplied by the SMACNA Fig. 14-4 correction for it",
+      "default": 0.0,
+      "validation": {"minimum": 0.0, "maximum": 30.0}
+    }
+  ],
+  "geometry": {
+    "backend": "generator",
+    "module": "shared:segments",
+    "function": "build_circular_curved"
+  },
+  "friction": {
+    "module": "shared:friction",
+    "function": "friction_flex_compressed"
+  }
+}

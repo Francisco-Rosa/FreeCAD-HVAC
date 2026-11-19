@@ -1,0 +1,114 @@
+{
+  "id": "branch_plenum_generic",
+  "label": "Plenum - Generic",
+  "category": "junction",
+  "topology": "branch",
+  "family": [
+    "branch.tee.plenum",
+    "branch.tee.3d.plenum",
+    "branch.lateral_tee.plenum",
+    "branch.lateral_tee.3d.plenum",
+    "branch.wye.plenum",
+    "branch.wye.3d.plenum",
+    "branch.generic.plenum"
+  ],
+  "profiles": [
+    "Circular",
+    "Rectangular",
+    "Oval"
+  ],
+  "selection": {
+    "kind": "model",
+    "priority": 5
+  },
+  "constraints": {
+    "degree": 3
+  },
+  "properties": [
+    {
+      "name": "Thickness",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Wall thickness. 0 builds the air space as a solid body instead of a hollow shell",
+      "default": 1.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "BoxLength",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Casing length. 0: automatic, twice the largest duct size, made larger where a duct would not fit on its face",
+      "default": 0.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "BoxWidth",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Casing width. 0: automatic, twice the largest duct size, made larger where a duct would not fit on its face",
+      "default": 0.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "BoxHeight",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Casing height. 0: automatic, twice the largest duct size, made larger where a duct would not fit on its face",
+      "default": 0.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "CentreOffsetX",
+      "prop_type": "App::PropertyDistance",
+      "group": "Dimensions",
+      "description": "Moves the box from the node along its length",
+      "default": 0.0
+    },
+    {
+      "name": "CentreOffsetY",
+      "prop_type": "App::PropertyDistance",
+      "group": "Dimensions",
+      "description": "Moves the box from the node along its width",
+      "default": 0.0
+    },
+    {
+      "name": "CentreOffsetZ",
+      "prop_type": "App::PropertyDistance",
+      "group": "Dimensions",
+      "description": "Moves the box from the node along its height",
+      "default": 0.0
+    },
+    {
+      "name": "TrimLength",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Collar length of each port, beyond the box face. 0 uses a quarter of that duct's size",
+      "default": 0.0,
+      "per_port": true,
+      "validation": {
+        "minimum": 0.0
+      }
+    }
+  ],
+  "geometry": {
+    "backend": "generator",
+    "module": "shared:boxes",
+    "function": "build_plenum"
+  },
+  "connection_lengths": {
+    "module": "shared:boxes",
+    "function": "measure_plenum"
+  },
+  "loss": {
+    "module": "shared:losses",
+    "function": "loss_plenum"
+  }
+}

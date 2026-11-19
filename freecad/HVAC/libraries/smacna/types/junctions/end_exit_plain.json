@@ -1,0 +1,145 @@
+{
+  "id": "end_exit_plain",
+  "label": "Exit - Plain Duct End",
+  "category": "junction",
+  "topology": "end",
+  "family": [
+    "end.terminal.exit"
+  ],
+  "profiles": [
+    "Circular",
+    "Rectangular",
+    "Oval"
+  ],
+  "selection": {
+    "kind": "model",
+    "priority": 70
+  },
+  "constraints": {
+    "degree": 1,
+    "flow_class": {
+      "enum": [
+        "exit",
+        "unknown"
+      ]
+    }
+  },
+  "properties": [
+    {
+      "name": "Thickness",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Sheet metal thickness. 0 builds the air space as a solid body instead of a hollow shell",
+      "default": 0.8,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "InsulationThickness",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Insulation thickness wrapped around the outside of the fitting; 0 disables insulation",
+      "default": 0.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "TrimNeck",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Length of the straight collar between the fitting and the duct. 0 uses a quarter of the duct size",
+      "default": 0.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "ScreenFreeArea",
+      "prop_type": "App::PropertyFloat",
+      "group": "Parameters",
+      "description": "Open fraction of a screen across the opening, from 0 to 1. 0 means there is no screen",
+      "default": 0.0,
+      "validation": {
+        "minimum": 0.0,
+        "maximum": 1.0
+      }
+    },
+    {
+      "name": "FlangeHeight",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Height of the transverse flange at each duct connection",
+      "default": 25.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "FlangeThickness",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Thickness of the transverse flange; 0 draws no flanges",
+      "default": 1.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "ShowFlange1",
+      "prop_type": "App::PropertyBool",
+      "group": "Options",
+      "description": "Include the flange at the duct connection",
+      "default": true
+    }
+  ],
+  "construction": {
+    "layers": [
+      {
+        "id": "casing",
+        "roles": [
+          "flow_surface",
+          "structural_shell"
+        ],
+        "default_material_role": "structural_shell",
+        "thickness_property": "Thickness"
+      },
+      {
+        "id": "insulation",
+        "roles": [
+          "thermal_insulation"
+        ],
+        "default_material_role": "thermal_insulation",
+        "thickness_property": "InsulationThickness"
+      }
+    ],
+    "features": [
+      {
+        "id": "transverse_flange",
+        "role": "transverse_joint",
+        "host_layer": "casing",
+        "module": "shared:features",
+        "generator": "transverse_flange",
+        "parameters": [
+          "FlangeHeight",
+          "FlangeThickness",
+          "ShowFlange1"
+        ]
+      }
+    ]
+  },
+  "geometry": {
+    "backend": "generator",
+    "module": "shared:terminals",
+    "function": "build_terminal_plain"
+  },
+  "connection_lengths": {
+    "module": "shared:terminals",
+    "function": "measure_terminal_plain"
+  },
+  "loss": {
+    "module": "shared:losses",
+    "function": "loss_exit_plain"
+  }
+}

@@ -1,0 +1,19 @@
+{
+  "id": "samples",
+  "label": "Samples",
+  "requires_api": {"geometry": 4, "loss": 1},
+  "generators_package": "freecad.HVAC.libraries.samples.generators",
+  "default_construction": {
+    "layers": [
+      {
+        "id": "shape",
+        "roles": ["flow_surface", "structural_shell"],
+        "default_material_role": "flow_surface"
+      }
+    ]
+  },
+  "type_roots": [
+    "types/segments",
+    "types/junctions"
+  ]
+}

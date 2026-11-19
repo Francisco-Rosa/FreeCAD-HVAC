@@ -3,8 +3,12 @@
   "label": "Terminal - Marker",
   "category": "junction",
   "topology": "end",
-  "family": ["terminal"],
+  "family": ["end.terminal"],
   "profiles": ["Generic"],
+  "selection": {
+    "kind": "placeholder",
+    "priority": 0
+  },
   "constraints": {
     "degree": 1
   },
@@ -17,8 +21,9 @@
       "default": 200.0
     }
   ],
-  "generator": {
-    "module": "junctions",
+  "geometry": {
+    "backend": "generator",
+    "module": "shared:markers",
     "function": "build_terminal_marker"
   }
 }

@@ -1,0 +1,76 @@
+{
+  "id": "through_flex_connector_generic",
+  "label": "Flexible Connector - Generic",
+  "category": "junction",
+  "topology": "through",
+  "family": [
+    "through.straight.flex_connector"
+  ],
+  "profiles": [
+    "Circular",
+    "Rectangular",
+    "Oval"
+  ],
+  "selection": {
+    "kind": "inline",
+    "priority": 50
+  },
+  "constraints": {
+    "degree": 2
+  },
+  "properties": [
+    {
+      "name": "Thickness",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Wall thickness. 0 builds the air space as a solid body instead of a hollow shell",
+      "default": 1.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "BodyLength",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Connector length along the duct. 0 uses 150 mm",
+      "default": 0.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "Bulge",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "How far the fabric bulges out at the middle. 0 uses 3 % of the duct size, at least 5 mm",
+      "default": 0.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "LossCoefficient",
+      "prop_type": "App::PropertyFloat",
+      "group": "Parameters",
+      "description": "Pressure-loss coefficient K, referenced to the connecting duct's own velocity. 0: no loss beyond the duct's own",
+      "default": 0.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    }
+  ],
+  "geometry": {
+    "backend": "generator",
+    "module": "shared:devices",
+    "function": "build_flex_connector"
+  },
+  "connection_lengths": {
+    "module": "shared:devices",
+    "function": "measure_flex_connector"
+  },
+  "loss": {
+    "module": "shared:losses",
+    "function": "loss_inline_device"
+  }
+}

@@ -1,0 +1,200 @@
+{
+  "id": "end_equipment_connection",
+  "label": "Equipment Connection",
+  "category": "junction",
+  "topology": "end",
+  "family": [
+    "end.terminal.equipment"
+  ],
+  "profiles": [
+    "Circular",
+    "Rectangular",
+    "Oval"
+  ],
+  "selection": {
+    "kind": "model",
+    "priority": 59
+  },
+  "constraints": {
+    "degree": 1,
+    "qualifiers": {
+      "terminal_function": {
+        "enum": [
+          "Source"
+        ]
+      }
+    }
+  },
+  "properties": [
+    {
+      "name": "Thickness",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Sheet metal thickness. 0 builds the air space as a solid body instead of a hollow shell",
+      "default": 0.8,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "InsulationThickness",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Insulation thickness wrapped around the outside of the fitting; 0 disables insulation",
+      "default": 0.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "TrimNeck",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Length of the collar between the duct and the equipment port (or the transition from it). 0 uses a quarter of the duct",
+      "default": 0.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "FanConnection",
+      "prop_type": "App::PropertyEnumeration",
+      "group": "Parameters",
+      "description": "How the duct leaves the unit's fan, for its system-effect loss. Only the choices that suit the connection are offered: None alone until the end is on an equipment port that discharges into the duct; a transition only where the outlet and the duct differ (sides straight or asymmetric when one side changes, pyramidal when both do or the shape changes). The transition choices also shape the transition drawn from the fan outlet to the duct",
+      "default": "None",
+      "validation": {
+        "enum": [
+          "None",
+          "Transition symmetric",
+          "Transition asymmetric top level",
+          "Transition asymmetric top 10 down",
+          "Transition asymmetric top 10 up",
+          "Transition pyramidal",
+          "Discharge into casing"
+        ]
+      }
+    },
+    {
+      "name": "FanOutletWidth",
+      "prop_type": "App::PropertyLength",
+      "group": "Parameters",
+      "description": "Width of the fan outlet, read from the equipment port the duct end is connected to (a round port gives its diameter). 0 while the end is on no equipment port",
+      "default": 0.0,
+      "editor_mode": 1,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "FanOutletHeight",
+      "prop_type": "App::PropertyLength",
+      "group": "Parameters",
+      "description": "Height of the fan outlet, read from the equipment port the duct end is connected to (a round port gives its diameter). 0 while the end is on no equipment port",
+      "default": 0.0,
+      "editor_mode": 1,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "TransitionAngle",
+      "prop_type": "App::PropertyAngle",
+      "group": "Parameters",
+      "description": "Included angle of the transition from the equipment port (or fan outlet) to the duct",
+      "default": 20.0,
+      "validation": {
+        "minimum": 0.0,
+        "maximum": 180.0
+      }
+    },
+    {
+      "name": "FanWheel",
+      "prop_type": "App::PropertyEnumeration",
+      "group": "Parameters",
+      "description": "Fan wheel, for Discharge into casing",
+      "default": "Backward inclined",
+      "validation": {
+        "enum": [
+          "Airfoil",
+          "Backward inclined",
+          "Forward curved"
+        ]
+      }
+    },
+    {
+      "name": "FlangeHeight",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Height of the transverse flange at each duct connection",
+      "default": 25.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "FlangeThickness",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Thickness of the transverse flange; 0 draws no flanges",
+      "default": 1.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "ShowFlange1",
+      "prop_type": "App::PropertyBool",
+      "group": "Options",
+      "description": "Include the flange at the duct connection",
+      "default": true
+    }
+  ],
+  "construction": {
+    "layers": [
+      {
+        "id": "casing",
+        "roles": [
+          "flow_surface",
+          "structural_shell"
+        ],
+        "default_material_role": "structural_shell",
+        "thickness_property": "Thickness"
+      },
+      {
+        "id": "insulation",
+        "roles": [
+          "thermal_insulation"
+        ],
+        "default_material_role": "thermal_insulation",
+        "thickness_property": "InsulationThickness"
+      }
+    ],
+    "features": [
+      {
+        "id": "transverse_flange",
+        "role": "transverse_joint",
+        "host_layer": "casing",
+        "module": "shared:features",
+        "generator": "transverse_flange",
+        "parameters": [
+          "FlangeHeight",
+          "FlangeThickness",
+          "ShowFlange1"
+        ]
+      }
+    ]
+  },
+  "geometry": {
+    "backend": "generator",
+    "module": "shared:terminals",
+    "function": "build_terminal_fan"
+  },
+  "connection_lengths": {
+    "module": "shared:terminals",
+    "function": "measure_terminal_fan"
+  },
+  "loss": {
+    "module": "shared:losses",
+    "function": "loss_equipment_connection"
+  }
+}

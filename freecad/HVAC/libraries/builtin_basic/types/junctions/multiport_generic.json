@@ -3,22 +3,57 @@
   "label": "Multiport - Generic",
   "category": "junction",
   "topology": "multiport",
-  "family": ["multiport.multiport", "multiport.multiport.3d"],
-  "profiles": ["Circular", "Rectangular", "Oval"],
+  "family": [
+    "multiport.multiport",
+    "multiport.multiport.3d"
+  ],
+  "profiles": [
+    "Circular",
+    "Rectangular",
+    "Oval",
+    "Generic"
+  ],
+  "selection": {
+    "kind": "model",
+    "priority": 50
+  },
   "constraints": {
     "degree_min": 5
   },
   "properties": [
     {
+      "name": "Thickness",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Wall thickness. 0 builds the air space as a solid body instead of a hollow shell",
+      "default": 1.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
       "name": "TrimLength",
       "prop_type": "App::PropertyLength",
       "group": "Dimensions",
-      "description": "Trim length for ports",
-      "default": 100.0
+      "description": "Trim length of each port, measured from the node. 0 uses a size-based default",
+      "default": 100.0,
+      "per_port": true,
+      "validation": {
+        "minimum": 0.0
+      }
     }
   ],
-  "generator": {
-    "module": "junctions",
+  "geometry": {
+    "backend": "generator",
+    "module": "shared:stars",
     "function": "build_manifold"
+  },
+  "connection_lengths": {
+    "module": "shared:stars",
+    "function": "measure_manifold"
+  },
+  "loss": {
+    "module": "shared:losses",
+    "function": "loss_multiport_generic"
   }
 }

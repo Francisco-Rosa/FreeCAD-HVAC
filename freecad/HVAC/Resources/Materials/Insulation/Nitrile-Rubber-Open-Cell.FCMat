@@ -1,0 +1,33 @@
+---
+General:
+  UUID: "1b7baf06-8e33-4b63-a1f1-a9a39bd3ab2e"
+  Author: "FreeCAD-HVAC"
+  License: "CC0-1.0"
+  Name: "Nitrile Rubber (Open Cell)"
+  Description: >-
+    Open-cell nitrile elastomeric foam used as an acoustic absorber in
+    internally lined HVAC ducts. Values are representative; product data
+    should be used for detailed acoustic design.
+Models:
+  Father:
+    UUID: '9cdda8b6-b606-4778-8f13-3934d8668e67'
+    Father: "Insulation"
+  Density:
+    UUID: '454661e5-265b-4320-8e6f-fcf6223ac3af'
+    Density: "100 kg/m^3"
+  Thermal:
+    UUID: '9959d007-a970-4ea7-bae4-3eb1b8b883c7'
+    SpecificHeat: "1400 J/kg/K"
+    ThermalConductivity: "0.050 W/m/K"
+  Hydraulic:
+    UUID: 'bbfee379-96b0-4995-80e2-e1725b3adfde'
+    HydraulicRoughness: "0.9 mm"
+AppearanceModels:
+  BasicRendering:
+    UUID: 'f006c7e4-35b7-43d5-bbf9-c5d572309e6e'
+    AmbientColor: "(0.0400, 0.0400, 0.0400, 1.0)"
+    DiffuseColor: "(0.0700, 0.0700, 0.0700, 1.0)"
+    EmissiveColor: "(0.0000, 0.0000, 0.0000, 1.0)"
+    Shininess: "0.0500"
+    SpecularColor: "(0.1200, 0.1200, 0.1200, 1.0)"
+    Transparency: "0.6"

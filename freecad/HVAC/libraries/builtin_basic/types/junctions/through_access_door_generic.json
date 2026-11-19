@@ -1,0 +1,129 @@
+{
+  "id": "through_access_door_generic",
+  "label": "Access Door - Generic",
+  "category": "junction",
+  "topology": "through",
+  "family": [
+    "through.straight.access_door"
+  ],
+  "profiles": [
+    "Circular",
+    "Rectangular",
+    "Oval"
+  ],
+  "selection": {
+    "kind": "inline",
+    "priority": 50
+  },
+  "constraints": {
+    "degree": 2
+  },
+  "properties": [
+    {
+      "name": "Thickness",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Wall thickness. 0 builds the air space as a solid body instead of a hollow shell",
+      "default": 1.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "BodyLength",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Sleeve length along the duct. 0 uses the duct size, at least 400 mm",
+      "default": 0.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "DoorWidth",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Door size along the duct. 0 fills the sleeve less 50 mm at each end",
+      "default": 0.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "DoorHeight",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Door size across the duct face. 0 uses three quarters of the face",
+      "default": 0.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "DoorThickness",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Thickness of the door panel",
+      "default": 20.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "DoorSide",
+      "prop_type": "App::PropertyEnumeration",
+      "group": "Options",
+      "description": "Side of the duct the door is on: Right / Left along the section's width, Top / Bottom along its height",
+      "default": "Right",
+      "validation": {
+        "enum": [
+          "Right",
+          "Left",
+          "Top",
+          "Bottom"
+        ]
+      }
+    },
+    {
+      "name": "LossCoefficient",
+      "prop_type": "App::PropertyFloat",
+      "group": "Parameters",
+      "description": "Pressure-loss coefficient K, referenced to the connecting duct's own velocity. 0: no loss beyond the duct's own",
+      "default": 0.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    }
+  ],
+  "construction": {
+    "features": [
+      {
+        "id": "access_door",
+        "role": "access_door",
+        "host_layer": "shape",
+        "module": "shared:devices",
+        "generator": "access_door",
+        "parameters": [
+          "BodyLength",
+          "DoorWidth",
+          "DoorHeight",
+          "DoorThickness",
+          "DoorSide"
+        ]
+      }
+    ]
+  },
+  "geometry": {
+    "backend": "generator",
+    "module": "shared:devices",
+    "function": "build_access_door"
+  },
+  "connection_lengths": {
+    "module": "shared:devices",
+    "function": "measure_access_door"
+  },
+  "loss": {
+    "module": "shared:losses",
+    "function": "loss_inline_device"
+  }
+}

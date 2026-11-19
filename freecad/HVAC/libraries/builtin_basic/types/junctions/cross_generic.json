@@ -3,43 +3,60 @@
   "label": "Cross - Generic",
   "category": "junction",
   "topology": "cross",
-  "family": ["cross.cross", "cross.cross.3d", "cross.double_wye", "cross.double_wye.3d", "cross.generic"],
-  "profiles": ["Circular", "Rectangular", "Oval"],
+  "family": [
+    "cross.cross",
+    "cross.cross.3d",
+    "cross.double_wye",
+    "cross.double_wye.3d",
+    "cross.generic"
+  ],
+  "profiles": [
+    "Circular",
+    "Rectangular",
+    "Oval",
+    "Generic"
+  ],
+  "selection": {
+    "kind": "model",
+    "priority": 50
+  },
   "constraints": {
     "degree": 4
   },
   "properties": [
     {
-      "name": "TrimLengthA",
+      "name": "Thickness",
       "prop_type": "App::PropertyLength",
       "group": "Dimensions",
-      "description": "Trim length for port A",
-      "default": 100.0
+      "description": "Wall thickness. 0 builds the air space as a solid body instead of a hollow shell",
+      "default": 1.0,
+      "validation": {
+        "minimum": 0.0
+      }
     },
     {
-      "name": "TrimLengthB",
+      "name": "TrimLength",
       "prop_type": "App::PropertyLength",
       "group": "Dimensions",
-      "description": "Trim length for port B",
-      "default": 100.0
-    },
-    {
-      "name": "TrimLengthC",
-      "prop_type": "App::PropertyLength",
-      "group": "Dimensions",
-      "description": "Trim length for port C",
-      "default": 100.0
-    },
-    {
-      "name": "TrimLengthD",
-      "prop_type": "App::PropertyLength",
-      "group": "Dimensions",
-      "description": "Trim length for port D",
-      "default": 100.0
+      "description": "Trim length of each port, measured from the node. 0 uses a size-based default",
+      "default": 100.0,
+      "per_port": true,
+      "validation": {
+        "minimum": 0.0
+      }
     }
   ],
-  "generator": {
-    "module": "junctions",
+  "geometry": {
+    "backend": "generator",
+    "module": "shared:stars",
     "function": "build_cross"
+  },
+  "connection_lengths": {
+    "module": "shared:stars",
+    "function": "measure_cross"
+  },
+  "loss": {
+    "module": "shared:losses",
+    "function": "loss_cross_generic"
   }
 }

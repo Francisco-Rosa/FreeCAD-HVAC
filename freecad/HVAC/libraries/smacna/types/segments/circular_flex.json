@@ -1,0 +1,128 @@
+{
+  "id": "circular_flex",
+  "label": "Circular Flexible Duct",
+  "category": "segment",
+  "family": [
+    "straight_segment.flex",
+    "curved_segment.flex"
+  ],
+  "profiles": [
+    "Circular"
+  ],
+  "selection": {
+    "kind": "model",
+    "priority": 50
+  },
+  "properties": [
+    {
+      "name": "Diameter",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Clear-air duct diameter",
+      "default": 100.0,
+      "validation": {
+        "exclusiveMinimum": 0.0
+      }
+    },
+    {
+      "name": "Thickness",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Sheet metal thickness",
+      "default": 0.8
+    },
+    {
+      "name": "InsulationThickness",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Insulation thickness wrapped around the outside of the duct wall; 0 disables insulation",
+      "default": 0.0
+    },
+    {
+      "name": "CompressionPercent",
+      "prop_type": "App::PropertyFloat",
+      "group": "Friction",
+      "description": "How much shorter than fully extended the duct is installed, in percent of its extended length (0 to 30). Friction is multiplied by the SMACNA Fig. 14-4 correction for it",
+      "default": 0.0,
+      "validation": {
+        "minimum": 0.0,
+        "maximum": 30.0
+      }
+    },
+    {
+      "name": "RibPitch",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Distance between the ribs of the wire helix; 0 draws no ribs",
+      "default": 40.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "RibWidth",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Width of each rib along the duct",
+      "default": 4.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "RibHeight",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "How far each rib stands proud of the duct's outer face; 0 draws no ribs",
+      "default": 3.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    }
+  ],
+  "construction": {
+    "layers": [
+      {
+        "id": "casing",
+        "roles": [
+          "flow_surface",
+          "structural_shell"
+        ],
+        "default_material_role": "structural_shell",
+        "thickness_property": "Thickness"
+      },
+      {
+        "id": "insulation",
+        "roles": [
+          "thermal_insulation"
+        ],
+        "default_material_role": "thermal_insulation",
+        "thickness_property": "InsulationThickness"
+      }
+    ],
+    "features": [
+      {
+        "id": "flex_ribs",
+        "role": "surface_rib",
+        "host_layer": "casing",
+        "module": "shared:features",
+        "generator": "flex_ribs",
+        "parameters": [
+          "Diameter",
+          "RibPitch",
+          "RibWidth",
+          "RibHeight"
+        ]
+      }
+    ]
+  },
+  "geometry": {
+    "backend": "generator",
+    "module": "shared:segments",
+    "function": "build_circular_curved"
+  },
+  "friction": {
+    "module": "shared:friction",
+    "function": "friction_flex_compressed"
+  }
+}

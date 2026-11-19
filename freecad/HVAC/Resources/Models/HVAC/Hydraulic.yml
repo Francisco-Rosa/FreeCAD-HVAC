@@ -1,0 +1,21 @@
+---
+# SPDX-License-Identifier: LGPL-2.1-or-later
+# SPDX-FileNotice: Part of the HVAC addon.
+
+Model:
+  Name: "Hydraulic"
+  UUID: 'bbfee379-96b0-4995-80e2-e1725b3adfde'
+  URL: 'https://handbook.ashrae.org/Handbooks/F21/IP/F21_Ch21/F21_Ch21_ip.aspx'
+  Description: >-
+    Hydraulic properties of a completed HVAC flow surface. Roughness is an
+    effective construction value that includes surface condition, seams,
+    joints, and other internal protuberances.
+  DOI: ""
+  HydraulicRoughness:
+    DisplayName: "Hydraulic Roughness"
+    Type: 'Quantity'
+    Units: 'mm'
+    URL: 'https://handbook.ashrae.org/Handbooks/F21/IP/F21_Ch21/F21_Ch21_ip.aspx'
+    Description: >-
+      Effective absolute roughness used by Darcy-Weisbach/Colebrook duct
+      friction calculations.

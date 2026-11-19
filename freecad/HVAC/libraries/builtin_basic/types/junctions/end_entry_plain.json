@@ -1,0 +1,113 @@
+{
+  "id": "end_entry_plain",
+  "label": "Entry - Plain Duct End",
+  "category": "junction",
+  "topology": "end",
+  "family": [
+    "end.terminal.entry"
+  ],
+  "profiles": [
+    "Circular",
+    "Rectangular",
+    "Oval"
+  ],
+  "selection": {
+    "kind": "model",
+    "priority": 80
+  },
+  "constraints": {
+    "degree": 1,
+    "flow_class": {
+      "enum": [
+        "entry",
+        "unknown"
+      ]
+    }
+  },
+  "properties": [
+    {
+      "name": "Thickness",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Wall thickness. 0 builds the air space as a solid body instead of a hollow shell",
+      "default": 1.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "TrimNeck",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Length of the straight collar between the fitting and the duct. 0 uses a quarter of the duct size",
+      "default": 0.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "WallThickness",
+      "prop_type": "App::PropertyLength",
+      "group": "Parameters",
+      "description": "Thickness of the duct wall at the opening, for the loss",
+      "default": 0.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "ProjectionLength",
+      "prop_type": "App::PropertyLength",
+      "group": "Parameters",
+      "description": "How far the duct sticks out of the wall. 0 means flush",
+      "default": 0.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "ScreenFreeArea",
+      "prop_type": "App::PropertyFloat",
+      "group": "Parameters",
+      "description": "Open fraction of a screen across the opening, from 0 to 1. 0 means there is no screen",
+      "default": 0.0,
+      "validation": {
+        "minimum": 0.0,
+        "maximum": 1.0
+      }
+    },
+    {
+      "name": "WallFlangeWidth",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Width of a mounting flange around the opening, flush with it, beyond the duct wall. 0 means no flange",
+      "default": 0.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "WallFlangeThickness",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Thickness of the mounting flange",
+      "default": 3.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    }
+  ],
+  "geometry": {
+    "backend": "generator",
+    "module": "shared:terminals",
+    "function": "build_terminal_plain"
+  },
+  "connection_lengths": {
+    "module": "shared:terminals",
+    "function": "measure_terminal_plain"
+  },
+  "loss": {
+    "module": "shared:losses",
+    "function": "loss_entry_plain"
+  }
+}

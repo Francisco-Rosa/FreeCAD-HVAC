@@ -1,0 +1,263 @@
+{
+  "id": "through_damper_generic",
+  "label": "Damper - Generic",
+  "category": "junction",
+  "topology": "through",
+  "family": [
+    "through.straight.damper"
+  ],
+  "profiles": [
+    "Circular",
+    "Rectangular",
+    "Oval"
+  ],
+  "selection": {
+    "kind": "inline",
+    "priority": 50
+  },
+  "constraints": {
+    "degree": 2
+  },
+  "properties": [
+    {
+      "name": "Thickness",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Sheet metal thickness. 0 builds the air space as a solid body instead of a hollow shell",
+      "default": 0.8,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "InsulationThickness",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Insulation thickness wrapped around the outside of the fitting; 0 disables insulation",
+      "default": 0.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "BodyLength",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Damper body length",
+      "default": 0.0
+    },
+    {
+      "name": "LossCoefficient",
+      "prop_type": "App::PropertyFloat",
+      "group": "Parameters",
+      "description": "Pressure-loss coefficient K, referenced to the connecting duct's own velocity (nominal open-position value; damper modulation is not modeled)",
+      "default": 0.2
+    },
+    {
+      "name": "DamperType",
+      "prop_type": "App::PropertyEnumeration",
+      "group": "Parameters",
+      "description": "How the loss is found. Coefficient uses LossCoefficient as given; any other choice reads the loss of that kind of damper at its current position",
+      "default": "Coefficient",
+      "validation": {
+        "enum": [
+          "Coefficient",
+          "Butterfly",
+          "Butterfly airfoil",
+          "Gate",
+          "Parallel blade",
+          "Opposed blade"
+        ]
+      }
+    },
+    {
+      "name": "BladeAngle",
+      "prop_type": "App::PropertyAngle",
+      "group": "Parameters",
+      "description": "Blade angle from fully open (0 = fully open)",
+      "default": 0.0,
+      "validation": {
+        "minimum": 0.0,
+        "maximum": 90.0
+      }
+    },
+    {
+      "name": "GateOpening",
+      "prop_type": "App::PropertyFloat",
+      "group": "Parameters",
+      "description": "Gate damper only: open height as a fraction of the duct height (1 = fully open)",
+      "default": 1.0,
+      "validation": {
+        "minimum": 0.0,
+        "maximum": 1.0
+      }
+    },
+    {
+      "name": "BladeCount",
+      "prop_type": "App::PropertyInteger",
+      "group": "Parameters",
+      "description": "Multi-blade dampers only: number of blades",
+      "default": 2,
+      "validation": {
+        "minimum": 1
+      }
+    },
+    {
+      "name": "FlangeHeight",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Height of the transverse flange at each duct connection",
+      "default": 25.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "FlangeThickness",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Thickness of the transverse flange; 0 draws no flanges",
+      "default": 1.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "ShowFlange1",
+      "prop_type": "App::PropertyBool",
+      "group": "Options",
+      "description": "Include the flange at port 1",
+      "default": true
+    },
+    {
+      "name": "ShowFlange2",
+      "prop_type": "App::PropertyBool",
+      "group": "Options",
+      "description": "Include the flange at port 2",
+      "default": true
+    },
+    {
+      "name": "Operator",
+      "prop_type": "App::PropertyEnumeration",
+      "group": "Operator",
+      "description": "What turns the blades, drawn outside the duct: a hand quadrant with a lever showing the blade position, an actuator, or nothing",
+      "default": "Hand quadrant",
+      "validation": {
+        "enum": [
+          "Hand quadrant",
+          "Actuator",
+          "None"
+        ]
+      }
+    },
+    {
+      "name": "OperatorSide",
+      "prop_type": "App::PropertyEnumeration",
+      "group": "Operator",
+      "description": "Side of the duct the shaft comes out of (Right / Left along the section width, Top / Bottom along its height); the blades turn about that axis",
+      "default": "Right",
+      "validation": {
+        "enum": [
+          "Right",
+          "Left",
+          "Top",
+          "Bottom"
+        ]
+      }
+    },
+    {
+      "name": "OperatorRotation",
+      "prop_type": "App::PropertyEnumeration",
+      "group": "Operator",
+      "description": "Turns the quadrant or actuator about the shaft, in degrees",
+      "default": "0",
+      "validation": {
+        "enum": [
+          "0",
+          "90",
+          "180",
+          "270"
+        ]
+      }
+    }
+  ],
+  "construction": {
+    "layers": [
+      {
+        "id": "casing",
+        "roles": [
+          "flow_surface",
+          "structural_shell"
+        ],
+        "default_material_role": "structural_shell",
+        "thickness_property": "Thickness"
+      },
+      {
+        "id": "insulation",
+        "roles": [
+          "thermal_insulation"
+        ],
+        "default_material_role": "thermal_insulation",
+        "thickness_property": "InsulationThickness"
+      }
+    ],
+    "features": [
+      {
+        "id": "transverse_flange",
+        "role": "transverse_joint",
+        "host_layer": "casing",
+        "module": "shared:features",
+        "generator": "transverse_flange",
+        "parameters": [
+          "FlangeHeight",
+          "FlangeThickness",
+          "ShowFlange1",
+          "ShowFlange2"
+        ]
+      },
+      {
+        "id": "damper_blades",
+        "role": "damper_blade",
+        "host_layer": "casing",
+        "module": "shared:dampers",
+        "generator": "damper_blades",
+        "parameters": [
+          "DamperType",
+          "BladeAngle",
+          "BladeCount",
+          "GateOpening",
+          "OperatorSide"
+        ]
+      },
+      {
+        "id": "damper_operator",
+        "role": "damper_operator",
+        "host_layer": "casing",
+        "module": "shared:dampers",
+        "generator": "damper_operator",
+        "parameters": [
+          "DamperType",
+          "BladeAngle",
+          "BladeCount",
+          "GateOpening",
+          "OperatorSide",
+          "Operator",
+          "OperatorRotation"
+        ]
+      }
+    ]
+  },
+  "geometry": {
+    "backend": "generator",
+    "module": "shared:inline",
+    "function": "build_damper_generic"
+  },
+  "connection_lengths": {
+    "module": "shared:inline",
+    "function": "measure_damper_generic"
+  },
+  "loss": {
+    "module": "shared:losses",
+    "function": "loss_damper_generic"
+  }
+}

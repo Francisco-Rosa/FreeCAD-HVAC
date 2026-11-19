@@ -47,21 +47,43 @@ class JunctionPort:
     """
     Generic junction port descriptor.
 
-    edge_key      : stable segment key, e.g. "Sketch001:0"
-    segment_end   : "start" or "end" relative to the connected segment
-    direction     : unit vector pointing away from the junction along the segment
-    profile       : segment profile string, e.g. "Circular", "Rectangular"
-    section_params: generic profile-dependent section data
+    edge_key : stable segment key, e.g. "Sketch001:0"
+
+    segment_end:
+        "start" or "end" relative to the connected segment.
+
+    direction:
+        Unit vector pointing away from the junction along the segment.
+        This is geometric port direction, not necessarily flow direction.
+
+    flow_role:
+        "inlet"  -> flow enters this junction through this port.
+        "outlet" -> flow leaves this junction through this port.
+        "unknown" -> direction could not be resolved.
+
+    flow_direction:
+        Unit vector in actual flow direction at this port.
+
+    flow_into_junction:
+        True  -> flow enters junction.
+        False -> flow leaves junction.
+        None  -> unknown.
     """
+
     edge_key: str
     segment_end: str
     position: tuple
     direction: tuple
+
     profile: str
     section_params: dict
     attachment: str
     user_offset: tuple
     profile_x_axis: tuple | None = None
+
+    flow_role: str = "unknown"
+    flow_direction: tuple | None = None
+    flow_into_junction: bool | None = None
     
 @dataclass
 class EdgePair:
@@ -98,6 +120,13 @@ class JunctionAnalysis:
     family: str
     family_tags: list[str]
     family_key: str
+    # Flow classification: independent of topology/family/family_key, derived
+    # purely from base-segment orientation (JunctionPort.flow_role/
+    # flow_direction), never from the hydraulic solver -- see
+    # classify_flow()/TOPOLOGY_CLASSIFICATION.md.
+    flow_class: str
+    qualifiers: dict
+    derived_values: dict
     connected_ports: list[JunctionPort]
     # Basic geometric data
     point: tuple[float, float, float]  # Representative XYZ coordinates
@@ -312,7 +341,8 @@ class DuctNetworkParser:
             if kind == "Unknown":
                 continue
 
-            edge = Part.Edge(geo)
+            # Raises for geometry Part cannot turn into an edge, before it is used.
+            Part.Edge(geo)
     
             yield (
                 vec_to_xyz(sp),
@@ -713,6 +743,31 @@ class DuctNetworkParser:
                 attachment = "Center"
                 user_offset = FreeCAD.Vector(0, 0, 0)
                 profile_x_axis = FreeCAD.Vector(0, 0, 0)
+
+            # ----------------------------------------------------------
+            # Flow interpretation
+            # ----------------------------------------------------------
+            # Base geometry direction is interpreted as flow direction:
+            # segment start -> segment end.
+            #
+            # At segment start:
+            #     flow leaves the junction into the segment -> outlet.
+            #
+            # At segment end:
+            #     flow enters the junction from the segment -> inlet.
+            # ----------------------------------------------------------
+            flow_direction = FreeCAD.Vector(direction_along_segment)
+            
+            if flow_direction.Length <= 1e-9:
+                flow_role = "unknown"
+                flow_into_junction = None
+                flow_direction_xyz = None
+            else:
+                flow_direction.normalize()
+            
+                flow_into_junction = segment_end == "end"
+                flow_role = "inlet" if flow_into_junction else "outlet"
+                flow_direction_xyz = vec_to_xyz(flow_direction)
         
             # ----------------------------------------------------------
             # Compute actual profile-aware port position
@@ -740,6 +795,9 @@ class DuctNetworkParser:
                     vec_to_xyz(profile_x_axis)
                     if profile_x_axis.Length > 1e-12 else None
                 ),
+                flow_role=flow_role,
+                flow_direction=flow_direction_xyz,
+                flow_into_junction=flow_into_junction,
             ))
     
         return ports
@@ -766,13 +824,17 @@ class DuctNetworkParser:
         topology = self.classify_node_topology(analysis)
         family, family_tags = self.classify_junction_family(analysis)
         family_key = self.make_junction_family_key(topology, family, *family_tags)
-        
+        flow_class, qualifiers, derived_values = self.classify_flow(analysis, topology)
+
         # Build analysis object for the junction
         junction_analysis = JunctionAnalysis(
             topology=topology,
             family=family,
             family_tags=family_tags,
             family_key=family_key,
+            flow_class=flow_class,
+            qualifiers=qualifiers,
+            derived_values=derived_values,
             connected_ports=connected_ports,
             # Basic geometric data
             point=analysis.point,
@@ -1109,6 +1171,25 @@ class DuctNetworkParser:
                 edge_eccentricities[str((i, j))] = self._distance_between_lines(pos_i, vec_i, pos_j, vec_j)
         return edge_eccentricities
 
+    @staticmethod
+    def _pair_angle_lookup(edge_angles, i, j):
+        """
+        Look up the precomputed angle (degrees) between ports i and j from
+        a node's own edge_angles dict (keyed by the sorted index pair --
+        see _edge_angles()/node_analysis()). Shared by
+        classify_junction_family() and the flow classifier so both read
+        the exact same angle for the exact same port pair, rather than
+        each recomputing it independently from raw direction vectors.
+        """
+        a, b = sorted((i, j))
+        return abs(edge_angles[str((a, b))])
+
+    @staticmethod
+    def _pair_eccentricity_lookup(edge_eccentricities, i, j):
+        """Look up the precomputed eccentricity between ports i and j (see _pair_angle_lookup)."""
+        a, b = sorted((i, j))
+        return edge_eccentricities[str((a, b))]
+
     def _collinear_pairs(self, origins, vectors):
         """
         Return incident edge pairs whose directions are approximately opposite.
@@ -1254,13 +1335,10 @@ class DuctNetworkParser:
         """
         degree = node_analysis.degree
         
-        port_origins = node_analysis.port_origins
-        edge_vectors = node_analysis.edge_vectors
         edge_angles = node_analysis.edge_angles
         edge_eccentricities= node_analysis.edge_eccentricities
         
         collinear_pairs = node_analysis.collinear_pairs
-        orthogonal_pairs = node_analysis.orthogonal_pairs
         is_coplanar = node_analysis.is_coplanar
         
         def _disjoint_pair_set(pairs):
@@ -1286,12 +1364,10 @@ class DuctNetworkParser:
             return None
     
         def _pair_angle(i, j):
-            a, b = sorted((i, j))
-            return abs(edge_angles[str((a, b))])
-        
+            return self._pair_angle_lookup(edge_angles, i, j)
+
         def _pair_eccentricity(i, j):
-            a, b = sorted((i, j))
-            return edge_eccentricities[str((a, b))]
+            return self._pair_eccentricity_lookup(edge_eccentricities, i, j)
     
         # ------------------------------------------------------------
         # degree 0 / invalid
@@ -1311,11 +1387,18 @@ class DuctNetworkParser:
         if degree == 2:
             # Collinear => through condition
             if len(collinear_pairs) == 1:
+                ports = node_analysis.connected_ports
+                same_section = len(ports) == 2 and self._sections_equal(ports[0], ports[1])
+                if not same_section:
+                    # A profile/size change at the joint -- a real transition
+                    # fitting, whether or not the axes also happen to be
+                    # displaced (see TOPOLOGY_CLASSIFICATION.md).
+                    return "transition", []
                 if _pair_eccentricity(0, 1) < self.tol:
                     return "straight", []
                 else:
                     return "offset", []
-                    
+
             # Not collinear => change in direction
             else:
                 angle = _pair_angle(0, 1)
@@ -1437,3 +1520,358 @@ class DuctNetworkParser:
             if is_coplanar:
                 return "multiport", []
             return "multiport", ["3d"]
+
+    # ======================================================================
+    # Flow classification (flow_class / qualifiers / derived_values)
+    # ======================================================================
+    #
+    # This is a second, independent classifier layered on top of
+    # topology/family: it never changes family_key, and it never asks the
+    # hydraulic solver anything -- direction always comes from
+    # JunctionPort.flow_role/flow_direction, which is itself derived purely
+    # from base-segment orientation (segment start -> segment end), see
+    # build_junction_ports() above.
+
+    def _geom_tol(self, characteristic_size, rel_tol=1e-6):
+        """
+        Shared size-relative geometry tolerance: max(self.tol, rel_tol *
+        characteristic_size). self.tol is the absolute floor (same value
+        used to snap the geometric graph itself), rel_tol scales it up
+        for larger ducts so floating-point round-off on a big section
+        doesn't get mistaken for a real geometric difference. Used
+        everywhere this classifier compares two dimensions/positions
+        against each other -- never a scattered literal 1e-6.
+        """
+        return max(self.tol, rel_tol * abs(characteristic_size))
+
+    def _sections_equal(self, port_a, port_b):
+        """
+        True if two ports share the same section within a size-relative
+        tolerance (see _geom_tol). Never area alone: two differently-
+        shaped sections can share an area without being "the same
+        section" for through.straight/offset vs. through.transition
+        classification purposes.
+        """
+        profile_a = str(port_a.profile or "")
+        profile_b = str(port_b.profile or "")
+        if not profile_a or profile_a != profile_b:
+            return False
+
+        ext_a = hvaclib.get_section_extents(port_a.section_params or {})
+        ext_b = hvaclib.get_section_extents(port_b.section_params or {})
+        if (ext_a[0] > 0.0 and ext_a[1] > 0.0) or (ext_b[0] > 0.0 and ext_b[1] > 0.0):
+            # Known Circular/Rectangular/Oval extents -- compare width/height
+            # (or diameter-as-box) with a tolerance scaled to their own size.
+            size = max(ext_a[0], ext_a[1], ext_b[0], ext_b[1])
+            tol = self._geom_tol(size)
+            return abs(ext_a[0] - ext_b[0]) <= tol and abs(ext_a[1] - ext_b[1]) <= tol
+
+        # Generic/custom profile with no recognized Width/Height/Diameter
+        # schema -- fall back to an exact canonical signature match (making
+        # this size-relative too would need a documented generic-profile
+        # dimension schema, out of scope here).
+        return hvaclib.profile_signature(profile_a, port_a.section_params) == hvaclib.profile_signature(
+            profile_b, port_b.section_params
+        )
+
+    def classify_flow(self, node_analysis, topology):
+        """
+        Return (flow_class, qualifiers, derived_values) for one node.
+
+        "through" (degree-2, collinear) and "branch" (degree-3) nodes get
+        qualifiers and derived values as well. An "end" node only gets
+        entry/exit, and a "cross"/"multiport" node only diverging/converging
+        -- see TOPOLOGY_CLASSIFICATION.md.
+        """
+        ports = node_analysis.connected_ports
+
+        if topology == "end" and len(ports) == 1:
+            return self._classify_end_flow(ports[0]), {}, {}
+
+        if topology in ("cross", "multiport"):
+            return self._classify_manifold_flow(ports), {}, {}
+
+        if topology == "through" and len(ports) == 2 and len(node_analysis.collinear_pairs) == 1:
+            return self._classify_through_flow(ports[0], ports[1])
+
+        if topology == "branch" and len(ports) == 3:
+            return self._classify_branch_flow(ports, node_analysis)
+
+        return "unknown", {}, {}
+
+    def _classify_end_flow(self, port):
+        """
+        Which way air passes the open end of a duct: "entry" (air comes into
+        the duct system here, e.g. an intake or a return grille), "exit"
+        (air leaves it here) or "unknown".
+        """
+        role = str(port.flow_role or "unknown")
+        # A port's role is seen from the node: an "inlet" brings air to the
+        # node, and at an open end that air has nowhere to go but out.
+        if role == "inlet":
+            return "exit"
+        if role == "outlet":
+            return "entry"
+        return "unknown"
+
+    def _classify_manifold_flow(self, ports):
+        """
+        "diverging" (one inlet, the rest outlets), "converging" (one outlet,
+        the rest inlets) or "unknown" (anything else, including several
+        inlets and several outlets at once) for a node of four or more ports.
+        """
+        roles = [str(p.flow_role or "unknown") for p in ports]
+        n_in = roles.count("inlet")
+        n_out = roles.count("outlet")
+        if n_in + n_out != len(ports):
+            return "unknown"
+        if n_in == 1 and n_out >= 2:
+            return "diverging"
+        if n_out == 1 and n_in >= 2:
+            return "converging"
+        return "unknown"
+
+    def _resolve_inlet_outlet(self, port_a, port_b):
+        """
+        (inlet, outlet) ordering of two ports from their own flow_role --
+        base-segment orientation is the sole source of truth here (see
+        build_junction_ports()). Returns (None, None) when the pair isn't
+        exactly one inlet and one outlet: an ambiguous or unresolved pair
+        must never fall back to an arbitrary port order, since that could
+        silently mislabel a contraction as an expansion (or vice versa).
+        """
+        if port_a.flow_role == "inlet" and port_b.flow_role == "outlet":
+            return port_a, port_b
+        if port_b.flow_role == "inlet" and port_a.flow_role == "outlet":
+            return port_b, port_a
+        return None, None
+
+    def _classify_through_flow(self, port_a, port_b):
+        inlet, outlet = self._resolve_inlet_outlet(port_a, port_b)
+        if inlet is None or outlet is None:
+            # Direction unresolved -- never guess expansion/contraction or
+            # any direction-dependent qualifier/derived value from an
+            # arbitrary port order.
+            return "unknown", {}, {}
+
+        qualifiers = {}
+        derived = {}
+
+        profile_in = str(inlet.profile or "")
+        profile_out = str(outlet.profile or "")
+        if profile_in or profile_out:
+            qualifiers["inlet_profile"] = profile_in
+            qualifiers["outlet_profile"] = profile_out
+            qualifiers["profile_relation"] = "same" if profile_in and profile_in == profile_out else "mixed"
+
+        area_in = hvaclib.profile_area(profile_in, inlet.section_params)
+        area_out = hvaclib.profile_area(profile_out, outlet.section_params)
+
+        flow_class = "unknown"
+        if area_in is not None and area_out is not None:
+            if math.isclose(area_in, area_out, rel_tol=1e-6, abs_tol=1e-6):
+                flow_class = "constant"
+            elif area_out > area_in:
+                flow_class = "expansion"
+            else:
+                flow_class = "contraction"
+            if area_in > 0.0:
+                derived["area_ratio"] = area_out / area_in
+
+        ext_in = hvaclib.get_section_extents(inlet.section_params or {})
+        ext_out = hvaclib.get_section_extents(outlet.section_params or {})
+        if ext_in[0] > 0.0 and ext_in[1] > 0.0:
+            derived["aspect_ratio_in"] = ext_in[0] / ext_in[1]
+        if ext_out[0] > 0.0 and ext_out[1] > 0.0:
+            derived["aspect_ratio_out"] = ext_out[0] / ext_out[1]
+
+        alignment, alignment_qualifiers, offset_ratio = self._classify_alignment(
+            inlet, outlet, profile_in, profile_out, ext_in, ext_out
+        )
+        if alignment:
+            qualifiers["alignment"] = alignment
+            qualifiers.update(alignment_qualifiers)
+        if offset_ratio is not None:
+            derived["offset_ratio"] = offset_ratio
+
+        transition_form = self._classify_transition_form(profile_in, profile_out, ext_in, ext_out)
+        if transition_form:
+            qualifiers["transition_form"] = transition_form
+
+        return flow_class, qualifiers, derived
+
+    def _classify_alignment(self, inlet, outlet, profile_in, profile_out, ext_in, ext_out):
+        """
+        Return (alignment, extra_qualifiers, offset_ratio) for a through
+        pair, using each port's own actual profile-aware position
+        (JunctionPort.position already accounts for Attachment/Offset --
+        see compute_port_position()), computed in ONE common local frame
+        so "top"/"bottom"/"left"/"right" have one consistent physical
+        meaning regardless of which port (inlet/outlet) is being looked
+        at -- through-port `direction` fields point opposite ways, so
+        interpreting each port's own direction independently would be
+        wrong. The frame's longitudinal axis is the inlet's actual FLOW
+        direction (not its `direction` field, which points upstream/away
+        from the junction) -- this is the same vector
+        compute_port_position() itself used against the inlet's own
+        ProfileXAxis (base-segment direction, see build_junction_ports()),
+        so the frame stays consistent with how ProfileXAxis was originally
+        interpreted; the transverse reference is the inlet's own
+        ProfileXAxis, per hvaclib's "X -> Left, Y -> Top" convention.
+        """
+        pos_in = FreeCAD.Vector(*inlet.position)
+        pos_out = FreeCAD.Vector(*outlet.position)
+        delta = pos_out - pos_in
+
+        w_in, h_in = ext_in
+        w_out, h_out = ext_out
+        ref_dim = ((w_in + h_in) + (w_out + h_out)) / 4.0
+
+        flow_dir = inlet.flow_direction
+        z_dir = FreeCAD.Vector(*flow_dir) if flow_dir else FreeCAD.Vector(0, 0, 0)
+        if z_dir.Length <= 1e-12:
+            # No frame to resolve a transverse offset against -- offset_ratio
+            # is undefined here, never the raw (possibly longitudinal) delta.
+            return "unknown", {}, None
+
+        preferred_x = FreeCAD.Vector(*inlet.profile_x_axis) if inlet.profile_x_axis else None
+        try:
+            _, x_dir, y_dir, _ = hvaclib.make_profile_frame(z_dir, preferred_x=preferred_x)
+        except ValueError:
+            return "unknown", {}, None
+
+        delta_x = delta.dot(x_dir)
+        delta_y = delta.dot(y_dir)
+
+        # offset_ratio is the TRANSVERSE offset only (perpendicular to flow,
+        # in this common frame) -- delta's own longitudinal component along
+        # z_dir is deliberately dropped, never folded into the ratio.
+        transverse_offset = math.hypot(delta_x, delta_y)
+        offset_ratio = (transverse_offset / ref_dim) if ref_dim > 1e-9 else None
+
+        tol = self._geom_tol(ref_dim)
+
+        rectangular = profile_in == "Rectangular" and profile_out == "Rectangular"
+        round_profiles = {"Circular", "Oval"}
+        round_pair = profile_in in round_profiles and profile_out in round_profiles
+
+        if rectangular or round_pair:
+            # Same "one side flush, offset entirely to the other side"
+            # test for both: for a round/oval pair, ext_in/ext_out are
+            # (D, D) for Circular (so half_dw == half_dh -- the classic
+            # tangent-edges eccentric reducer, independent of which axis
+            # the offset lands on) or the real (Width, Height) for Oval.
+            # Only Rectangular gets aligned_side/aligned_corner and the
+            # double_eccentric (corner) case -- a round or oval section has
+            # no corners, so that case falls through to "offset" instead.
+            half_dw = (w_out - w_in) / 2.0
+            half_dh = (h_out - h_in) / 2.0
+
+            x_centered = abs(delta_x) <= tol
+            x_right = abs(delta_x - half_dw) <= tol
+            x_left = abs(delta_x + half_dw) <= tol
+            y_centered = abs(delta_y) <= tol
+            y_top = abs(delta_y + half_dh) <= tol
+            y_bottom = abs(delta_y - half_dh) <= tol
+
+            if x_centered and y_centered:
+                return "concentric", {}, offset_ratio
+
+            if x_centered and abs(half_dh) > tol and (y_top or y_bottom):
+                qualifiers = {"aligned_side": "top" if y_top else "bottom"} if rectangular else {}
+                return "eccentric", qualifiers, offset_ratio
+
+            if y_centered and abs(half_dw) > tol and (x_left or x_right):
+                qualifiers = {"aligned_side": "left" if x_left else "right"} if rectangular else {}
+                return "eccentric", qualifiers, offset_ratio
+
+            if rectangular and (x_left or x_right) and (y_top or y_bottom):
+                corner = "{}_{}".format("top" if y_top else "bottom", "left" if x_left else "right")
+                return "double_eccentric", {"aligned_corner": corner}, offset_ratio
+
+            return "offset", {}, offset_ratio
+
+        # Mixed profile families (e.g. Circular -> Rectangular): alignment
+        # isn't a well-defined concept across different section shapes.
+        return "unknown", {}, offset_ratio
+
+    def _classify_transition_form(self, profile_in, profile_out, ext_in, ext_out):
+        """
+        Return a generic transition-form qualifier where reliably derivable
+        from profile/extent data alone -- never a SMACNA-specific fitting id.
+        Returns "" (no qualifier at all) when there's no actual section
+        change to classify (e.g. a through.straight/offset pair that
+        happens to reach this same code path); "unknown" when a real
+        change occurred but this profile family isn't reliably
+        classifiable into the vocabulary below (Oval/Generic/custom).
+        """
+        if not profile_in or not profile_out:
+            return "unknown"
+        if profile_in != profile_out:
+            return "profile_change"
+
+        tol = self._geom_tol(max(ext_in[0], ext_in[1], ext_out[0], ext_out[1]))
+        w_changed = abs(ext_in[0] - ext_out[0]) > tol
+        h_changed = abs(ext_in[1] - ext_out[1]) > tol
+        if not w_changed and not h_changed:
+            return ""
+
+        if profile_in == "Circular":
+            return "conical"
+
+        if profile_in == "Rectangular":
+            return "pyramidal" if (w_changed and h_changed) else "single_plane"
+
+        # Oval/Generic/custom: a real change occurred but this profile
+        # family isn't reliably classifiable into the vocabulary above --
+        # never silently mapped onto the Circular/Rectangular SMACNA forms.
+        return "unknown"
+
+    def _classify_branch_flow(self, ports, node_analysis):
+        qualifiers = {}
+        derived = {}
+
+        roles = [str(p.flow_role or "unknown") for p in ports]
+        n_in = roles.count("inlet")
+        n_out = roles.count("outlet")
+
+        lone_idx = None
+        if n_in == 1 and n_out == 2:
+            flow_class = "diverging"
+            lone_idx = roles.index("inlet")
+        elif n_in == 2 and n_out == 1:
+            flow_class = "converging"
+            lone_idx = roles.index("outlet")
+        else:
+            flow_class = "unknown"
+
+        profiles = [str(p.profile or "") for p in ports if p.profile]
+        if profiles:
+            qualifiers["profile_relation"] = "same" if len(set(profiles)) <= 1 else "mixed"
+
+        # common_leg / area_ratio only resolve for a tee/lateral_tee (one
+        # geometrically identified run/trunk pair) -- a wye has none.
+        collinear_pairs = node_analysis.collinear_pairs
+        if len(collinear_pairs) == 1:
+            trunk = collinear_pairs[0]
+            branch_idx = next(i for i in range(3) if i not in (trunk.a, trunk.b))
+
+            if lone_idx is not None:
+                qualifiers["common_leg"] = "run" if lone_idx in (trunk.a, trunk.b) else "branch"
+
+            area_run = hvaclib.profile_area(ports[trunk.a].profile, ports[trunk.a].section_params)
+            area_branch = hvaclib.profile_area(ports[branch_idx].profile, ports[branch_idx].section_params)
+            if area_run and area_branch and area_run > 0.0:
+                derived["area_ratio"] = area_branch / area_run
+
+            # Geometric branch angle (degrees) between the branch leg and
+            # whichever trunk leg it's closer to -- the same acute-angle
+            # convention classify_junction_family() already uses to split
+            # tee (~90 deg) from lateral_tee, and read from the exact same
+            # precomputed edge_angles a node's family classification already
+            # used, rather than recomputing it from raw direction vectors.
+            ang_a = self._pair_angle_lookup(node_analysis.edge_angles, branch_idx, trunk.a)
+            ang_b = self._pair_angle_lookup(node_analysis.edge_angles, branch_idx, trunk.b)
+            derived["branch_angle"] = min(ang_a, ang_b)
+
+        return flow_class, qualifiers, derived

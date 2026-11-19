@@ -1,2 +1,5 @@
 
 *.pyc
+/.zed
+__pycache__/
+tools/.smoke/

@@ -1,0 +1,33 @@
+---
+General:
+  UUID: "e8b73d0d-6193-4387-87cc-420e5d99308c"
+  Author: "FreeCAD-HVAC"
+  License: "CC0-1.0"
+  Name: "Polyurethane Foam"
+  Description: >-
+    Rigid closed-cell polyurethane (PU/PIR) foam thermal insulation, as
+    used for duct board/pre-insulated panel construction. Typical values
+    for a standard HVAC-grade rigid PU foam board.
+Models:
+  Father:
+    UUID: '9cdda8b6-b606-4778-8f13-3934d8668e67'
+    Father: "Insulation"
+  Density:
+    UUID: '454661e5-265b-4320-8e6f-fcf6223ac3af'
+    Density: "35 kg/m^3"
+  Thermal:
+    UUID: '9959d007-a970-4ea7-bae4-3eb1b8b883c7'
+    SpecificHeat: "1450 J/kg/K"
+    ThermalConductivity: "0.026 W/m/K"
+  Hydraulic:
+    UUID: 'bbfee379-96b0-4995-80e2-e1725b3adfde'
+    HydraulicRoughness: "0.9 mm"
+AppearanceModels:
+  BasicRendering:
+    UUID: 'f006c7e4-35b7-43d5-bbf9-c5d572309e6e'
+    AmbientColor: "(0.7800, 0.7000, 0.4500, 1.0)"
+    DiffuseColor: "(0.9500, 0.8300, 0.5000, 1.0)"
+    EmissiveColor: "(0.0000, 0.0000, 0.0000, 1.0)"
+    Shininess: "0.1000"
+    SpecularColor: "(0.2000, 0.2000, 0.2000, 1.0)"
+    Transparency: "0.6"

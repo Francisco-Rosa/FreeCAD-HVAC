@@ -1,0 +1,177 @@
+{
+  "id": "branch_lateral_tee_radius",
+  "label": "Lateral Tee - Radius",
+  "category": "junction",
+  "topology": "branch",
+  "family": [
+    "branch.lateral_tee",
+    "branch.lateral_tee.3d"
+  ],
+  "profiles": [
+    "Circular",
+    "Rectangular",
+    "Oval"
+  ],
+  "selection": {
+    "kind": "model",
+    "priority": 55
+  },
+  "constraints": {
+    "degree": 3
+  },
+  "properties": [
+    {
+      "name": "Thickness",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Wall thickness. 0 builds the air space as a solid body instead of a hollow shell",
+      "default": 1.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "TrimRunA",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Trim length for run port A",
+      "default": 100.0
+    },
+    {
+      "name": "TrimRunB",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Trim length for run port B",
+      "default": 100.0
+    },
+    {
+      "name": "TrimBranch",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Trim length for the branch port",
+      "default": 100.0
+    },
+    {
+      "name": "Attachment",
+      "prop_type": "App::PropertyEnumeration",
+      "group": "Options",
+      "description": "How the branch joins the run. Side: through the side of the run. Face: the branch passes over or under the run, and joins it with a collar and a 90 degree elbow. Auto picks one from where the branch is drawn",
+      "default": "Auto",
+      "validation": {
+        "enum": [
+          "Auto",
+          "Side",
+          "Face"
+        ]
+      }
+    },
+    {
+      "name": "CollarRoll",
+      "prop_type": "App::PropertyAngle",
+      "group": "Options",
+      "description": "Face-mounted branch on a round run only: rolls the collar about the run towards the branch (SMACNA 'rolled 45 deg'); the elbow then turns that much less. 0 = collar straight up",
+      "default": 0.0,
+      "validation": {
+        "minimum": 0.0,
+        "maximum": 75.0
+      }
+    },
+    {
+      "name": "BranchRadius",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Centreline radius of the branch bend. 0 uses the branch size. A face-mounted branch (one passing over or under the run) uses it for the elbow after its collar",
+      "default": 0.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    }
+  ],
+  "geometry": {
+    "backend": "generator",
+    "module": "shared:tees",
+    "function": "build_lateral_tee_radius"
+  },
+  "connection_lengths": {
+    "module": "shared:tees",
+    "function": "measure_lateral_tee_radius"
+  },
+  "loss": {
+    "module": "shared:losses",
+    "function": "loss_tee_generic",
+    "variants": [
+      {
+        "constraints": {
+          "flow_class": {
+            "enum": [
+              "diverging"
+            ]
+          },
+          "qualifiers": {
+            "common_leg": {
+              "enum": [
+                "run"
+              ]
+            }
+          }
+        },
+        "module": "shared:losses",
+        "function": "loss_branch_diverging_run"
+      },
+      {
+        "constraints": {
+          "flow_class": {
+            "enum": [
+              "converging"
+            ]
+          },
+          "qualifiers": {
+            "common_leg": {
+              "enum": [
+                "run"
+              ]
+            }
+          }
+        },
+        "module": "shared:losses",
+        "function": "loss_branch_converging_run"
+      },
+      {
+        "constraints": {
+          "flow_class": {
+            "enum": [
+              "diverging"
+            ]
+          },
+          "qualifiers": {
+            "common_leg": {
+              "enum": [
+                "branch"
+              ]
+            }
+          }
+        },
+        "module": "shared:losses",
+        "function": "loss_branch_diverging_branch"
+      },
+      {
+        "constraints": {
+          "flow_class": {
+            "enum": [
+              "converging"
+            ]
+          },
+          "qualifiers": {
+            "common_leg": {
+              "enum": [
+                "branch"
+              ]
+            }
+          }
+        },
+        "module": "shared:losses",
+        "function": "loss_branch_converging_branch"
+      }
+    ]
+  }
+}

@@ -1,0 +1,32 @@
+---
+General:
+  UUID: "c56ec5d1-a181-43d8-9436-054cda8baf29"
+  Author: "FreeCAD-HVAC"
+  License: "CC0-1.0"
+  Name: "Galvanized Steel - Spiral Corrugated"
+  Description: >-
+    Corrugated spiral galvanized-steel duct casing. Density and thermal
+    properties are those of the parent galvanized steel sheet.
+Models:
+  Father:
+    UUID: '9cdda8b6-b606-4778-8f13-3934d8668e67'
+    Father: "Metal"
+  Density:
+    UUID: '454661e5-265b-4320-8e6f-fcf6223ac3af'
+    Density: "7860 kg/m^3"
+  Thermal:
+    UUID: '9959d007-a970-4ea7-bae4-3eb1b8b883c7'
+    SpecificHeat: "490 J/kg/K"
+    ThermalConductivity: "50 W/m/K"
+  Hydraulic:
+    UUID: 'bbfee379-96b0-4995-80e2-e1725b3adfde'
+    HydraulicRoughness: "0.9 mm"
+AppearanceModels:
+  BasicRendering:
+    UUID: 'f006c7e4-35b7-43d5-bbf9-c5d572309e6e'
+    AmbientColor: "(0.5700, 0.5700, 0.5900, 1.0)"
+    DiffuseColor: "(0.7200, 0.7300, 0.7500, 1.0)"
+    EmissiveColor: "(0.0000, 0.0000, 0.0000, 1.0)"
+    Shininess: "0.3800"
+    SpecularColor: "(0.8600, 0.8600, 0.8800, 1.0)"
+    Transparency: "0.0"

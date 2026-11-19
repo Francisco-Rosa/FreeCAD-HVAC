@@ -1,0 +1,173 @@
+{
+  "id": "end_grille_generic",
+  "label": "Grille - Generic",
+  "category": "junction",
+  "topology": "end",
+  "family": [
+    "end.terminal.grille"
+  ],
+  "profiles": [
+    "Circular",
+    "Rectangular",
+    "Oval"
+  ],
+  "selection": {
+    "kind": "model",
+    "priority": 86
+  },
+  "constraints": {
+    "degree": 1,
+    "qualifiers": {
+      "terminal_function": {
+        "enum": [
+          "Supply",
+          "Return",
+          "Exhaust",
+          "OutdoorAir",
+          "Discharge"
+        ]
+      }
+    }
+  },
+  "properties": [
+    {
+      "name": "Thickness",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Wall thickness. 0 builds the air space as a solid body instead of a hollow shell",
+      "default": 1.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "TrimNeck",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Length of the straight collar between the fitting and the duct. 0 uses a quarter of the duct size",
+      "default": 0.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "FrameWidth",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Width of the frame around the opening. 0 leaves the frame out",
+      "default": 25.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "FrameDepth",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Depth of the frame along the duct",
+      "default": 20.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "LossMode",
+      "prop_type": "App::PropertyEnumeration",
+      "group": "Parameters",
+      "description": "How the loss is given: a coefficient K, or a fixed pressure drop from the maker's data",
+      "default": "Coefficient",
+      "validation": {
+        "enum": [
+          "Coefficient",
+          "Fixed pressure drop"
+        ]
+      }
+    },
+    {
+      "name": "LossCoefficient",
+      "prop_type": "App::PropertyFloat",
+      "group": "Parameters",
+      "description": "Pressure-loss coefficient K, referenced to velocity at the neck",
+      "default": 1.5,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "NeckSize",
+      "prop_type": "App::PropertyLength",
+      "group": "Parameters",
+      "description": "Equivalent neck diameter the loss coefficient refers to. Used for the loss only, not for the shape",
+      "default": 200.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "PressureDrop",
+      "prop_type": "App::PropertyFloat",
+      "group": "Parameters",
+      "description": "Pressure drop in Pa at the design flow, used when LossMode is Fixed pressure drop",
+      "default": 0.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "FacePattern",
+      "prop_type": "App::PropertyEnumeration",
+      "group": "Face",
+      "description": "How the face is drawn: single deflection (one row of blades), double deflection (two rows, square to each other), egg crate (a grid) or a perforated plate",
+      "default": "Single deflection",
+      "validation": {
+        "enum": [
+          "Single deflection",
+          "Double deflection",
+          "Egg crate",
+          "Perforated"
+        ]
+      }
+    },
+    {
+      "name": "BladeOrientation",
+      "prop_type": "App::PropertyEnumeration",
+      "group": "Face",
+      "description": "Direction of the front blades: horizontal (along the face width) or vertical",
+      "default": "Horizontal",
+      "validation": {
+        "enum": [
+          "Horizontal",
+          "Vertical"
+        ]
+      }
+    }
+  ],
+  "geometry": {
+    "backend": "generator",
+    "module": "shared:terminals",
+    "function": "build_terminal_frame"
+  },
+  "connection_lengths": {
+    "module": "shared:terminals",
+    "function": "measure_terminal_frame"
+  },
+  "loss": {
+    "module": "shared:losses",
+    "function": "loss_diffuser_generic"
+  },
+  "construction": {
+    "features": [
+      {
+        "id": "terminal_face",
+        "role": "terminal_face",
+        "host_layer": "shape",
+        "module": "shared:faces",
+        "generator": "grille_face",
+        "parameters": [
+          "FacePattern",
+          "BladeOrientation"
+        ]
+      }
+    ]
+  }
+}

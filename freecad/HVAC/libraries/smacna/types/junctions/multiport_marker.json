@@ -3,8 +3,12 @@
   "label": "Multiport - Marker",
   "category": "junction",
   "topology": "multiport",
-  "family": ["multiport"],
+  "family": ["multiport.multiport", "multiport.multiport.3d"],
   "profiles": ["Generic"],
+  "selection": {
+    "kind": "placeholder",
+    "priority": 0
+  },
   "constraints": {
     "degree_min": 5
   },
@@ -17,8 +21,9 @@
       "default": 320.0
     }
   ],
-  "generator": {
-    "module": "junctions",
+  "geometry": {
+    "backend": "generator",
+    "module": "shared:markers",
     "function": "build_manifold_marker"
   }
 }

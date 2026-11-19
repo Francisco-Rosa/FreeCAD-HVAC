@@ -21,6 +21,7 @@
 #                                                                              #
 ################################################################################
 
+import json
 import os
 import platform
 import sys
@@ -33,7 +34,7 @@ from PySide import QtGui, QtCore
 translate = FreeCAD.Qt.translate
 preferences = FreeCAD.ParamGet("User parameter:BaseApp/Preferences/Mod/HVAC")
 
-from ..library.Library import HVACLibraryRegistry
+from ..library.Library import HVACLibraryRegistry, HVACTypeMatchRequest
 
 # Enable loading external libraries from the ext_libs directory
 path = os.path.dirname(__file__)
@@ -54,7 +55,6 @@ import networkx as nx
 WORKBENCH_NAME = 'HVAC'
 WORKBENCH_STATE = 'DEFAULT'
 DUCT_NETWORK_CONTEXT_KEY = "hvac_ductnetwork"
-OBSERVER_TIMER_POLL_INTERVAL = 100
 
 #------------------------------------------------------------------------------
 # Detect the operating system...
@@ -115,36 +115,141 @@ class HVACLibraryService:
             return ""
         return lib.default_profile(category="segment", family="straight_segment")
 
-    @classmethod
-    def default_segment_type_id(cls, library_id: str, profile: str, curved: bool = False) -> str:
-        lib = cls._get_registry().get_library(library_id)
-        if lib is None:
-            return ""
-        
-        if curved:
-            family = "curved_segment"
-        else:
-            family = "straight_segment"
-            
-        type_defs = lib.list_types(
-            category = "segment",
-            family = family,
-            profile = profile if profile else None,
-        )
-        if not type_defs:
-            return ""
-        return type_defs[0].id
+    # ------------------------------------------------------------------
+    # Registry-driven type selection (see freecad/HVAC/library/Library.py:
+    # HVACLibraryRegistry.select_type / matches_type / resolve_sticky_type).
+    #
+    # select_*        -- fresh automatic selection (used for explicit
+    #                     "reset to network defaults").
+    # resolve_*        -- sticky: retains a current, still-compatible,
+    #                     non-placeholder selection; otherwise selects.
+    # matches_*        -- compatibility check only, no selection.
+    # ------------------------------------------------------------------
 
     @staticmethod
-    def default_topology_type_id(topology: str) -> str:
-        mapping = {
-            "end": "end_terminal_marker",
-            "through": "through_generic",
-            "branch": "branch_generic",
-            "cross": "cross_generic",
-            "multiport": "multiport_generic",
-        }
-        return mapping.get(topology, "multiport_marker")
+    def _segment_request(
+        profile: str, curved: bool, context: dict | None = None, flex: bool = False
+    ) -> HVACTypeMatchRequest:
+        family = "curved_segment" if curved else "straight_segment"
+        if flex:
+            family += ".flex"
+        ctx = dict(context or {})
+        ctx.setdefault("profile", profile or "")
+        return HVACTypeMatchRequest(
+            category="segment", topology="generic", family=family, profile=profile or "", context=ctx
+        )
+
+    @staticmethod
+    def _junction_request(
+        topology: str, family_key: str, profile: str, connected_ports=None, context: dict | None = None
+    ) -> HVACTypeMatchRequest:
+        ctx = dict(context or {})
+        ctx.setdefault("connected_ports", list(connected_ports or []))
+        ctx.setdefault("topology", topology or "")
+        return HVACTypeMatchRequest(
+            category="junction", topology=topology or "", family=family_key or "", profile=profile or "", context=ctx
+        )
+
+    @staticmethod
+    def _is_real_model(selection) -> bool:
+        """Whether a selection found a type that is not a placeholder."""
+        type_def = getattr(selection, "type_def", None)
+        return type_def is not None and getattr(type_def.selection, "kind", "") != "placeholder"
+
+    @classmethod
+    def select_segment_type(
+        cls, library_id: str, profile: str, curved: bool = False, context: dict | None = None, flex: bool = False
+    ):
+        """
+        Fresh automatic segment-type selection (non-sticky).
+
+        `flex` (a curved route drawn as a spline, see BaseCurveIsSpline) asks
+        for a flexible duct first ("curved_segment.flex") and falls back to
+        the plain curved type when the library has none for this profile.
+        """
+        if flex and curved:
+            selection = cls._get_registry().select_type(library_id, cls._segment_request(profile, curved, context, True))
+            if cls._is_real_model(selection):
+                return selection
+        request = cls._segment_request(profile, curved, context)
+        return cls._get_registry().select_type(library_id, request)
+
+    @classmethod
+    def resolve_segment_type(
+        cls,
+        library_id: str,
+        current_type_id: str,
+        profile: str,
+        curved: bool = False,
+        context: dict | None = None,
+        flex: bool = False,
+    ):
+        """
+        Sticky segment-type resolution used by normal network sync. With
+        `flex`, see select_segment_type(); a type the user chose stays either
+        way (a flexible and a plain curved duct are compatible with both requests).
+        """
+        if flex and curved:
+            selection = cls._get_registry().resolve_sticky_type(
+                library_id, current_type_id, cls._segment_request(profile, curved, context, True)
+            )
+            if cls._is_real_model(selection):
+                return selection
+        request = cls._segment_request(profile, curved, context)
+        return cls._get_registry().resolve_sticky_type(library_id, current_type_id, request)
+
+    @classmethod
+    def select_junction_type(
+        cls, library_id: str, topology: str, family_key: str, profile: str, connected_ports=None, context: dict | None = None
+    ):
+        """Fresh automatic junction-type selection (non-sticky)."""
+        request = cls._junction_request(topology, family_key, profile, connected_ports, context)
+        return cls._get_registry().select_type(library_id, request)
+
+    @classmethod
+    def resolve_junction_type(
+        cls,
+        library_id: str,
+        current_type_id: str,
+        topology: str,
+        family_key: str,
+        profile: str,
+        connected_ports=None,
+        context: dict | None = None,
+    ):
+        """Sticky junction-type resolution used by normal network sync."""
+        request = cls._junction_request(topology, family_key, profile, connected_ports, context)
+        return cls._get_registry().resolve_sticky_type(library_id, current_type_id, request)
+
+    @classmethod
+    def default_segment_type_id(cls, library_id: str, profile: str, curved: bool = False) -> str:
+        """
+        Deprecated compatibility wrapper: prefer select_segment_type(), which
+        returns full HVACTypeSelection diagnostics instead of a bare id.
+        """
+        selection = cls.select_segment_type(library_id, profile, curved=curved)
+        return selection.type_def.id if selection.type_def else ""
+
+    @classmethod
+    def match_profile_from_ports(cls, connected_ports) -> str:
+        """
+        Derive a junction match profile from its connected ports'
+        (already-known) duct profiles:
+            all ports share one known profile -> that profile
+            multiple distinct known profiles  -> "Mixed"
+            no known profiles                 -> "" (unknown)
+        """
+        profiles = set()
+        for port in connected_ports or []:
+            profile = str((port.get("profile", "") if isinstance(port, dict) else getattr(port, "profile", "")) or "")
+            if profile:
+                profiles.add(profile)
+
+        if not profiles:
+            return ""
+        if len(profiles) == 1:
+            return next(iter(profiles))
+        return "Mixed"
 
     @classmethod
     def all_junction_type_defs(cls, library_id: str | None = None, family: str | None = None) -> list:
@@ -155,11 +260,18 @@ class HVACLibraryService:
         return lib.list_types(category="junction", family=family)
 
     @classmethod
+    def list_inline_types(cls, library_id: str | None = None, topology: str | None = None, profile: str | None = None) -> list:
+        """selection.kind=="inline" junction types, for the Add Inline Component UI."""
+        reg = cls._get_registry()
+        lib = reg.get_library(library_id) if library_id else reg.get_active_library()
+        if lib is None:
+            return []
+        return lib.list_inline_types(topology=topology, profile=profile)
+
+    @classmethod
     def all_type_defs_for_object(cls, obj) -> list:
         reg = cls._get_registry()
         library_id = getattr(obj, "LibraryId", "")
-        topology = getattr(obj, "Topology", "")
-        profile = getattr(obj, "Profile", "")
 
         lib = reg.get_library(library_id) if library_id else reg.get_active_library()
         if lib is None:
@@ -168,11 +280,29 @@ class HVACLibraryService:
         if isDuctSegment(obj):
             return lib.list_types(category="segment")
 
-        if isDuctJunction(obj):
+        if isDuctComponent(obj):
+            # Topology is a junction-level concept -- read it off the
+            # parent. A component's own Profile can collapse several
+            # distinct connected-port profiles into a single "Mixed" label
+            # (see match_profile_from_ports), which can never correctly
+            # filter a type by plain membership (no type declares a
+            # literal "Mixed" profile) -- pass the parent's own
+            # connected_ports instead, so list_types() checks each port's
+            # real profile individually, the same way select_type() does.
+            parent_name = getattr(obj, "ParentJunctionName", "")
+            parent = obj.Document.getObject(parent_name) if parent_name else None
+            topology = getattr(parent, "Topology", "") if parent is not None else ""
+            connected_ports = None
+            if parent is not None:
+                try:
+                    analysis = json.loads(getattr(parent, "AnalysisJson", "") or "{}")
+                except Exception:
+                    analysis = {}
+                connected_ports = list(analysis.get("connected_ports", []) or [])
             return lib.list_types(
                 category="junction",
                 topology=topology or None,
-                profile=profile or None,
+                connected_ports=connected_ports,
             )
 
         return []
@@ -267,7 +397,7 @@ def selectedGeometryObjects():
     if objs:
         filtered = [
             o for o in objs
-            if isDuctSegment(o) or isDuctJunction(o)
+            if isDuctSegment(o) or isDuctJunction(o) or isDuctComponent(o)
         ]
         return filtered
     return None
@@ -295,7 +425,11 @@ def isDuctSegment(obj):
 def isDuctJunction(obj):
     from ..core.Junction import DuctJunction
     return bool(obj) and hasattr(obj, "Proxy") and isinstance(obj.Proxy, DuctJunction)
-    
+
+def isDuctComponent(obj):
+    from ..core.Component import DuctComponent
+    return bool(obj) and hasattr(obj, "Proxy") and isinstance(obj.Proxy, DuctComponent)
+
 def isDuctJunctionVirtual(obj):
     from ..core.Junction import DuctJunctionVirtual
     return bool(obj) and hasattr(obj, "Proxy") and isinstance(obj.Proxy, DuctJunctionVirtual)
@@ -380,6 +514,23 @@ def BaseCurveKind(base_obj_name, local_index):
             return EdgeKind(base_obj.Shape.Edges[local_index])
     return "Unknown"
 
+def BaseCurveIsSpline(base_obj_name, local_index):
+    """
+    Whether a base edge is a spline (B-spline or Bezier): what the "New
+    Curved" tool draws. Such a route defaults to a flexible duct; an arc
+    stays a plain curved duct.
+    """
+    base_obj = get_obj_by_name(base_obj_name)
+    curve = None
+    if base_obj and isSketch(base_obj):
+        if len(base_obj.Geometry) > local_index:
+            curve = base_obj.Geometry[local_index]
+    elif base_obj and isWire(base_obj):
+        if len(base_obj.Shape.Edges) > local_index:
+            curve = getattr(base_obj.Shape.Edges[local_index], "Curve", None)
+    return bool(curve) and GeomType(curve) in ("Part::GeomBSplineCurve", "Part::GeomBezierCurve")
+
+
 def get_obj_name(obj):
     # Get object name from FreeCAD object
     return getattr(obj, "Name", "")
@@ -392,23 +543,53 @@ def get_obj_by_name(name, doc=None):
     return obj
     
 def makeLineKey(obj_name, source_index):
-    """Make a unique line key from an object name and source index."""
+    """
+    The stable key of one base-geometry edge, the same before and after a
+    save and reload (ROADMAP 6.4 a):
+
+    - a sketch edge: "<sketch Name>:g<geometry id>". The sketch's own
+      geometry id is saved with the document and stays with its geometry
+      when other geometry is deleted and the indices shift; new geometry
+      gets a new id. (A geometry Tag would not do: tags are regenerated on
+      every reload.)
+    - any other edge (a Draft wire, a Part shape): "<object Name>:e<index>".
+      Its points are saved, so the index only changes when the shape does.
+    """
     source_index = int(source_index)
-    obj = FreeCAD.ActiveDocument.getObject(obj_name)
-    if (obj and len(getattr(obj, "Geometry", [])) > source_index and \
-                hasattr(obj.Geometry[source_index], "Tag") and 
-                obj.Geometry[source_index].Tag):
-        if isSketch(obj):
-            return obj.Geometry[source_index].Tag
-        elif isWire(obj):
-            return "{}_{}".format(getattr(obj, "Name", ""), 
-                                getattr(obj.Geometry[source_index], "Tag", ""))
-    return '{}_{}'.format(obj_name, source_index)
+    obj = FreeCAD.ActiveDocument.getObject(obj_name) if FreeCAD.ActiveDocument else None
+    if obj is not None and isSketch(obj) and hasattr(obj, "getGeometryId"):
+        try:
+            return "{}:g{}".format(obj_name, int(obj.getGeometryId(source_index)))
+        except Exception:
+            pass
+    return "{}:e{}".format(obj_name, source_index)
 
 
 #------------------------------------------------------------------------------
 # Object data manipulation
 #------------------------------------------------------------------------------
+
+def label_matches(current, wanted):
+    """
+    True when an object's Label already is `wanted`, allowing for the digits
+    FreeCAD appends to keep labels unique ("Tee [Primary]" -> "Tee [Primary]015").
+    """
+    current, wanted = str(current), str(wanted)
+    return current == wanted or (current.startswith(wanted) and current[len(wanted) :].isdigit())
+
+
+def set_label(obj, wanted):
+    """
+    Give `obj` the label `wanted` unless it has it already (see
+    label_matches); returns True when it was written. A sync must not write
+    a label it already has: FreeCAD renames duplicates, so a plain
+    comparison never holds, and every write marks the object for recompute.
+    """
+    if label_matches(obj.Label, wanted):
+        return False
+    obj.Label = wanted
+    return True
+
 
 def vec_quant(p):
     """
@@ -492,7 +673,126 @@ def get_section_extents(section_params):
         return d, d
     # fallback
     return 0.0, 0.0
-    
+
+def profile_area(profile, section_params):
+    """
+    Return a duct cross-section's area from its profile-dependent section
+    parameters, or None when the profile/parameters aren't known well
+    enough to compute one (e.g. a "Generic"/custom profile) -- used by
+    NetworkParser to derive flow_class/derived_values from base-segment
+    geometry, never from the hydraulic solver.
+    """
+    profile = str(profile or "")
+    params = section_params or {}
+
+    if profile == "Circular":
+        d = float(params.get("Diameter", 0.0) or 0.0)
+        if d <= 0.0:
+            return None
+        return math.pi / 4.0 * d * d
+
+    if profile in ("Rectangular", "Oval"):
+        w = float(params.get("Width", 0.0) or 0.0)
+        h = float(params.get("Height", 0.0) or 0.0)
+        if w <= 0.0 or h <= 0.0:
+            return None
+        if profile == "Rectangular":
+            return w * h
+        # Oval "stadium" section: a rectangle capped by two semicircles,
+        # using the shorter side as the semicircle diameter.
+        major, minor = (w, h) if w >= h else (h, w)
+        return (major - minor) * minor + math.pi / 4.0 * minor * minor
+
+    return None
+
+
+def _circular_profile_signature(params):
+    return (round(float(params.get("Diameter", 0.0) or 0.0), 6),)
+
+
+def _rect_oval_profile_signature(params):
+    return (
+        round(float(params.get("Width", 0.0) or 0.0), 6),
+        round(float(params.get("Height", 0.0) or 0.0), 6),
+    )
+
+
+def _generic_profile_signature(params):
+    # No fixed Width/Height/Diameter schema assumed -- every numeric
+    # section parameter, sorted by name so the result is deterministic.
+    return tuple(
+        (k, round(float(v), 6))
+        for k, v in sorted((params or {}).items())
+        if isinstance(v, (int, float)) and not isinstance(v, bool)
+    )
+
+
+# Profile name -> builder(params) -> tuple of canonical, tolerance-rounded
+# dimensions. A future custom-profile implementation registers its own
+# entry here instead of falling into the generic (sorted numeric params)
+# fallback -- see profile_signature().
+PROFILE_SIGNATURE_BUILDERS = {
+    "Circular": _circular_profile_signature,
+    "Rectangular": _rect_oval_profile_signature,
+    "Oval": _rect_oval_profile_signature,
+}
+
+
+def profile_signature(profile, section_params):
+    """
+    Return a canonical, comparable signature for a duct cross-section --
+    used to decide whether two ports share "the same section" (e.g.
+    NetworkParser's through.straight/offset vs. through.transition split)
+    without relying on area equality alone, since two differently-shaped
+    sections can share an area. Always starts with the profile name, so
+    two ports of different profiles never compare equal regardless of
+    numeric coincidence.
+    """
+    profile = str(profile or "")
+    params = dict(section_params or {})
+    builder = PROFILE_SIGNATURE_BUILDERS.get(profile, _generic_profile_signature)
+    return (profile,) + tuple(builder(params))
+
+
+def translated_port_position(junction_obj, port):
+    """
+    A connected_ports entry's own "position" is the raw, pre-fitting
+    shared anchor point every port on a junction shares before any
+    geometry backend independently pushes its own port outward (see
+    core/Junction.py's composeComponents() docstring). junction_obj's own
+    ConnectionLengthsJson (kept current every sync by composeComponents()/
+    aggregateConnectionLengths()) holds each real edge's current total
+    push-out length, so this translates the port that far along its own
+    direction to get where it actually, physically ends -- used wherever
+    a port needs to be drawn/highlighted at its real location rather than
+    the shared anchor (e.g. TaskPanelEditInlineComponents' port highlight,
+    TerminalFlowRateObserver's outlet plane).
+
+    Returns a copy of port with "position" replaced; the input is never
+    mutated. Falls back to returning an unchanged copy if position/
+    direction can't be resolved.
+    """
+    edge_key = port.get("edge_key", "")
+    try:
+        lengths = json.loads(getattr(junction_obj, "ConnectionLengthsJson", "") or "[]")
+    except Exception:
+        lengths = []
+    length = 0.0
+    for item in lengths:
+        if item.get("edge_key") == edge_key:
+            length = float(item.get("length", 0.0) or 0.0)
+            break
+
+    position = vec(port.get("position"))
+    direction = vec(port.get("direction"))
+    if position is None or direction is None:
+        return dict(port)
+
+    translated = dict(port)
+    translated["position"] = vec_to_xyz(position + direction * length)
+    return translated
+
+
 def parse_edge_info(edge):
     """
     Parse edge information into a dictionary.
@@ -623,6 +923,21 @@ def get_default_library_search_paths():
     return [
         get_file_path("libraries"),
     ]
+
+def get_materials_base_path():
+    """
+    Path to this addon's shipped native FreeCAD material cards (.FCMat) --
+    see utils/materials.py. Resolved (no "..") before being registered as a
+    Material subsystem ModuleDir, since that value is echoed back verbatim
+    in a few places (e.g. Materials.Material.LibraryRoot) and an unresolved
+    path is needlessly harder to read there.
+    """
+    return os.path.realpath(get_file_path(os.path.join("Resources", "Materials")))
+
+
+def get_material_models_base_path():
+    """Path to the native FreeCAD material models shipped by this addon."""
+    return os.path.realpath(get_file_path(os.path.join("Resources", "Models")))
 
 
 #------------------------------------------------------------------------------

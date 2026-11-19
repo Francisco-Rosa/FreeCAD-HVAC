@@ -1,7 +1,22 @@
 {
   "id": "smacna",
   "label": "SMACNA",
+  "requires_api": {"geometry": 4, "loss": 1},
   "generators_package": "freecad.HVAC.libraries.smacna.generators",
+  "default_construction": {
+    "layers": [
+      {
+        "id": "shape",
+        "roles": ["flow_surface", "structural_shell"],
+        "default_material_role": "flow_surface"
+      },
+      {
+        "id": "insulation",
+        "roles": ["thermal_insulation"],
+        "default_material_role": "thermal_insulation"
+      }
+    ]
+  },
   "type_roots": [
     "types/segments",
     "types/junctions"

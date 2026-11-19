@@ -1,0 +1,90 @@
+{
+  "id": "through_offset_radiussed",
+  "label": "Offset - Radiussed",
+  "category": "junction",
+  "topology": "through",
+  "family": [
+    "through.offset"
+  ],
+  "profiles": [
+    "Circular",
+    "Rectangular",
+    "Oval"
+  ],
+  "selection": {
+    "kind": "model",
+    "priority": 40
+  },
+  "constraints": {
+    "degree": 2
+  },
+  "properties": [
+    {
+      "name": "Thickness",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Wall thickness. 0 builds the air space as a solid body instead of a hollow shell",
+      "default": 1.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "OffsetLength",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Length of the offset along the duct axis. 0 uses the duct size, or longer where the arcs need it to fit at OffsetRadius",
+      "default": 0.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "OffsetRadius",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Centreline radius of the two arcs. 0 uses the duct size",
+      "default": 50.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "OffsetAngle",
+      "prop_type": "App::PropertyAngle",
+      "group": "Derived",
+      "description": "Deflection of each corner from the duct axis (read-only, set on recompute)",
+      "default": 0.0,
+      "editor_mode": 1
+    },
+    {
+      "name": "BodyLength",
+      "prop_type": "App::PropertyLength",
+      "group": "Derived",
+      "description": "Axial length the fitting was built with (read-only, set on recompute)",
+      "default": 0.0,
+      "editor_mode": 1
+    },
+    {
+      "name": "ActualRadius",
+      "prop_type": "App::PropertyLength",
+      "group": "Derived",
+      "description": "Arc radius actually built: OffsetRadius reduced to what fits (read-only, set on recompute)",
+      "default": 0.0,
+      "editor_mode": 1
+    }
+  ],
+  "geometry": {
+    "backend": "generator",
+    "module": "shared:offsets",
+    "function": "build_offset_radiussed"
+  },
+  "connection_lengths": {
+    "module": "shared:offsets",
+    "function": "measure_offset_radiussed"
+  },
+  "loss": {
+    "module": "shared:losses",
+    "function": "loss_offset_generic"
+  }
+}

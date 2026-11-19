@@ -1,0 +1,203 @@
+{
+  "id": "cross_double_wye_mitered",
+  "label": "Double Wye - Mitered",
+  "category": "junction",
+  "topology": "cross",
+  "family": [
+    "cross.double_wye",
+    "cross.double_wye.3d"
+  ],
+  "profiles": [
+    "Circular",
+    "Rectangular",
+    "Oval"
+  ],
+  "selection": {
+    "kind": "model",
+    "priority": 60
+  },
+  "constraints": {
+    "degree": 4
+  },
+  "properties": [
+    {
+      "name": "Thickness",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Sheet metal thickness. 0 builds the air space as a solid body instead of a hollow shell",
+      "default": 0.8,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "InsulationThickness",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Insulation thickness wrapped around the outside of the fitting; 0 disables insulation",
+      "default": 0.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "TrimRunA",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Trim length for run port A, beyond the fitting's own body",
+      "default": 100.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "TrimRunB",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Trim length for run port B, beyond the fitting's own body",
+      "default": 100.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "TrimBranchA",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Trim length for branch port A, beyond the fitting's own body",
+      "default": 100.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "TrimBranchB",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Trim length for branch port B, beyond the fitting's own body",
+      "default": 100.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "BranchRadius",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Centreline radius of each branch bend. 0 uses the branch size",
+      "default": 0.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "NumberOfCuts",
+      "prop_type": "App::PropertyInteger",
+      "group": "Dimensions",
+      "description": "Number of mitre joints in each branch bend",
+      "default": 2,
+      "validation": {
+        "minimum": 1
+      }
+    },
+    {
+      "name": "FlangeHeight",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Height of the transverse flange at each duct connection",
+      "default": 25.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "FlangeThickness",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Thickness of the transverse flange; 0 draws no flanges",
+      "default": 1.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "ShowFlangeRunA",
+      "prop_type": "App::PropertyBool",
+      "group": "Options",
+      "description": "Include the flange at run port A",
+      "default": true
+    },
+    {
+      "name": "ShowFlangeRunB",
+      "prop_type": "App::PropertyBool",
+      "group": "Options",
+      "description": "Include the flange at run port B",
+      "default": true
+    },
+    {
+      "name": "ShowFlangeBranchA",
+      "prop_type": "App::PropertyBool",
+      "group": "Options",
+      "description": "Include the flange at branch A",
+      "default": true
+    },
+    {
+      "name": "ShowFlangeBranchB",
+      "prop_type": "App::PropertyBool",
+      "group": "Options",
+      "description": "Include the flange at branch B",
+      "default": true
+    }
+  ],
+  "construction": {
+    "layers": [
+      {
+        "id": "casing",
+        "roles": [
+          "flow_surface",
+          "structural_shell"
+        ],
+        "default_material_role": "structural_shell",
+        "thickness_property": "Thickness"
+      },
+      {
+        "id": "insulation",
+        "roles": [
+          "thermal_insulation"
+        ],
+        "default_material_role": "thermal_insulation",
+        "thickness_property": "InsulationThickness"
+      }
+    ],
+    "features": [
+      {
+        "id": "transverse_flange",
+        "role": "transverse_joint",
+        "host_layer": "casing",
+        "module": "shared:features",
+        "generator": "transverse_flange",
+        "parameters": [
+          "FlangeHeight",
+          "FlangeThickness",
+          "ShowFlangeRunA",
+          "ShowFlangeRunB",
+          "ShowFlangeBranchA",
+          "ShowFlangeBranchB"
+        ]
+      }
+    ]
+  },
+  "geometry": {
+    "backend": "generator",
+    "module": "shared:crosses",
+    "function": "build_double_wye_mitered"
+  },
+  "connection_lengths": {
+    "module": "shared:crosses",
+    "function": "measure_double_wye_mitered"
+  },
+  "loss": {
+    "module": "shared:losses",
+    "function": "loss_cross_generic"
+  }
+}

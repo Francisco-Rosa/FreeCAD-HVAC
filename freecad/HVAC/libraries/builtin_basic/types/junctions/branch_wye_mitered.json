@@ -1,0 +1,130 @@
+{
+  "id": "branch_wye_mitered",
+  "label": "Wye - Mitered",
+  "category": "junction",
+  "topology": "branch",
+  "family": [
+    "branch.wye",
+    "branch.wye.3d",
+    "branch.tee.bullhead",
+    "branch.tee.3d.bullhead"
+  ],
+  "profiles": [
+    "Circular",
+    "Rectangular",
+    "Oval"
+  ],
+  "selection": {
+    "kind": "model",
+    "priority": 18
+  },
+  "constraints": {
+    "degree": 3,
+    "qualifiers": {
+      "common_leg": {
+        "enum": [
+          "branch"
+        ]
+      }
+    }
+  },
+  "properties": [
+    {
+      "name": "Thickness",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Wall thickness. 0 builds the air space as a solid body instead of a hollow shell",
+      "default": 1.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "TrimMain",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Additional trim beyond the intrinsic body on the common/main leg",
+      "default": 100.0
+    },
+    {
+      "name": "TrimBranchA",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Additional trim beyond the intrinsic body on branch A",
+      "default": 100.0
+    },
+    {
+      "name": "TrimBranchB",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Additional trim beyond the intrinsic body on branch B",
+      "default": 100.0
+    },
+    {
+      "name": "BranchRadius",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Reference centerline radius used to position the mitered branch bends (a minimum: legs at a narrow angle get a larger radius so they part)",
+      "default": 150.0
+    },
+    {
+      "name": "NumberOfCuts",
+      "prop_type": "App::PropertyInteger",
+      "group": "Dimensions",
+      "description": "Number of internal mitre joints in each branch bend",
+      "default": 2,
+      "validation": {"minimum": 1}
+    }
+  ],
+  "geometry": {
+    "backend": "generator",
+    "module": "shared:wyes",
+    "function": "build_wye_mitered"
+  },
+  "connection_lengths": {
+    "module": "shared:wyes",
+    "function": "measure_wye_mitered"
+  },
+  "loss": {
+    "module": "shared:losses",
+    "function": "loss_wye_generic",
+    "variants": [
+      {
+        "constraints": {
+          "flow_class": {
+            "enum": [
+              "diverging"
+            ]
+          },
+          "qualifiers": {
+            "common_leg": {
+              "enum": [
+                "branch"
+              ]
+            }
+          }
+        },
+        "module": "shared:losses",
+        "function": "loss_branch_diverging_branch"
+      },
+      {
+        "constraints": {
+          "flow_class": {
+            "enum": [
+              "converging"
+            ]
+          },
+          "qualifiers": {
+            "common_leg": {
+              "enum": [
+                "branch"
+              ]
+            }
+          }
+        },
+        "module": "shared:losses",
+        "function": "loss_branch_converging_branch"
+      }
+    ]
+  }
+}

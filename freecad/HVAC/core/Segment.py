@@ -30,6 +30,11 @@ from PySide.QtCore import QT_TRANSLATE_NOOP
 translate = FreeCAD.Qt.translate
 
 from ..utils import hvaclib
+from . import _type_schema
+from . import _construction_schema
+from . import _geometry_apply
+from . import _component_appearance
+from . import Construction as _construction
 
 
 class DuctSegment:
@@ -55,6 +60,7 @@ class DuctSegment:
         self.Object = obj
         self._allow_delete = False
         self.setProperties(obj)
+        _construction_schema.normalize_material_properties(obj)
 
     def dumps(self):
         return None
@@ -62,7 +68,24 @@ class DuctSegment:
     def loads(self, state):
         pass
 
+    # Segment properties outside the type schema that change its size or
+    # position, and so the fittings at its ends (see onChanged).
+    _SYNC_ON_EDIT = ("Diameter", "Width", "Height", "Attachment", "Offset", "ProfileXAxis")
+
+    def onChanged(self, obj, prop):
+        # A size or type parameter edited in the property editor: the network
+        # re-syncs so the fittings at both ends follow the new duct.
+        _type_schema.request_sync_after_edit(obj, prop, self._SYNC_ON_EDIT)
+
     def execute(self, obj):
+        # Values this rebuild writes back are not user edits (see onChanged).
+        self._executing = True
+        try:
+            self._execute(obj)
+        finally:
+            self._executing = False
+
+    def _execute(self, obj):
         edge = self.resolveSourceEdge()
 
         start_point = getattr(obj, "EffectiveStartPoint", None) or getattr(obj, "StartPoint", None)
@@ -86,13 +109,8 @@ class DuctSegment:
                     "Unknown segment type '{}' in library '{}'".format(type_id, library_id)
                 )
     
-            props = {}
-            for pdef in getattr(type_def, "properties", []) or []:
-                if hasattr(obj, pdef.name):
-                    props[pdef.name] = getattr(obj, pdef.name)
-                else:
-                    props[pdef.name] = getattr(pdef, "default", None)
-                    
+            params = reg.resolve_params(type_def, obj=obj)
+
             profile = getattr(obj, "Profile", "")
             attachment = getattr(obj, "Attachment", "Center")
             user_offset = getattr(obj, "Offset", FreeCAD.Vector(0, 0, 0))
@@ -109,12 +127,12 @@ class DuctSegment:
                     trim_start=getattr(obj, "TrimStart", 0.0),
                     trim_end=getattr(obj, "TrimEnd", 0.0),
                     profile=profile,
-                    section_params=props,
+                    section_params=params,
                     attachment=attachment,
                     user_offset=user_offset,
                     profile_x_axis=profile_x_axis,
                 )
-        
+
                 if routed_edge is not None:
                     path_edge = routed_edge
                     path_kind = hvaclib.EdgeKind(routed_edge)
@@ -124,12 +142,40 @@ class DuctSegment:
                     end_dir = red
                 else:
                     path_kind = hvaclib.EdgeKind(edge)
-    
+            elif start_dir is not None:
+                # No routable source edge (e.g. a segment defined directly by
+                # start/end points, no sketch geometry) -- still apply the
+                # same Attachment/Offset shift an edge-based segment gets
+                # from makeTrimmedShiftedEdge above, so a basic/straight duct
+                # honors them too instead of only ever running through its
+                # raw, unshifted centerline.
+                shift = hvaclib.compute_port_position(
+                    base_point=FreeCAD.Vector(0, 0, 0),
+                    direction=start_dir,
+                    section_params=params,
+                    attachment=attachment,
+                    user_offset_vec=FreeCAD.Vector(user_offset),
+                    profile_x_axis=profile_x_axis,
+                )
+                start_point = start_point + shift
+                end_point = end_point + shift
+
+            # EffectiveStartPoint/EffectiveEndPoint are the final, placement-
+            # inclusive points actually used to build the duct solid above --
+            # publish them back so anything reading these two properties
+            # (e.g. the airflow-result overlay in ui/Observer.py) sees the
+            # real geometry, not just the pre-shift trim points updateMetadata()
+            # first seeded them with.
+            if getattr(obj, "EffectiveStartPoint", None) != start_point:
+                obj.EffectiveStartPoint = start_point
+            if getattr(obj, "EffectiveEndPoint", None) != end_point:
+                obj.EffectiveEndPoint = end_point
+
             context = {
                 "obj": obj,
                 "start_point": start_point,
                 "end_point": end_point,
-                "properties": props,
+                "properties": params,
                 "family": getattr(obj, "Family", ""),
                 "profile": getattr(obj, "Profile", ""),
                 "profile_x_axis": getattr(obj, "ProfileXAxis", None),
@@ -144,16 +190,17 @@ class DuctSegment:
                 "end_direction": end_dir,
             }
     
-            result = reg.call_generator(library_id, type_def, context)
-            shape = result.get("shape", None)
-            if shape is not None:
-                obj.Shape = shape
-    
+            result = reg.build_geometry(library_id, type_def, context)
+            _geometry_apply.apply_geometry_result(obj, result)
+            _geometry_apply.apply_computed_properties(obj, type_def, result)
+            # Drop-downs offer only the choices that suit this geometry.
+            _geometry_apply.apply_property_choices(obj, type_def, result)
+
             # Optional trim plane overrides from generator
-            if "start_trim_plane_json" in result:
-                obj.StartTrimPlaneJson = result["start_trim_plane_json"] or ""
-            if "end_trim_plane_json" in result:
-                obj.EndTrimPlaneJson = result["end_trim_plane_json"] or ""
+            if result.start_trim_plane_json is not None:
+                obj.StartTrimPlaneJson = result.start_trim_plane_json or ""
+            if result.end_trim_plane_json is not None:
+                obj.EndTrimPlaneJson = result.end_trim_plane_json or ""
     
         except Exception as e:
             FreeCAD.Console.PrintWarning(
@@ -164,6 +211,8 @@ class DuctSegment:
     def setProperties(self, obj):
         self._addProperty(obj, "App::PropertyString", "OwnerNetworkName", "HVAC", "Owning duct network")
         self._addProperty(obj, "App::PropertyString", "SegmentKey", "HVAC", "Runtime segment key")
+        # Prop_NoRecompute -- documentation only, never affects geometry.
+        self._addProperty(obj, "App::PropertyString", "Number", "HVAC", "Documentation number assigned by Renumber Network (e.g. 'D012'), blank until first renumbered", attr=16)
         self._addProperty(obj, "App::PropertyString", "SourceObjectName", "HVAC", "Internal source object name")
         self._addProperty(obj, "App::PropertyInteger", "SourceIndex", "HVAC", "Zero-based line segment index in the source object")
         self._addProperty(obj, "App::PropertyInteger", "StartNode", "HVAC", "Graph start node id")
@@ -174,8 +223,8 @@ class DuctSegment:
         
         self._addProperty(obj, "App::PropertyLength", "TrimStart", "HVAC", "Trim length at start node")
         self._addProperty(obj, "App::PropertyLength", "TrimEnd", "HVAC", "Trim length at end node")
-        self._addProperty(obj, "App::PropertyVector", "EffectiveStartPoint", "HVAC", "Trimmed segment start point")
-        self._addProperty(obj, "App::PropertyVector", "EffectiveEndPoint", "HVAC", "Trimmed segment end point")
+        self._addProperty(obj, "App::PropertyVector", "EffectiveStartPoint", "HVAC", "Trimmed segment start point, including the Attachment/Offset shift")
+        self._addProperty(obj, "App::PropertyVector", "EffectiveEndPoint", "HVAC", "Trimmed segment end point, including the Attachment/Offset shift")
         self._addProperty(obj, "App::PropertyLength", "EffectiveLength", "HVAC", "Trimmed centerline length")
         self._addProperty(obj, "App::PropertyVector", "StartDirection", "HVAC", "Unit tangent direction at start")
         self._addProperty(obj, "App::PropertyVector", "EndDirection", "HVAC", "Unit tangent direction at end")
@@ -188,7 +237,10 @@ class DuctSegment:
         self._addProperty(obj, "App::PropertyString", "TypeId", "HVAC", "Selected segment type id")
         self._addProperty(obj, "App::PropertyString", "Profile", "HVAC", "Segment profile")
         self._addProperty(obj, "App::PropertyString", "AnalysisJson", "HVAC", "Serialized segment analysis")
-        
+        self._addProperty(obj, "App::PropertyStringList", "TypeSchemaPropertyNames", "HVAC", "Internal: property names added by the last-applied type schema (for stale cleanup)")
+        self._addProperty(obj, "App::PropertyStringList", "ConstructionLayerIds", "HVAC", "Internal: construction layer ids of the last-applied type (see core/_construction_schema.py)")
+        self._addProperty(obj, "App::PropertyStringList", "ConstructionFeatureIds", "HVAC", "Internal: construction feature ids of the last-applied type (see core/_construction_schema.py)")
+
         self._addProperty(obj, "App::PropertyEnumeration", "Attachment", "Placement", "Section attachment relative to route")
         self._addProperty(obj, "App::PropertyVector", "Offset", "Placement", "Global user offset")
         self._addProperty(obj, "App::PropertyVector", "ProfileXAxis", "Placement", "Preferred local X axis for section/profile orientation; zero vector = auto")
@@ -198,10 +250,56 @@ class DuctSegment:
         self._addProperty(obj, "App::PropertyLength", "Diameter", "Dimensions", "Circular duct diameter")
         self._addProperty(obj, "App::PropertyLength", "Width", "Dimensions", "Rectangular duct width")
         self._addProperty(obj, "App::PropertyLength", "Height", "Dimensions", "Rectangular duct height")
-        self._addProperty(obj, "App::PropertyLength", "InsulationThickness", "Parameters", "Insulation thickness")
-        self._addProperty(obj, "App::PropertyLength", "Roughness", "Parameters", "Wall roughness")
-        self._addProperty(obj, "App::PropertyFloat", "FlowRate", "Parameters", "Design flow rate")
-        self._addProperty(obj, "App::PropertyFloat", "Velocity", "Parameters", "Design air velocity")
+        self._addProperty(obj, "App::PropertyLength", "Roughness", "Parameters", "Legacy document value; airflow roughness now comes from the flow-surface construction material")
+        self._addProperty(obj, "App::PropertyFloat", "Velocity", "Parameters", "Target velocity (m/s) override for duct sizing on this segment only; 0 uses the network's SizingMethod/TargetVelocity")
+
+        # Per-construction-layer Layer_<id>_Shape/Layer_<id>_Material
+        # properties are added/removed by applyTypeSchema() (via
+        # core/_construction_schema.py) to match the selected type's own
+        # declared construction -- not fixed properties here, since the
+        # number and names of layers are entirely library-defined. Shape
+        # itself is only the aggregate compound of those layers, derived
+        # each execute() by core/_geometry_apply.py; never the other way
+        # around.
+
+        if "RectangularSizingMode" not in obj.PropertiesList:
+            obj.addProperty(
+                "App::PropertyEnumeration",
+                "RectangularSizingMode",
+                "Parameters",
+                "Per-segment override of the network's RectangularSizingMode for duct sizing; "
+                "UseNetworkDefault defers to the network setting"
+            )
+            obj.RectangularSizingMode = ["UseNetworkDefault", "FixedAspectRatio", "FixedHeight", "FixedWidth"]
+            obj.RectangularSizingMode = "UseNetworkDefault"
+
+        self._addProperty(
+            obj, "App::PropertyFloat", "TargetAspectRatio", "Parameters",
+            "Target Width:Height ratio override (used when RectangularSizingMode resolves to "
+            "FixedAspectRatio); 0 uses the network's TargetAspectRatio"
+        )
+
+        self._addProperty(obj, "App::PropertyFloat", "CalcFlowRate", "Airflow", "Computed flow rate (L/s)")
+        self._addProperty(obj, "App::PropertyFloat", "CalcVelocity", "Airflow", "Computed air velocity (m/s)")
+        self._addProperty(obj, "App::PropertyFloat", "CalcReynoldsNumber", "Airflow", "Computed Reynolds number")
+        self._addProperty(obj, "App::PropertyFloat", "CalcFrictionLoss", "Airflow", "Computed straight-duct friction loss (Pa)")
+        self._addProperty(obj, "App::PropertyFloat", "CalcFittingLoss", "Airflow", "Fitting/dynamic loss attributed to this segment from its upstream junction (Pa)")
+        self._addProperty(obj, "App::PropertyFloat", "CalcTotalLoss", "Airflow", "CalcFrictionLoss + CalcFittingLoss (Pa)")
+        self._addProperty(obj, "App::PropertyFloat", "CalcCumulativePressure", "Airflow", "Static pressure (Pa) at this segment's downstream end, relative to the sub-network's balancing terminal")
+
+        for prop in (
+            "CalcFlowRate",
+            "CalcVelocity",
+            "CalcReynoldsNumber",
+            "CalcFrictionLoss",
+            "CalcFittingLoss",
+            "CalcTotalLoss",
+            "CalcCumulativePressure",
+        ):
+            try:
+                obj.setEditorMode(prop, 1)
+            except Exception:
+                pass
 
         for prop in (
             "TrimStart",
@@ -229,24 +327,40 @@ class DuctSegment:
             obj.AnalysisJson = "{}"
 
         for prop in (
+            "StartPoint",
+            "EndPoint",
+            "CenterlineLength",
+            "Family",
+            "Profile",
+        ):
+            try:
+                obj.setEditorMode(prop, 1)
+            except Exception:
+                pass
+
+        # Internal bookkeeping/JSON blobs -- kept (never removed) for the
+        # addon's own use, just hidden from the property editor since a
+        # user never needs to read or edit them directly.
+        for prop in (
             "OwnerNetworkName",
             "SegmentKey",
             "SourceObjectName",
             "SourceIndex",
             "StartNode",
             "EndNode",
-            "StartPoint",
-            "EndPoint",
-            "CenterlineLength",
-            "Family",
-            "Profile",
+            "PathKind",
             "AnalysisJson",
+            "TypeSchemaPropertyNames",
+            "ConstructionLayerIds",
+            "ConstructionFeatureIds",
+            "StartTrimPlaneJson",
+            "EndTrimPlaneJson",
         ):
             try:
-                obj.setEditorMode(prop, 1)
+                obj.setEditorMode(prop, 2)
             except Exception:
                 pass
-                
+
     def applyOwnerDefaults(self, obj, owner):
         if owner is None:
             return
@@ -271,62 +385,41 @@ class DuctSegment:
     
         if not getattr(obj, "Height", 0):
             obj.Height = float(getattr(owner, "DefaultHeight", 100.0))
-    
+
         if not getattr(obj, "ProfileXAxis", None):
             obj.ProfileXAxis = FreeCAD.Vector(0, 0, 0)
-                
+
+        # Construction layer materials can't be defaulted here yet -- which
+        # layers exist depends on the type this segment hasn't been given
+        # yet (TypeId is still unset at construction time). applyTypeSchema()
+        # applies layer material defaults itself, every time the
+        # construction schema is (re)established, not just once here.
+
     def applyTypeSchema(self):
         obj = self.Object
-        reg = hvaclib.HVACLibraryService.get_hvac_library_registry()
-        lib_id = getattr(obj, "LibraryId", "")
+        # Diameter/Width/Height are permanent core properties (see
+        # setProperties) shared across every segment type regardless of
+        # whether the active type's schema declares them -- never removed
+        # by the shared helper; their editor mode alone tracks relevance. A
+        # type-def (e.g. circular_straight) may still dual-declare one of
+        # these in its own `properties` list purely to pull its current
+        # value into build_geometry's `params`, exactly like Diameter
+        # already does.
+        library_id = getattr(obj, "LibraryId", "")
         type_id = getattr(obj, "TypeId", "")
-        if not lib_id or not type_id:
-            return False
-    
-        type_def = reg.resolve_type(lib_id, type_id)
-        if type_def is None:
-            return False
-    
-        changed = False
-    
-        active_prop_names = set()
-        for pdef in getattr(type_def, "properties", []) or []:
-            active_prop_names.add(pdef.name)
-            prop_added = False
-    
-            if pdef.name not in obj.PropertiesList:
-                obj.addProperty(pdef.prop_type, pdef.name, pdef.group, pdef.description)
-                changed = True
-                prop_added = True
-    
-            try:
-                current = getattr(obj, pdef.name)
-            except Exception:
-                current = None
-    
-            if getattr(pdef, "default", None) is not None:
-                should_apply_default = prop_added or current in (None, "")
-                if should_apply_default:
-                    try:
-                        setattr(obj, pdef.name, pdef.default)
-                        changed = True
-                    except Exception:
-                        pass
-    
-            try:
-                obj.setEditorMode(pdef.name, 0)
-            except Exception:
-                pass
-    
-        for prop in ("Diameter", "Width", "Height"):
-            if prop in obj.PropertiesList:
-                try:
-                    obj.setEditorMode(prop, 0 if prop in active_prop_names else 1)
-                except Exception:
-                    pass
-    
+        changed = _type_schema.apply_type_schema(
+            obj, library_id, type_id,
+            protected_names=("Diameter", "Width", "Height"),
+        )
+        changed = _construction_schema.apply_construction_schema(obj, library_id, type_id) or changed
+        _construction_schema.apply_default_layer_materials(obj, library_id, type_id)
+        changed = _construction_schema.apply_construction_features_schema(obj, library_id, type_id) or changed
         return changed
-    
+
+    def getConstruction(self):
+        """This segment's own construction layers, queryable by semantic role -- see core/Construction.py."""
+        return _construction.construction_for(self.Object)
+
     def resolveSourceEdge(self):
         """
         Resolve the live source edge for this segment using:
@@ -739,9 +832,9 @@ class DuctSegment:
         return "{} [{}]".format(source_obj.Label if source_obj else "Segment", int(source_index))
 
     @staticmethod
-    def _addProperty(obj, prop_type, prop_name, group, description):
+    def _addProperty(obj, prop_type, prop_name, group, description, attr=0):
         if prop_name not in obj.PropertiesList:
-            obj.addProperty(prop_type, prop_name, group, description)
+            obj.addProperty(prop_type, prop_name, group, description, attr)
 
     def _unit(self, v, fallback=None):
         vv = hvaclib.vec(v)
@@ -765,6 +858,7 @@ class DuctSegmentViewProvider:
 
     def attach(self, vobj):
         self.Object = vobj.Object
+        self.ViewObject = vobj
 
     def dumps(self):
         return None
@@ -772,20 +866,30 @@ class DuctSegmentViewProvider:
     def loads(self, state):
         pass
 
+    def updateData(self, obj, prop):
+        # Re-render every construction layer's own shape from its own
+        # linked material whenever a layer's shape or material link
+        # changes -- see core/_component_appearance.py.
+        if _component_appearance.is_trigger_property(obj, prop):
+            vobj = getattr(self, "ViewObject", None)
+            if vobj is not None:
+                _component_appearance.apply_component_appearance(vobj, from_view_update=True)
+
     def getIcon(self):
         return hvaclib.get_icon_path("DuctsIcon.svg")
 
     def onDelete(self, vobj, subelements):
+        # Permit direct deletion from the tree -- e.g. of a stale segment
+        # left over from an older schema that the owning network's own
+        # sync loop never picked up for cleanup. If a live network still
+        # owns it, ask that network to resync afterwards, so anything
+        # still topologically required gets regenerated fresh from
+        # library defaults (see DuctNetwork.syncSegments).
         obj = vobj.Object
         owner = hvaclib.getOwnerNetwork(obj)
-        if getattr(obj.Proxy, "_allow_delete", False):
-            return True
-        if owner and getattr(owner.Proxy, "_allow_internal_delete", False):
-            return True
-        FreeCAD.Console.PrintWarning(
-            "HVAC - Internal segment '{}' cannot be deleted directly.\n".format(obj.Label)
-        )
-        return False
+        if owner and getattr(owner, "Proxy", None):
+            owner.Proxy.requestSync(force_recompute=True)
+        return True
 
     def canDropObjects(self):
         return False

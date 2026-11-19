@@ -1,38 +1,138 @@
 {
   "id": "branch_generic",
-  "label": "Wye - Generic",
+  "label": "Branch - Generic",
   "category": "junction",
   "topology": "branch",
-  "family": ["branch.wye", "branch.tee", "branch.lateral_tee", "branch.wye.3d", "branch.tee.3d", "branch.lateral_tee.3d", "branch.generic"],
-  "profiles": ["Circular", "Rectangular", "Oval"],
+  "family": [
+    "branch.wye",
+    "branch.tee",
+    "branch.lateral_tee",
+    "branch.wye.3d",
+    "branch.tee.3d",
+    "branch.lateral_tee.3d",
+    "branch.generic"
+  ],
+  "profiles": [
+    "Circular",
+    "Rectangular",
+    "Oval",
+    "Generic"
+  ],
+  "selection": {
+    "kind": "model",
+    "priority": 10
+  },
   "constraints": {
     "degree": 3
   },
   "properties": [
     {
-      "name": "TrimLengthA",
+      "name": "Thickness",
       "prop_type": "App::PropertyLength",
       "group": "Dimensions",
-      "description": "Trim length for port A",
-      "default": 100.0
+      "description": "Wall thickness. 0 builds the air space as a solid body instead of a hollow shell",
+      "default": 1.0,
+      "validation": {
+        "minimum": 0.0
+      }
     },
     {
-      "name": "TrimLengthB",
+      "name": "TrimLength",
       "prop_type": "App::PropertyLength",
       "group": "Dimensions",
-      "description": "Trim length for port B",
-      "default": 100.0
-    },
-    {
-      "name": "TrimLengthC",
-      "prop_type": "App::PropertyLength",
-      "group": "Dimensions",
-      "description": "Trim length for port C",
-      "default": 100.0
+      "description": "Trim length of each port, measured from the node. 0 uses a size-based default",
+      "default": 100.0,
+      "per_port": true,
+      "validation": {
+        "minimum": 0.0
+      }
     }
   ],
-  "generator": {
-    "module": "junctions",
-    "function": "build_wye"
+  "geometry": {
+    "backend": "generator",
+    "module": "shared:stars",
+    "function": "build_branch_generic"
+  },
+  "connection_lengths": {
+    "module": "shared:stars",
+    "function": "measure_branch_generic"
+  },
+  "loss": {
+    "module": "shared:losses",
+    "function": "loss_wye_generic",
+    "variants": [
+      {
+        "constraints": {
+          "flow_class": {
+            "enum": [
+              "diverging"
+            ]
+          },
+          "qualifiers": {
+            "common_leg": {
+              "enum": [
+                "run"
+              ]
+            }
+          }
+        },
+        "module": "shared:losses",
+        "function": "loss_branch_diverging_run"
+      },
+      {
+        "constraints": {
+          "flow_class": {
+            "enum": [
+              "converging"
+            ]
+          },
+          "qualifiers": {
+            "common_leg": {
+              "enum": [
+                "run"
+              ]
+            }
+          }
+        },
+        "module": "shared:losses",
+        "function": "loss_branch_converging_run"
+      },
+      {
+        "constraints": {
+          "flow_class": {
+            "enum": [
+              "diverging"
+            ]
+          },
+          "qualifiers": {
+            "common_leg": {
+              "enum": [
+                "branch"
+              ]
+            }
+          }
+        },
+        "module": "shared:losses",
+        "function": "loss_branch_diverging_branch"
+      },
+      {
+        "constraints": {
+          "flow_class": {
+            "enum": [
+              "converging"
+            ]
+          },
+          "qualifiers": {
+            "common_leg": {
+              "enum": [
+                "branch"
+              ]
+            }
+          }
+        },
+        "module": "shared:losses",
+        "function": "loss_branch_converging_branch"
+      }
+    ]
   }
 }

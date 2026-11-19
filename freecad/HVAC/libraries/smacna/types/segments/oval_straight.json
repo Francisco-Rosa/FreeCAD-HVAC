@@ -2,26 +2,121 @@
   "id": "oval_straight",
   "label": "Oval Straight",
   "category": "segment",
-  "family": "straight_segment",
-  "profiles": ["Oval"],
+  "family": [
+    "straight_segment"
+  ],
+  "profiles": [
+    "Oval"
+  ],
+  "selection": {
+    "kind": "model",
+    "priority": 50
+  },
   "properties": [
     {
       "name": "Width",
       "prop_type": "App::PropertyLength",
       "group": "Dimensions",
-      "description": "Oval duct overall width",
-      "default": 200.0
+      "description": "Clear-air duct width",
+      "default": 200.0,
+      "validation": {
+        "exclusiveMinimum": 0.0
+      }
     },
     {
       "name": "Height",
       "prop_type": "App::PropertyLength",
       "group": "Dimensions",
-      "description": "Oval duct overall height",
-      "default": 100.0
+      "description": "Clear-air duct height",
+      "default": 100.0,
+      "validation": {
+        "exclusiveMinimum": 0.0
+      }
+    },
+    {
+      "name": "Thickness",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Sheet metal thickness",
+      "default": 0.8
+    },
+    {
+      "name": "FlangeHeight",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Flange height",
+      "default": 25.0
+    },
+    {
+      "name": "FlangeThickness",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Flange thickness",
+      "default": 1.0
+    },
+    {
+      "name": "ShowFlange1",
+      "prop_type": "App::PropertyBool",
+      "group": "Options",
+      "description": "Include the flange at port 1 (start)",
+      "default": false
+    },
+    {
+      "name": "ShowFlange2",
+      "prop_type": "App::PropertyBool",
+      "group": "Options",
+      "description": "Include the flange at port 2 (end)",
+      "default": false
+    },
+    {
+      "name": "InsulationThickness",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Insulation thickness wrapped around the outside of the duct wall; 0 disables insulation",
+      "default": 0.0
     }
   ],
-  "generator": {
-    "module": "segments",
+  "construction": {
+    "layers": [
+      {
+        "id": "casing",
+        "roles": [
+          "flow_surface",
+          "structural_shell"
+        ],
+        "default_material_role": "structural_shell",
+        "thickness_property": "Thickness"
+      },
+      {
+        "id": "insulation",
+        "roles": [
+          "thermal_insulation"
+        ],
+        "default_material_role": "thermal_insulation",
+        "thickness_property": "InsulationThickness"
+      }
+    ],
+    "features": [
+      {
+        "id": "transverse_flange",
+        "role": "transverse_joint",
+        "host_layer": "casing",
+        "module": "shared:features",
+        "generator": "transverse_flange",
+        "parameters": [
+          "Width",
+          "Height",
+          "FlangeHeight",
+          "FlangeThickness",
+          "ShowFlange1",
+          "ShowFlange2"
+        ]
+      }
+    ]
+  },
+  "geometry": {
+    "backend": "generator",
+    "module": "shared:segments",
     "function": "build_oval_straight"
   }
 }

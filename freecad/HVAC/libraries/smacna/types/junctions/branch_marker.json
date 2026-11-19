@@ -3,8 +3,12 @@
   "label": "Branch - Marker",
   "category": "junction",
   "topology": "branch",
-  "family": ["wye", "tee"],
+  "family": ["branch.wye", "branch.tee", "branch.lateral_tee", "branch.wye.3d", "branch.tee.3d", "branch.lateral_tee.3d", "branch.generic"],
   "profiles": ["Generic"],
+  "selection": {
+    "kind": "placeholder",
+    "priority": 0
+  },
   "constraints": {
     "degree": 3
   },
@@ -17,8 +21,9 @@
       "default": 260.0
     }
   ],
-  "generator": {
-    "module": "junctions",
+  "geometry": {
+    "backend": "generator",
+    "module": "shared:markers",
     "function": "build_wye_marker"
   }
 }

@@ -1,0 +1,323 @@
+{
+  "id": "end_register_generic",
+  "label": "Register - Generic",
+  "category": "junction",
+  "topology": "end",
+  "family": [
+    "end.terminal.register"
+  ],
+  "profiles": [
+    "Circular",
+    "Rectangular",
+    "Oval"
+  ],
+  "selection": {
+    "kind": "model",
+    "priority": 85
+  },
+  "constraints": {
+    "degree": 1,
+    "qualifiers": {
+      "terminal_function": {
+        "enum": [
+          "Supply",
+          "Return",
+          "Exhaust",
+          "OutdoorAir",
+          "Discharge"
+        ]
+      }
+    }
+  },
+  "properties": [
+    {
+      "name": "Thickness",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Sheet metal thickness. 0 builds the air space as a solid body instead of a hollow shell",
+      "default": 0.8,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "InsulationThickness",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Insulation thickness wrapped around the outside of the fitting; 0 disables insulation",
+      "default": 0.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "TrimNeck",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Length of the straight collar between the fitting and the duct. 0 uses a quarter of the duct size",
+      "default": 0.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "FrameWidth",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Width of the frame around the opening. 0 leaves the frame out",
+      "default": 25.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "FrameDepth",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Depth of the frame along the duct",
+      "default": 20.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "LossMode",
+      "prop_type": "App::PropertyEnumeration",
+      "group": "Parameters",
+      "description": "How the loss is given: a coefficient K, or a fixed pressure drop from the maker's data",
+      "default": "Coefficient",
+      "validation": {
+        "enum": [
+          "Coefficient",
+          "Fixed pressure drop"
+        ]
+      }
+    },
+    {
+      "name": "LossCoefficient",
+      "prop_type": "App::PropertyFloat",
+      "group": "Parameters",
+      "description": "Pressure-loss coefficient K, referenced to velocity at the neck (the grille alone)",
+      "default": 1.5,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "DamperLossCoefficient",
+      "prop_type": "App::PropertyFloat",
+      "group": "Parameters",
+      "description": "Coefficient of the damper behind the grille at its present setting, added to LossCoefficient",
+      "default": 0.5,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "NeckSize",
+      "prop_type": "App::PropertyLength",
+      "group": "Parameters",
+      "description": "Equivalent neck diameter the loss coefficient refers to. Used for the loss only, not for the shape",
+      "default": 200.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "PressureDrop",
+      "prop_type": "App::PropertyFloat",
+      "group": "Parameters",
+      "description": "Pressure drop in Pa at the design flow, used when LossMode is Fixed pressure drop",
+      "default": 0.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "FlangeHeight",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Height of the transverse flange at each duct connection",
+      "default": 25.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "FlangeThickness",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Thickness of the transverse flange; 0 draws no flanges",
+      "default": 1.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "ShowFlange1",
+      "prop_type": "App::PropertyBool",
+      "group": "Options",
+      "description": "Include the flange at the duct connection",
+      "default": true
+    },
+    {
+      "name": "FacePattern",
+      "prop_type": "App::PropertyEnumeration",
+      "group": "Face",
+      "description": "How the face is drawn: single deflection (one row of blades), double deflection (two rows, square to each other), egg crate (a grid) or a perforated plate",
+      "default": "Double deflection",
+      "validation": {
+        "enum": [
+          "Single deflection",
+          "Double deflection",
+          "Egg crate",
+          "Perforated"
+        ]
+      }
+    },
+    {
+      "name": "BladeOrientation",
+      "prop_type": "App::PropertyEnumeration",
+      "group": "Face",
+      "description": "Direction of the front blades: horizontal (along the face width) or vertical",
+      "default": "Horizontal",
+      "validation": {
+        "enum": [
+          "Horizontal",
+          "Vertical"
+        ]
+      }
+    },
+    {
+      "name": "FaceThickness",
+      "prop_type": "App::PropertyLength",
+      "group": "Face",
+      "description": "Thickness of the face frame (0 = worked out from the face size)",
+      "default": 0.0
+    },
+    {
+      "name": "BladeSpacing",
+      "prop_type": "App::PropertyLength",
+      "group": "Face",
+      "description": "Distance between blades (0 = worked out from the face size)",
+      "default": 0.0
+    },
+    {
+      "name": "BladeDepth",
+      "prop_type": "App::PropertyLength",
+      "group": "Face",
+      "description": "Blade depth, front to back (0 = worked out from the face size)",
+      "default": 0.0
+    },
+    {
+      "name": "BladeThickness",
+      "prop_type": "App::PropertyLength",
+      "group": "Face",
+      "description": "Blade thickness (0 = worked out from the face size)",
+      "default": 0.0
+    },
+    {
+      "name": "BladeAngle",
+      "prop_type": "App::PropertyAngle",
+      "group": "Face",
+      "description": "Deflection of the front blades from straight through",
+      "default": 0.0,
+      "validation": {
+        "minimum": -60.0,
+        "maximum": 60.0
+      }
+    },
+    {
+      "name": "HoleDiameter",
+      "prop_type": "App::PropertyLength",
+      "group": "Face",
+      "description": "Perforated: hole diameter (0 = worked out from the face size)",
+      "default": 0.0
+    },
+    {
+      "name": "HolePitch",
+      "prop_type": "App::PropertyLength",
+      "group": "Face",
+      "description": "Perforated: distance between hole centres (0 = worked out from the face size)",
+      "default": 0.0
+    },
+    {
+      "name": "DamperBladeAngle",
+      "prop_type": "App::PropertyAngle",
+      "group": "Face",
+      "description": "Angle of the damper blades behind the face, from fully open",
+      "default": 30.0,
+      "validation": {
+        "minimum": 0.0,
+        "maximum": 90.0
+      }
+    }
+  ],
+  "construction": {
+    "layers": [
+      {
+        "id": "casing",
+        "roles": [
+          "flow_surface",
+          "structural_shell"
+        ],
+        "default_material_role": "structural_shell",
+        "thickness_property": "Thickness"
+      },
+      {
+        "id": "insulation",
+        "roles": [
+          "thermal_insulation"
+        ],
+        "default_material_role": "thermal_insulation",
+        "thickness_property": "InsulationThickness"
+      }
+    ],
+    "features": [
+      {
+        "id": "transverse_flange",
+        "role": "transverse_joint",
+        "host_layer": "casing",
+        "module": "shared:features",
+        "generator": "transverse_flange",
+        "parameters": [
+          "FlangeHeight",
+          "FlangeThickness",
+          "ShowFlange1"
+        ]
+      },
+      {
+        "id": "terminal_face",
+        "role": "terminal_face",
+        "host_layer": "casing",
+        "module": "shared:faces",
+        "generator": "register_face",
+        "parameters": [
+          "FacePattern",
+          "BladeOrientation",
+          "FaceThickness",
+          "BladeSpacing",
+          "BladeDepth",
+          "BladeThickness",
+          "BladeAngle",
+          "HoleDiameter",
+          "HolePitch",
+          "DamperBladeAngle"
+        ]
+      }
+    ]
+  },
+  "geometry": {
+    "backend": "generator",
+    "module": "shared:terminals",
+    "function": "build_terminal_frame"
+  },
+  "connection_lengths": {
+    "module": "shared:terminals",
+    "function": "measure_terminal_frame"
+  },
+  "loss": {
+    "module": "shared:losses",
+    "function": "loss_register_generic"
+  }
+}

@@ -3,43 +3,121 @@
   "label": "Cross - Generic",
   "category": "junction",
   "topology": "cross",
-  "family": ["cross"],
-  "profiles": ["Circular", "Rectangular", "Oval"],
+  "family": [
+    "cross.cross",
+    "cross.cross.3d",
+    "cross.double_wye",
+    "cross.double_wye.3d",
+    "cross.generic"
+  ],
+  "profiles": [
+    "Circular",
+    "Rectangular",
+    "Oval",
+    "Generic"
+  ],
+  "selection": {
+    "kind": "model",
+    "priority": 50
+  },
   "constraints": {
     "degree": 4
   },
   "properties": [
     {
-      "name": "TrimLengthA",
+      "name": "TrimLength",
       "prop_type": "App::PropertyLength",
       "group": "Dimensions",
-      "description": "Trim length for port A",
-      "default": 100.0
+      "description": "Trim length of each port, measured from the node. 0 uses a size-based default",
+      "default": 100.0,
+      "per_port": true,
+      "validation": {
+        "minimum": 0.0
+      }
     },
     {
-      "name": "TrimLengthB",
+      "name": "Thickness",
       "prop_type": "App::PropertyLength",
       "group": "Dimensions",
-      "description": "Trim length for port B",
-      "default": 100.0
+      "description": "Sheet metal thickness",
+      "default": 0.8
     },
     {
-      "name": "TrimLengthC",
+      "name": "FlangeHeight",
       "prop_type": "App::PropertyLength",
       "group": "Dimensions",
-      "description": "Trim length for port C",
-      "default": 100.0
+      "description": "Flange height",
+      "default": 25.0
     },
     {
-      "name": "TrimLengthD",
+      "name": "FlangeThickness",
       "prop_type": "App::PropertyLength",
       "group": "Dimensions",
-      "description": "Trim length for port D",
-      "default": 100.0
+      "description": "Flange thickness",
+      "default": 1.0
+    },
+    {
+      "name": "ShowFlange",
+      "prop_type": "App::PropertyBool",
+      "group": "Options",
+      "description": "Include the flange at each port",
+      "default": true,
+      "per_port": true
+    },
+    {
+      "name": "InsulationThickness",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Insulation thickness wrapped around the outside of the fitting; 0 disables insulation",
+      "default": 0.0
     }
   ],
-  "generator": {
-    "module": "junctions",
+  "construction": {
+    "layers": [
+      {
+        "id": "casing",
+        "roles": [
+          "flow_surface",
+          "structural_shell"
+        ],
+        "default_material_role": "structural_shell",
+        "thickness_property": "Thickness"
+      },
+      {
+        "id": "insulation",
+        "roles": [
+          "thermal_insulation"
+        ],
+        "default_material_role": "thermal_insulation",
+        "thickness_property": "InsulationThickness"
+      }
+    ],
+    "features": [
+      {
+        "id": "transverse_flange",
+        "role": "transverse_joint",
+        "host_layer": "casing",
+        "module": "shared:features",
+        "generator": "transverse_flange",
+        "parameters": [
+          "FlangeHeight",
+          "FlangeThickness",
+          "ShowFlange"
+        ]
+      }
+    ]
+  },
+  "geometry": {
+    "backend": "generator",
+    "module": "shared:stars",
     "function": "build_cross"
+  },
+  "connection_lengths": {
+    "module": "shared:stars",
+    "function": "measure_cross"
+  },
+  "loss": {
+    "module": "shared:losses",
+    "function": "loss_cross_generic"
   }
 }

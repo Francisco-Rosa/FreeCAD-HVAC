@@ -2,26 +2,45 @@
   "id": "rectangular_generic",
   "label": "Rectangular Generic",
   "category": "segment",
-  "family": "curved_segment",
-  "profiles": ["Rectangular"],
+  "family": [
+    "curved_segment"
+  ],
+  "profiles": [
+    "Rectangular"
+  ],
+  "selection": {
+    "kind": "model",
+    "priority": 50
+  },
   "properties": [
+    {
+      "name": "Thickness",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Wall thickness. 0 builds the air space as a solid body instead of a hollow shell",
+      "default": 1.0,
+      "validation": {"minimum": 0.0}
+    },
     {
       "name": "Width",
       "prop_type": "App::PropertyLength",
       "group": "Dimensions",
-      "description": "Rectangular duct width",
-      "default": 100.0
+      "description": "Clear-air duct width",
+      "default": 100.0,
+      "validation": {"exclusiveMinimum": 0.0}
     },
     {
       "name": "Height",
       "prop_type": "App::PropertyLength",
       "group": "Dimensions",
-      "description": "Rectangular duct height",
-      "default": 100.0
+      "description": "Clear-air duct height",
+      "default": 100.0,
+      "validation": {"exclusiveMinimum": 0.0}
     }
   ],
-  "generator": {
-    "module": "segments",
+  "geometry": {
+    "backend": "generator",
+    "module": "shared:segments",
     "function": "build_rectangular_curved"
   }
 }

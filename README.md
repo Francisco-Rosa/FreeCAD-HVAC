@@ -15,82 +15,36 @@ The intended workflow is:
 
 This approach keeps the modeling process parametric and reduces the need to rebuild duct geometry manually after every layout change.
 
+Duct segments and fittings are generated from a library of reusable
+definitions rather than being hard-coded. Three libraries ship today:
+`builtin_basic` (minimal generic types), `smacna` (SMACNA-based sheet-metal
+types, meant for day-to-day modeling), and `samples` (reference-only
+examples). New fitting types, profiles, and parameters can be added as
+library data without touching the core addon: see
+[Writing an HVAC library](docs/library-guide.md).
+
+Once a network is modeled, built-in tools can calculate airflow pressure
+drop across it and propose duct sizes (constant velocity, constant friction
+rate, or static regain).
+
+Each generated segment/fitting can also carry a casing and an insulation
+material, assigned from FreeCAD's own native material database (built-in
+materials, this addon's own SMACNA-relevant cards, other addons', or
+user-defined) — there is no separate HVAC material list.
+
 ## Screenshots
 <img width="1418" height="815" alt="Screenshot from 2026-03-27 03-37-15" src="https://github.com/user-attachments/assets/70b94757-0161-4c5d-b9fd-5b85a57cfde7" />
 <img width="1418" height="815" alt="Screenshot from 2026-03-27 03-35-18" src="https://github.com/user-attachments/assets/052a4662-84c8-417a-a198-d021a9b4eba3" />
 <img width="1418" height="815" alt="Screenshot from 2026-03-27 03-36-14" src="https://github.com/user-attachments/assets/6fafb9ee-c38f-48df-a6a3-4a32c91a7a1e" />
 
-## Project structure
-
-A simplified view of the architecture is:
-
-- **Network container layer**  
-  `DuctNetwork` manages the overall duct model and its internal folders.
-
-- **Topology layer**  
-  `DuctNetworkParser` reads base geometry and determines connectivity and classification.
-
-- **Generated object layer**  
-  `DuctSegment` and `DuctJunction` manage the derived HVAC elements.
-
-- **Library layer**  
-  `HVACLibraryRegistry`, `HVACLibraryService`, and JSON definitions provide reusable segment and junction definitions.
-
-## Main concepts
-
-### 1. DuctNetwork
-
-`DuctNetwork` is the central object used to manage a duct system. It is designed to manage the modeling workflow now, and to support analysis workflows later. A duct network maintains managed folders for:
-
-- **Base geometry**: user-authored routing objects such as sketches and line objects
-- **Generated geometry**: automatically created duct segments and junctions/fittings
-
-This separation makes the workflow easier to manage: the user edits the base route, while derived HVAC geometry is regenerated or synchronized from it.
-
-### 2. DuctNetworkParser
-
-`DuctNetworkParser` is responsible for reading the base geometry and building network connectivity information from it. It handles:
-
-- topology generation
-- connectivity interpretation
-- node and edge handling
-- classification logic used for segment and junction generation
-
-In practical terms, this is the component that converts drawing geometry into structured duct-network data.
-
-### 3. DuctSegment and DuctJunction
-
-Generated HVAC elements are managed through:
-
-- **`DuctSegment`**: represents generated duct runs
-- **`DuctJunction`**: represents generated fittings, junctions, or similar connection objects
-
-The parser reads the base geometry, extracts connectivity, and the resulting information is synchronized into these generated objects. This keeps the final duct model tied to the original routing input.
-
-### 4. Library system
-
-The project uses a library-driven architecture for duct and fitting generation.
-
-Library parsing and management are handled by:
-
-- **`HVACLibraryRegistry`**
-- **`HVACLibraryService`**
-
-These components load and organize the available HVAC definitions used by the model generator.
-
-### 5. JSON-based element definitions
-
-Duct segments and junctions are defined in the library using **JSON files**. Shape generation is handled using shape generation functions specified along with element definition. This keeps the system modular and extensible. New profiles, fitting types, and parameters can be added through library data instead of hard-coding everything in the core logic.
-
 ## Design goals
-
 
 - [x] Duct routing module (may use the same module or reuse components for piping also).
 - [ ] Detailing of ducts and fittings for rectangular/ circular/ oval ducts.
 - [ ] Add BIM data
 - [ ] Standard library of commonly used air side HVAC components like Diffusers, grills, registers, dampers, intake and exhaust accessories, VAV units, AHUs etc.
-- [ ] Pressure drop calculation based on terminal flow rates and static pressure calculation for nodes.
-- [ ] Automatic sizing module based on constant friction drop, constant velocity, static regain methods.
+- [x] Pressure drop calculation based on terminal flow rates and static pressure calculation for nodes.
+- [x] Automatic sizing module based on constant friction drop, constant velocity, static regain methods.
 - [ ] Add additional duct classes (custom profile ducts) and detailing like insulation, duct supports, flanges etc.
 - [ ] Add support for defining piping.
 
@@ -103,5 +57,29 @@ Basic duct creation functionality is now reasonably in place. The project alread
 - generating duct segments
 - generating junction/fitting objects
 - organizing library-based element definitions
+- calculating airflow pressure drop across a network
+- automatic duct sizing by constant velocity, constant friction rate, or static regain
+- assigning casing/insulation materials from FreeCAD's native material database
 
 This provides a solid base for further development, including richer fitting logic, validation tools, and future analysis capabilities.
+
+### Known geometry limitations
+
+The `builtin_basic` `branch_wye_radius` fitting is experimental and its
+geometry generation is incomplete. It can build circular, rectangular, and
+oval wyes across a broad range of sizes and radii, but some combinations of
+profile dimensions, branch angles, and radii may still fail in Open CASCADE's
+sweep or boolean operations. The generator may increase an undersized radius
+or move the main split plane to keep the layout geometrically feasible. When a
+build fails, the generated component retains the previous geometry and reports
+the current failure in its read-only `GeometryError` property and the FreeCAD
+Report view. With a wall thickness (the hollow build) it currently fails on
+round and rectangular ducts, so automatic selection uses `branch_wye_mitered`
+for a wye and the radius wye is a manual choice.
+
+## For developers
+
+For how the addon is put together internally (module responsibilities,
+sync/execute flow, the airflow/sizing solvers, the library type-selection
+system) see [`ARCHITECTURE.md`](ARCHITECTURE.md). Coding/testing rules for
+this repository are in [`AGENTS.md`](AGENTS.md).

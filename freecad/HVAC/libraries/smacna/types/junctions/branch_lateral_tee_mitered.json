@@ -1,0 +1,275 @@
+{
+  "id": "branch_lateral_tee_mitered",
+  "label": "Lateral Tee - Mitered",
+  "category": "junction",
+  "topology": "branch",
+  "family": [
+    "branch.lateral_tee",
+    "branch.lateral_tee.3d"
+  ],
+  "profiles": [
+    "Circular",
+    "Rectangular",
+    "Oval"
+  ],
+  "selection": {
+    "kind": "model",
+    "priority": 60
+  },
+  "constraints": {
+    "degree": 3
+  },
+  "properties": [
+    {
+      "name": "Thickness",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Sheet metal thickness. 0 builds the air space as a solid body instead of a hollow shell",
+      "default": 0.8,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "InsulationThickness",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Insulation thickness wrapped around the outside of the fitting; 0 disables insulation",
+      "default": 0.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "TrimRunA",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Trim length for run port A",
+      "default": 100.0
+    },
+    {
+      "name": "TrimRunB",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Trim length for run port B",
+      "default": 100.0
+    },
+    {
+      "name": "TrimBranch",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Trim length for the branch port",
+      "default": 100.0
+    },
+    {
+      "name": "Attachment",
+      "prop_type": "App::PropertyEnumeration",
+      "group": "Options",
+      "description": "How the branch joins the run. Side: through the side of the run. Face: the branch passes over or under the run, and joins it with a collar and a 90 degree elbow. Auto picks one from where the branch is drawn",
+      "default": "Auto",
+      "validation": {
+        "enum": [
+          "Auto",
+          "Side",
+          "Face"
+        ]
+      }
+    },
+    {
+      "name": "CollarRoll",
+      "prop_type": "App::PropertyAngle",
+      "group": "Options",
+      "description": "Face-mounted branch on a round run only: rolls the collar about the run towards the branch (SMACNA 'rolled 45 deg'); the elbow then turns that much less. 0 = collar straight up",
+      "default": 0.0,
+      "validation": {
+        "minimum": 0.0,
+        "maximum": 75.0
+      }
+    },
+    {
+      "name": "BranchRadius",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Centreline radius of the branch bend. 0 uses the branch size. A face-mounted branch (one passing over or under the run) uses it for the elbow after its collar",
+      "default": 0.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "NumberOfCuts",
+      "prop_type": "App::PropertyInteger",
+      "group": "Dimensions",
+      "description": "Number of mitre joints in the branch bend",
+      "default": 2,
+      "validation": {
+        "minimum": 1
+      }
+    },
+    {
+      "name": "FlangeHeight",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Height of the transverse flange at each duct connection",
+      "default": 25.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "FlangeThickness",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Thickness of the transverse flange; 0 draws no flanges",
+      "default": 1.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "ShowFlangeRunA",
+      "prop_type": "App::PropertyBool",
+      "group": "Options",
+      "description": "Include the flange at run port A",
+      "default": true
+    },
+    {
+      "name": "ShowFlangeRunB",
+      "prop_type": "App::PropertyBool",
+      "group": "Options",
+      "description": "Include the flange at run port B",
+      "default": true
+    },
+    {
+      "name": "ShowFlangeBranch",
+      "prop_type": "App::PropertyBool",
+      "group": "Options",
+      "description": "Include the flange at the branch",
+      "default": true
+    }
+  ],
+  "construction": {
+    "layers": [
+      {
+        "id": "casing",
+        "roles": [
+          "flow_surface",
+          "structural_shell"
+        ],
+        "default_material_role": "structural_shell",
+        "thickness_property": "Thickness"
+      },
+      {
+        "id": "insulation",
+        "roles": [
+          "thermal_insulation"
+        ],
+        "default_material_role": "thermal_insulation",
+        "thickness_property": "InsulationThickness"
+      }
+    ],
+    "features": [
+      {
+        "id": "transverse_flange",
+        "role": "transverse_joint",
+        "host_layer": "casing",
+        "module": "shared:features",
+        "generator": "transverse_flange",
+        "parameters": [
+          "FlangeHeight",
+          "FlangeThickness",
+          "ShowFlangeRunA",
+          "ShowFlangeRunB",
+          "ShowFlangeBranch"
+        ]
+      }
+    ]
+  },
+  "geometry": {
+    "backend": "generator",
+    "module": "shared:tees",
+    "function": "build_lateral_tee_mitered"
+  },
+  "connection_lengths": {
+    "module": "shared:tees",
+    "function": "measure_lateral_tee_mitered"
+  },
+  "loss": {
+    "module": "shared:losses",
+    "function": "loss_tee_generic",
+    "variants": [
+      {
+        "constraints": {
+          "flow_class": {
+            "enum": [
+              "diverging"
+            ]
+          },
+          "qualifiers": {
+            "common_leg": {
+              "enum": [
+                "run"
+              ]
+            }
+          }
+        },
+        "module": "shared:losses",
+        "function": "loss_branch_diverging_run"
+      },
+      {
+        "constraints": {
+          "flow_class": {
+            "enum": [
+              "converging"
+            ]
+          },
+          "qualifiers": {
+            "common_leg": {
+              "enum": [
+                "run"
+              ]
+            }
+          }
+        },
+        "module": "shared:losses",
+        "function": "loss_branch_converging_run"
+      },
+      {
+        "constraints": {
+          "flow_class": {
+            "enum": [
+              "diverging"
+            ]
+          },
+          "qualifiers": {
+            "common_leg": {
+              "enum": [
+                "branch"
+              ]
+            }
+          }
+        },
+        "module": "shared:losses",
+        "function": "loss_branch_diverging_branch"
+      },
+      {
+        "constraints": {
+          "flow_class": {
+            "enum": [
+              "converging"
+            ]
+          },
+          "qualifiers": {
+            "common_leg": {
+              "enum": [
+                "branch"
+              ]
+            }
+          }
+        },
+        "module": "shared:losses",
+        "function": "loss_branch_converging_branch"
+      }
+    ]
+  }
+}

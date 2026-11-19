@@ -1,0 +1,108 @@
+{
+  "id": "end_diffuser_generic",
+  "label": "Diffuser / Grille / Register - Generic",
+  "category": "junction",
+  "topology": "end",
+  "family": [
+    "end.terminal.diffuser",
+    "end.terminal.grille",
+    "end.terminal.register"
+  ],
+  "profiles": [
+    "Circular",
+    "Rectangular",
+    "Oval"
+  ],
+  "selection": {
+    "kind": "model",
+    "priority": 90
+  },
+  "constraints": {
+    "degree": 1
+  },
+  "properties": [
+    {
+      "name": "Thickness",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Wall thickness. 0 builds the air space as a solid body instead of a hollow shell",
+      "default": 1.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "NeckSize",
+      "prop_type": "App::PropertyLength",
+      "group": "Parameters",
+      "description": "Equivalent neck (collar) diameter used only for the pressure-loss calculation, referenced to velocity at this neck -- not a separate geometric profile; the generated body's own interface is always the connected duct port's real profile",
+      "default": 200.0
+    },
+    {
+      "name": "LossCoefficient",
+      "prop_type": "App::PropertyFloat",
+      "group": "Parameters",
+      "description": "Pressure-loss coefficient K, referenced to velocity at the neck",
+      "default": 1.0
+    },
+    {
+      "name": "TrimNeck",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Length of the straight collar between the body and the duct",
+      "default": 0.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "BodyLength",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Axial length of the generic terminal body",
+      "default": 150.0
+    },
+    {
+      "name": "FacePattern",
+      "prop_type": "App::PropertyEnumeration",
+      "group": "Face",
+      "description": "How the face is drawn: Louvered (concentric rings), Plaque (a plate in front of the core), Perforated (a plate with holes), Swirl (radial slots)",
+      "default": "Perforated",
+      "validation": {
+        "enum": [
+          "Louvered",
+          "Plaque",
+          "Perforated",
+          "Swirl"
+        ]
+      }
+    }
+  ],
+  "geometry": {
+    "backend": "generator",
+    "module": "shared:terminals",
+    "function": "build_terminal_body_generic"
+  },
+  "connection_lengths": {
+    "module": "shared:terminals",
+    "function": "measure_terminal_body_generic"
+  },
+  "loss": {
+    "module": "shared:losses",
+    "function": "loss_diffuser_generic"
+  },
+  "construction": {
+    "features": [
+      {
+        "id": "terminal_face",
+        "role": "terminal_face",
+        "host_layer": "shape",
+        "module": "shared:faces",
+        "generator": "generic_diffuser_face",
+        "parameters": [
+          "FacePattern"
+        ]
+      }
+    ]
+  }
+}

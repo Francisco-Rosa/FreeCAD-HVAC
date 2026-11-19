@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "source": {
+    "file": "static_diffuser.step",
+    "format": "step",
+    "units": "mm"
+  },
+  "placement": {
+    "origin": [0.0, 0.0, 0.0],
+    "direction": [0.0, 0.0, 1.0],
+    "x_axis": [1.0, 0.0, 0.0],
+    "runtime_port": 0,
+    "origin_context": "runtime_port"
+  },
+  "validation": {
+    "strict": true,
+    "angle_tolerance_deg": 0.5,
+    "size_tolerance_mm": 0.5
+  },
+  "ports": [
+    {
+      "id": "P1",
+      "runtime_port": 0,
+      "position": [0.0, 0.0, 75.0],
+      "direction": [0.0, 0.0, 1.0],
+      "profile": "Circular",
+      "section_params": {
+        "Diameter": 250.0
+      }
+    }
+  ],
+  "outputs": {
+    "connection_lengths": {
+      "P1": 75.0
+    }
+  }
+}

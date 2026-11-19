@@ -1,0 +1,32 @@
+---
+General:
+  UUID: "02457b24-f9bc-475c-b126-ec563d82598b"
+  Author: "FreeCAD-HVAC"
+  License: "CC0-1.0"
+  Name: "Concrete"
+  Description: >-
+    Normal-weight concrete used for cast or formed air passages. Physical
+    values are representative of standard structural concrete.
+Models:
+  Father:
+    UUID: '9cdda8b6-b606-4778-8f13-3934d8668e67'
+    Father: "Aggregate"
+  Density:
+    UUID: '454661e5-265b-4320-8e6f-fcf6223ac3af'
+    Density: "2400 kg/m^3"
+  Thermal:
+    UUID: '9959d007-a970-4ea7-bae4-3eb1b8b883c7'
+    SpecificHeat: "880 J/kg/K"
+    ThermalConductivity: "1.700 W/m/K"
+  Hydraulic:
+    UUID: 'bbfee379-96b0-4995-80e2-e1725b3adfde'
+    HydraulicRoughness: "3.0 mm"
+AppearanceModels:
+  BasicRendering:
+    UUID: 'f006c7e4-35b7-43d5-bbf9-c5d572309e6e'
+    AmbientColor: "(0.4200, 0.4200, 0.4200, 1.0)"
+    DiffuseColor: "(0.6000, 0.6000, 0.6000, 1.0)"
+    EmissiveColor: "(0.0000, 0.0000, 0.0000, 1.0)"
+    Shininess: "0.0500"
+    SpecularColor: "(0.1200, 0.1200, 0.1200, 1.0)"
+    Transparency: "0.0"

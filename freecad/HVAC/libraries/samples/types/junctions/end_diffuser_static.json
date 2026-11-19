@@ -1,0 +1,23 @@
+{
+  "id": "end_diffuser_static",
+  "label": "Static Diffuser 250",
+  "category": "junction",
+  "topology": "end",
+  "family": [
+    "end.terminal.diffuser"
+  ],
+  "profiles": [
+    "Circular"
+  ],
+  "selection": {
+    "kind": "model",
+    "priority": 50
+  },
+  "constraints": {
+    "degree": 1
+  },
+  "geometry": {
+    "backend": "static",
+    "descriptor": "models/static_diffuser.json"
+  }
+}

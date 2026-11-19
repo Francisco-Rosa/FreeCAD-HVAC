@@ -3,8 +3,12 @@
   "label": "Cross - Marker",
   "category": "junction",
   "topology": "cross",
-  "family": ["cross"],
+  "family": ["cross.cross", "cross.cross.3d", "cross.double_wye", "cross.double_wye.3d", "cross.generic"],
   "profiles": ["Generic"],
+  "selection": {
+    "kind": "placeholder",
+    "priority": 0
+  },
   "constraints": {
     "degree": 4
   },
@@ -17,8 +21,9 @@
       "default": 280.0
     }
   ],
-  "generator": {
-    "module": "junctions",
+  "geometry": {
+    "backend": "generator",
+    "module": "shared:markers",
     "function": "build_cross_marker"
   }
 }

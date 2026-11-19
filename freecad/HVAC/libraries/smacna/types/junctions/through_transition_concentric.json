@@ -1,0 +1,181 @@
+{
+  "id": "through_transition_concentric",
+  "label": "Transition - Concentric",
+  "category": "junction",
+  "topology": "through",
+  "family": [
+    "through.transition"
+  ],
+  "profiles": [
+    "Circular",
+    "Rectangular",
+    "Oval"
+  ],
+  "selection": {
+    "kind": "model",
+    "priority": 62
+  },
+  "constraints": {
+    "degree": 2,
+    "qualifiers": {
+      "alignment": {
+        "enum": [
+          "concentric",
+          "unknown"
+        ]
+      }
+    }
+  },
+  "properties": [
+    {
+      "name": "Thickness",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Sheet metal thickness. 0 builds the air space as a solid body instead of a hollow shell",
+      "default": 0.8,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "InsulationThickness",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Insulation thickness wrapped around the outside of the fitting; 0 disables insulation",
+      "default": 0.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "TransitionLength",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Transition body length",
+      "default": 300.0
+    },
+    {
+      "name": "IncludedAngle",
+      "prop_type": "App::PropertyAngle",
+      "group": "Derived",
+      "description": "Included angle the SMACNA transition tables are read at (read-only, set on recompute)",
+      "default": 0.0,
+      "editor_mode": 1
+    },
+    {
+      "name": "BodyLength",
+      "prop_type": "App::PropertyLength",
+      "group": "Derived",
+      "description": "Axial length the fitting was built with (read-only, set on recompute)",
+      "default": 0.0,
+      "editor_mode": 1
+    },
+    {
+      "name": "FlangeHeight",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Height of the transverse flange at each duct connection",
+      "default": 25.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "FlangeThickness",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Thickness of the transverse flange; 0 draws no flanges",
+      "default": 1.0,
+      "validation": {
+        "minimum": 0.0
+      }
+    },
+    {
+      "name": "ShowFlange1",
+      "prop_type": "App::PropertyBool",
+      "group": "Options",
+      "description": "Include the flange at port 1",
+      "default": true
+    },
+    {
+      "name": "ShowFlange2",
+      "prop_type": "App::PropertyBool",
+      "group": "Options",
+      "description": "Include the flange at port 2",
+      "default": true
+    }
+  ],
+  "construction": {
+    "layers": [
+      {
+        "id": "casing",
+        "roles": [
+          "flow_surface",
+          "structural_shell"
+        ],
+        "default_material_role": "structural_shell",
+        "thickness_property": "Thickness"
+      },
+      {
+        "id": "insulation",
+        "roles": [
+          "thermal_insulation"
+        ],
+        "default_material_role": "thermal_insulation",
+        "thickness_property": "InsulationThickness"
+      }
+    ],
+    "features": [
+      {
+        "id": "transverse_flange",
+        "role": "transverse_joint",
+        "host_layer": "casing",
+        "module": "shared:features",
+        "generator": "transverse_flange",
+        "parameters": [
+          "FlangeHeight",
+          "FlangeThickness",
+          "ShowFlange1",
+          "ShowFlange2"
+        ]
+      }
+    ]
+  },
+  "geometry": {
+    "backend": "generator",
+    "module": "shared:transitions",
+    "function": "build_transition"
+  },
+  "connection_lengths": {
+    "module": "shared:transitions",
+    "function": "measure_transition"
+  },
+  "loss": {
+    "module": "shared:losses",
+    "function": "loss_transition_generic",
+    "variants": [
+      {
+        "constraints": {
+          "flow_class": {
+            "enum": [
+              "expansion"
+            ]
+          }
+        },
+        "module": "shared:losses",
+        "function": "loss_transition_expansion"
+      },
+      {
+        "constraints": {
+          "flow_class": {
+            "enum": [
+              "contraction"
+            ]
+          }
+        },
+        "module": "shared:losses",
+        "function": "loss_transition_contraction"
+      }
+    ]
+  }
+}
