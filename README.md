@@ -61,9 +61,34 @@ New types, profiles and parameters are added as library data. See
 [library API reference](docs/library-api.md).
 
 ## Screenshots
-<img width="1418" height="815" alt="Screenshot from 2026-03-27 03-37-15" src="https://github.com/user-attachments/assets/70b94757-0161-4c5d-b9fd-5b85a57cfde7" />
-<img width="1418" height="815" alt="Screenshot from 2026-03-27 03-35-18" src="https://github.com/user-attachments/assets/052a4662-84c8-417a-a198-d021a9b4eba3" />
-<img width="1418" height="815" alt="Screenshot from 2026-03-27 03-36-14" src="https://github.com/user-attachments/assets/6fafb9ee-c38f-48df-a6a3-4a32c91a7a1e" />
+
+A supply network with an air handling unit, SMACNA fittings, terminals and in-line devices:
+
+![Duct network with an air handling unit, fittings and terminals](screenshots/screenshot1.png)
+
+Terminals and fittings up close: a square ceiling diffuser, a round diffuser, a grille, a plenum and
+flanged joints:
+
+![Diffusers, grille, plenum and flanged joints](screenshots/screenshot2.png)
+
+Routes drawn as a sketch or as Draft lines; the ducts and fittings follow the routes:
+
+![Routing with a sketch](screenshots/screenshot7.png)
+![Routing with Draft lines](screenshots/screenshot8.png)
+
+Size Ducts, here with pressure-balanced static regain:
+
+![Size Ducts panel](screenshots/screenshot3.png)
+
+Calculate Airflow results in the 3D view: velocity on the ducts, flow rate and pressure at the junction ports,
+with warnings and result tables in the panel:
+
+![Duct velocities after Calculate Airflow](screenshots/screenshot4.png)
+![Flow rate and pressure at junction ports](screenshots/screenshot5.png)
+
+Layers, with insulation visible:
+
+![Ducts with their insulation layer visible](screenshots/screenshot6.png)
 
 ## Design goals
 
