@@ -75,6 +75,7 @@ only to `HVACLibraryAPI` / `HVACLossAPI`.
 - Draft snapping onto equipment snap points not tried by script (the owner's GUI check covered the port panel).
 
 *Testing*
+- Pre-merge run, 20 November 2026 (geometry API 4, before merging to `main`): unit tests 2267 pass; smoke run 665 valid / 32 skipped / 0 errors, identical to the API 4 report; geometry sweep 1990 / 1990 valid (both libraries).
 - Unit tests: 2262 pass on Linux. The 20 failures once seen on the Windows machine were never investigated.
 - Smoke run, 19 November 2026 (SMACNA aligned): 665 valid / 32 skipped / 0 errors; only the SMACNA mitered elbow changed (one cut). Before, 18 November 2026 (after design 6.6): 661 valid / 32 skipped / 0 errors. No build lost; volumes and trims changed only on the types 6.6 rebuilt (and on face-mounted tees, from the single BranchRadius change before it).
 - Geometry sweep (`tools/geometry_sweep.py`, design 6.6), 18 November 2026: 1838 / 1838 valid, every type and case (the design's table had the radius wye at 76 / 144, the others failing on full-size branches and thick walls).
