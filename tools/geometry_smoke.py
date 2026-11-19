@@ -12,6 +12,7 @@ the fitting generators broke any type, profile or node layout:
     python tools/geometry_smoke.py                 # list problems + a summary
     python tools/geometry_smoke.py --all           # list every build
     python tools/geometry_smoke.py out.json        # also save the full report as JSON
+    python tools/geometry_smoke.py --set LinerThickness=25   # set a property on every build that has it
 
 `python` here is the Python that ships with FreeCAD (on Windows,
 `bin/python.exe` in the FreeCAD folder). With any other Python of the same
@@ -164,11 +165,13 @@ def _volume(shape):
         return None
 
 
-def _build_one(reg, library_id, type_def, family, profile, section):
+def _build_one(reg, library_id, type_def, family, profile, section, overrides=None):
     ports, pairs = _node(family, profile, section)
     if ports is None:
         return {"status": "skipped", "detail": "no synthetic node for family"}
-    return build_entry(reg, library_id, type_def, family.split(".", 1)[1].split(" ")[0], ports, pairs)
+    names = {prop.name for prop in type_def.properties}
+    properties = {name: value for name, value in (overrides or {}).items() if name in names}
+    return build_entry(reg, library_id, type_def, family.split(".", 1)[1].split(" ")[0], ports, pairs, properties)
 
 
 def build_entry(reg, library_id, type_def, family, ports, pairs, properties=None):
@@ -238,7 +241,8 @@ def build_entry(reg, library_id, type_def, family, ports, pairs, properties=None
     return entry
 
 
-def run():
+def run(overrides=None):
+    """Build every junction type; `overrides` ({name: value}) is set on each type that has the property."""
     reg = HVACLibraryRegistry()
     reg.set_search_paths([LIBRARIES_ROOT])
     reg.ensure_loaded()
@@ -253,7 +257,7 @@ def run():
                 for profile in type_def.profiles:
                     for label, section in SECTIONS.get(profile, []):
                         key = "{}/{} [{}] {}{}".format(library_id, type_def.id, family, profile, label)
-                        report[key] = _build_one(reg, library_id, type_def, family, profile, section)
+                        report[key] = _build_one(reg, library_id, type_def, family, profile, section, overrides)
     return report
 
 
@@ -290,8 +294,14 @@ def report_and_save(report, argv):
         print("saved", out_path)
 
 
+def _overrides(argv):
+    """{name: float} from every `--set Name=Value` pair in `argv`."""
+    pairs = [argv[i + 1] for i, arg in enumerate(argv[:-1]) if arg == "--set"]
+    return {name: float(value) for name, value in (pair.split("=", 1) for pair in pairs)}
+
+
 def main(argv):
-    report_and_save(run(), argv)
+    report_and_save(run(_overrides(argv)), argv)
 
 
 if __name__ == "__main__":

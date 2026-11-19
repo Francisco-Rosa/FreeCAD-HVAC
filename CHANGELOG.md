@@ -28,6 +28,11 @@ for in `library.json` (`"requires_api"`) and is refused by any other.
 - Context: library code no longer receives `obj` (the FreeCAD object). The registry still reads property values
   from it (`contexts.CALLER_KEYS`).
 
+- SMACNA ducts and fittings take an acoustic liner inside the sheet-metal wall: `LinerThickness` (0, the default,
+  leaves it out). The sizes stay the clear airway, so the casing, insulation and flanges move out by the liner. The
+  liner's material defaults to the network's acoustic absorber (open-cell nitrile rubber), and with a liner the
+  duct's roughness comes from it. The geometry smoke run takes `--set Name=Value` to set a property on every build.
+
 - Diffusers, grilles and registers (square, round and slot diffusers, `end_grille_generic`, `end_register_generic`,
   both libraries) are offered for every terminal function except `Source`: outdoor-air intakes and discharge
   outlets now get them too, as return and exhaust inlets already did.

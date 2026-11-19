@@ -103,8 +103,14 @@ class Construction:
         return [layer for layer in self._layers if role in layer.roles]
 
     def flow_surface(self):
-        """The layer facing the airstream, or None if no layer declares that role."""
+        """
+        The layer facing the airstream, or None if no layer declares that role.
+        A layer of zero thickness is not built, so the next flow-surface layer
+        out faces the air instead (a duct liner set to 0 leaves the casing).
+        """
         layers = self.layers_with_role(ROLE_FLOW_SURFACE)
+        built = [layer for layer in layers if layer.thickness_mm is None or layer.thickness_mm > 0.0]
+        layers = built or layers
         return layers[0] if layers else None
 
     def structural_layers(self):
