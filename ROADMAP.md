@@ -34,7 +34,7 @@ only to `HVACLibraryAPI` / `HVACLossAPI`.
 - GUI check of design 6.6 (section 6): wyes (radius and mitered, the crotch plate of an uneven wye with a wall), lateral tees, double wyes, the mitered shoe and the centre radius tee.
 - GUI check of the 19 November 2026 fixes: SMACNA `branch_wye_radius`, curved and flexible SMACNA segments, and typing a value in the property editor (the network now syncs when the value is entered, not per keystroke; this relies on the property editor's own transaction, which a script cannot exercise).
 - Review of the new documentation (design 6.7, done 19 November 2026): `docs/library-guide.md`, `docs/type-def-reference.md`, `docs/library-api.md`, `docs/loss-coverage.md`. The "after the freeze" gaps below come next.
-- Design 6.8 (section 6), IFC export: approved 20 November 2026 (chosen before an MCP server); implementation not started.
+- Design 6.8 (section 6), IFC export: implemented 20 November 2026 and checked headless (`tools/ifc_roundtrip.py`); needs a GUI check of HVAC_ExportIFC and an export opened in Bonsai / Revit.
 - Deferred by the owner: saving a custom fitting as a library type.
 
 *Done 19 November 2026 (owner: design 6.6 geometry good; SMACNA lags builtin; typing a value is slow):*
@@ -2048,4 +2048,54 @@ connectivity are recognised, not only that the geometry shows.
 - (f) Approved: unit tests for `plan.py` (the covering plan included),
   one headless round trip for the writer.
 
-**Status.** Design approved; implementation not started.
+**Status (20 November 2026).** Implemented, checked headless; **not yet
+tried in the GUI.**
+- Code: `freecad/HVAC/ifc/` (`mapping.py` and `plan.py` pure; `collect.py`,
+  `writer.py`, `export.py`), `core/_ifc_properties.py` (the properties of
+  A2/A3, refreshed at the end of every sync and after Calculate Airflow),
+  network properties `Level` and `IfcSystemType`, command `HVAC_ExportIFC`
+  (menu and toolbar, after Size Ducts; exports the selected networks, or
+  all of them).
+- Tests: `tests/test_ifc_mapping.py`, `tests/test_ifc_plan.py` (61 tests).
+  Round trip: `tools/ifc_roundtrip.py` builds an insulated SMACNA supply
+  network in freecadcmd (source, elbow, tee, damper on the branch, two round
+  diffusers, a BIM level), calculates it, exports it twice and reopens the
+  files: 9 elements in the right classes, no proxies, the same GUIDs in both
+  exports, 17 ports, 8 connections (connected ports at the same point, axes
+  opposite), one system holding all 9, 5 type objects, 4 insulation
+  coverings, everything in "Level 2". ifcopenshell's schema validation
+  (without the EXPRESS rules, which need pytest) reports nothing.
+- Departures from the text above:
+  - A6: no `Shape` swap on the real objects. The export gives each element
+    a temporary Part::Feature stand-in holding the body and the IFC
+    properties, and deletes it afterwards; only the GUID is copied back.
+    This also covers equipment and custom fittings, whose shapes live in an
+    App::Part or App::Link. The exporter names elements after the
+    stand-ins' labels, which FreeCAD makes unique ("Duct001"), so the
+    writer puts the real labels back.
+  - A6: a layer is a covering when it has a covering role and not
+    `structural_shell`. The SMACNA liner (`flow_surface` +
+    `acoustic_absorber`) is therefore a covering, not body.
+  - A6 and B: covering, port, system and type GUIDs are derived from a
+    stable seed (the element's GUID plus the layer id or port key; the
+    document's Uid plus the network or type), not stored in `IfcData`.
+  - A6: ifcopenshell cannot convert the swept insulation solids to an
+    advanced BREP (it returns nothing), so a covering falls back to a
+    triangulated face set (1 mm deviation). Element bodies are written by
+    the BIM exporter as before.
+  - A4: no standard occurrence sets yet; only the four `HVAC_*` sets.
+    Results are left out until the network has been calculated.
+  - B: type objects carry no property sets yet.
+  - A7: when the Level's storey is not in the file (the usual case: the
+    building is not exported with the ducts), a storey with the Level's
+    name and elevation is made, with the Level's own GUID when it has one
+    (`IfcData["IfcUID"]` after an architectural export), so the two models
+    line up in a federated view.
+- Building networks in freecadcmd needs three work-arounds, all in the
+  round-trip script: an empty `MatGui` module, view providers that skip a
+  missing ViewObject, and a sync that is run directly instead of on a Qt
+  timer. Draft must be imported before the HVAC modules or freecadcmd
+  crashes.
+- Open: the GUI check (the command, the property editor showing the IFC
+  group, an export opened in Bonsai and imported into Revit); the
+  standard property sets.

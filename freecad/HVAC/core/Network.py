@@ -30,11 +30,12 @@ from dataclasses import asdict
 import FreeCAD
 
 from ..analysis.sizing import SIZE_CHANGE_POLICIES
-from ..core import _construction_schema, _terminal_function
+from ..core import _construction_schema, _ifc_properties, _terminal_function
 from ..core.Component import DuctComponent
 from ..core.Junction import DuctJunction, DuctJunctionVirtual
 from ..core.NetworkParser import DuctNetworkParser
 from ..core.Segment import DuctSegment
+from ..ifc import mapping as ifc_mapping
 from ..library.construction import (
     ALL_LAYER_ROLES,
     ROLE_ACOUSTIC_ABSORBER,
@@ -310,6 +311,28 @@ class DuctNetwork:
             )
             obj.SystemType = list(_terminal_function.SYSTEM_TYPES)
             obj.SystemType = "Supply"
+
+        # IFC export (ROADMAP 6.8): the storey the network's elements go in,
+        # and the IfcDistributionSystem type when the default is not wanted.
+        if "Level" not in obj.PropertiesList:
+            obj.addProperty(
+                "App::PropertyLink",
+                "Level",
+                "IFC",
+                "Building storey (a BIM level) this network's ducts and fittings are placed in on IFC export",
+                16,  # Prop_NoRecompute
+            )
+        if "IfcSystemType" not in obj.PropertiesList:
+            obj.addProperty(
+                "App::PropertyEnumeration",
+                "IfcSystemType",
+                "IFC",
+                "IFC system type on export. Auto: VENTILATION, or EXHAUST for an exhaust network; the system's "
+                "name says supply, return or outdoor air",
+                16,  # Prop_NoRecompute
+            )
+            obj.IfcSystemType = list(ifc_mapping.IFC_SYSTEM_TYPE_CHOICES)
+            obj.IfcSystemType = "Auto"
 
         if "ShowFeatures" not in obj.PropertiesList:
             obj.addProperty(
@@ -2017,6 +2040,10 @@ class DuctNetwork:
                     obj.Document.recompute()
 
             self._initial_sync = False
+
+            # Keep the IFC properties current, so an export from the BIM menu
+            # sees the present classes and property sets (ROADMAP 6.8 A2).
+            _ifc_properties.refresh_network(obj)
 
             # Refresh visual base direction arrows using the same parser
             self.refreshBaseDirectionOverlay(parser)

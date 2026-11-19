@@ -19,6 +19,16 @@ for in `library.json` (`"requires_api"`) and is refused by any other.
 
 ## Unreleased
 
+- **IFC export** (ROADMAP design 6.8): Export IFC (`HVAC_ExportIFC`) writes the selected duct networks, or all of
+  them, with their equipment, to an IFC4 file. Ducts, fittings, terminals, dampers, VAV boxes, silencers, filters,
+  coils and equipment get their IFC class and predefined type from a lookup table in core. The file also holds their
+  ports and port connections with flow directions, one distribution system per network, type objects per library
+  type, insulation, liner and jacket layers as separate coverings, and storey containment from the network's new
+  `Level` property. GUIDs stay the same from one export to the next. Segments and components carry the IFC properties
+  (`IfcType`, `PredefinedType`, `ObjectType`, `Tag`, `IfcProperties`) the BIM workbench exporter reads, so an export
+  from the BIM menu gives the right classes and property sets too, without ports or systems. Network property
+  `IfcSystemType` overrides the system type. Needs IfcOpenShell and the BIM workbench set to IFC4.
+
 - **Geometry API 4** (design 6.7 C; libraries declare `"requires_api": {"geometry": 4, ...}`). Removed:
   `make_section_wire`, `make_section_wire_from_port`, `make_section_face`, `make_section_face_from_port` (use
   `make_profile` / `profile_from_port` and `make_face`), `arc_wire`, `make_oval_wire`, `boundary`,

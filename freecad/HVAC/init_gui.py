@@ -66,6 +66,7 @@ class HVAC(Gui.Workbench):
                     'HVAC_RenumberNetwork',
                     'HVAC_CalculateAirflow',
                     'HVAC_SizeDucts',
+                    'HVAC_ExportIFC',
                     "Separator",
                     'HVAC_CreateSketch',
                     'HVAC_CreateLine',
@@ -200,6 +201,7 @@ class HVAC(Gui.Workbench):
                                 "HVAC_RenumberNetwork",
                                 "HVAC_CalculateAirflow",
                                 "HVAC_SizeDucts",
+                                "HVAC_ExportIFC",
                                 "HVAC_LayerVisibility",
                                 "HVAC_SelectAllSegments",
                                 "HVAC_SelectAllComponents"]
