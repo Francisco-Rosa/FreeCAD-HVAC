@@ -66,10 +66,10 @@ A supply network with an air handling unit, SMACNA fittings, terminals and in-li
 
 ![Duct network with an air handling unit, fittings and terminals](screenshots/screenshot1.png)
 
-Terminals and fittings up close: a square ceiling diffuser, a round diffuser, a slot diffuser, a plenum and
+Terminals and fittings up close: a square ceiling diffuser, a round diffuser, a grille, a plenum and
 flanged joints:
 
-![Diffusers, plenum and flanged joints](screenshots/screenshot2.png)
+![Diffusers, grille, plenum and flanged joints](screenshots/screenshot2.png)
 
 Routes drawn as a sketch or as Draft lines; the ducts and fittings follow the routes:
 
@@ -86,9 +86,9 @@ with warnings and result tables in the panel:
 ![Duct velocities after Calculate Airflow](screenshots/screenshot4.png)
 ![Flow rate and pressure at junction ports](screenshots/screenshot5.png)
 
-Layer Visibility with some construction layers hidden:
+Layers, with insulation visible:
 
-![Ducts with construction layers hidden](screenshots/screenshot6.png)
+![Ducts with their insulation layer visible](screenshots/screenshot6.png)
 
 ## Design goals
 
