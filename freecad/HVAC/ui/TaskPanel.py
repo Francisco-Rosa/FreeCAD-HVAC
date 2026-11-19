@@ -23,6 +23,7 @@
 
 """This module implements HVAC duct description classes."""
 
+import contextlib
 import json
 import traceback
 
@@ -1009,18 +1010,41 @@ class TaskPanelTypeEditor:
             return False
 
         if self.apply_callback:
-            QtCore.QTimer.singleShot(
-                0,
-                lambda: self.apply_callback(
-                    self.objects,
-                    library_id=library_id,
-                    type_id=type_id,
-                )
+            _runWithPropertyViewDetached(
+                lambda: self.apply_callback(self.objects, library_id=library_id, type_id=type_id)
             )
         return True
 
     def reject(self):
         return True
+
+
+def _runWithPropertyViewDetached(func):
+    """
+    Run func with the selection cleared, then select the same objects again.
+
+    func may remove type properties from several selected objects. FreeCAD's
+    property view (1.1) breaks on that: after one object is selected and a
+    second is added, a row shared by both stays bound to the first object's
+    property. Once that property is removed, the row throws "Property 'X'
+    not found" on the next update or repaint. Clearing the selection first,
+    and waiting for the property view's rebuild timer, removes the old rows.
+    """
+    selection = list(Gui.Selection.getSelection())
+    Gui.Selection.clearSelection()
+    rebuild_ms = FreeCAD.ParamGet("User parameter:BaseApp/Preferences/View").GetUnsigned("PropertyViewTimer", 100)
+
+    def run():
+        try:
+            func()
+        finally:
+            for obj in selection:
+                # An object func deleted raises on access; leave it out.
+                with contextlib.suppress(ReferenceError, RuntimeError):
+                    if obj.Document is not None and obj.Document.getObject(obj.Name) is obj:
+                        Gui.Selection.addSelection(obj)
+
+    QtCore.QTimer.singleShot(int(rebuild_ms) + 50, run)
 
 
 class TaskPanelEditInlineComponents:
