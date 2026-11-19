@@ -259,3 +259,34 @@ def test_containment_by_level():
     plan = ifc_plan.build_plan([unknown], levels={})
     assert plan.containment == {}
     assert any("Level" in w for w in plan.warnings)
+
+
+def test_body_materials_and_covering_colours():
+    network = _two_duct_network()
+    steel = (0.7, 0.7, 0.75)
+    rubber = (0.1, 0.1, 0.1)
+    network.elements["A"].layers = [
+        LayerInput("casing", ("flow_surface", "structural_shell"), "Steel", color=steel),
+        LayerInput("insulation", ("thermal_insulation",), "Rubber", color=rubber, transparency=0.2),
+    ]
+    network.elements["B"].layers = [LayerInput("casing", ("flow_surface", "structural_shell"), "", color=None)]
+    plan = ifc_plan.build_plan([network])
+
+    bodies = {b.element_id: b for b in plan.body_materials}
+    assert [(m.layer_id, m.material, m.color) for m in bodies["A"].layers] == [("casing", "Steel", steel)]
+    # A layer with neither a material nor a colour gives the element no material.
+    assert "B" not in bodies
+    covering = plan.coverings[0]
+    assert (covering.material, covering.color, covering.transparency) == ("Rubber", rubber, 0.2)
+
+
+def test_body_materials_skip_layers_without_shape():
+    network = _two_duct_network()
+    network.elements["A"].layers = [
+        LayerInput("liner", ("flow_surface", "acoustic_absorber"), "Foam", has_shape=False, color=(1, 1, 1)),
+        LayerInput("casing", ("flow_surface", "structural_shell"), "Steel", color=(0.5, 0.5, 0.5)),
+    ]
+    plan = ifc_plan.build_plan([network])
+    body = next(b for b in plan.body_materials if b.element_id == "A")
+    assert [m.material for m in body.layers] == ["Steel"]
+    assert plan.coverings == []

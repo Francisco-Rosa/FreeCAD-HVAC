@@ -45,6 +45,7 @@ import FreeCAD
 
 from ..ifc import mapping
 from ..utils import hvaclib
+from ..utils import materials as hvac_materials
 from .Construction import construction_for
 
 GROUP = "IFC"
@@ -149,7 +150,8 @@ def classify(obj):
 def _layers(obj):
     out = []
     for layer in construction_for(obj).layers():
-        material = getattr(layer.material, "Name", "") if layer.material is not None else ""
+        assigned = layer.material is not None and hvac_materials.is_material_assigned(layer.material)
+        material = str(getattr(layer.material, "Name", "") or "") if assigned else ""
         out.append(
             {"id": layer.id, "roles": list(layer.roles), "material": material, "thickness_mm": layer.thickness_mm}
         )

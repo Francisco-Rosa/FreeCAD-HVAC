@@ -44,6 +44,7 @@ import Part
 from ..core import Equipment, _custom_fitting, _ifc_properties
 from ..core.Construction import construction_for
 from ..utils import hvaclib
+from ..utils import materials as hvac_materials
 from . import mapping
 from .plan import ChainLink, ElementInput, EquipmentLink, LayerInput, NetworkInput, NodeInput, PortInput
 
@@ -79,13 +80,16 @@ def _has_geometry(shape):
 # ----------------------------------------------------------------------------
 
 
-def _custom_shape(comp_obj):
-    """The shape of a custom fitting (ROADMAP 6.3): its App::Link at the node, or the model where it was made."""
-    doc = comp_obj.Document
+def _custom_source(comp_obj):
+    """What a custom fitting's geometry comes from: its App::Link at the node, or the model where it was made."""
     if _custom_fitting.is_in_place(comp_obj):
-        source = getattr(comp_obj, "CustomFitting", None)
-    else:
-        source = doc.getObject(str(getattr(comp_obj, "CustomLinkName", "") or ""))
+        return getattr(comp_obj, "CustomFitting", None)
+    return comp_obj.Document.getObject(str(getattr(comp_obj, "CustomLinkName", "") or ""))
+
+
+def _custom_shape(comp_obj):
+    """The shape of a custom fitting (ROADMAP 6.3)."""
+    source = _custom_source(comp_obj)
     if source is None:
         return None
     try:
@@ -172,12 +176,55 @@ def _segment_ports(seg_obj):
     ]
 
 
+def _appearance(material):
+    """(colour (r, g, b) in 0..1 or None, transparency 0..1) of a layer material, as the 3D view draws it."""
+    try:
+        appearance = hvac_materials.get_view_appearance(material)
+    except Exception:
+        appearance = None
+    if appearance is None:
+        return None, 0.0
+    color = tuple(float(c) for c in tuple(appearance.DiffuseColor)[:3])
+    return color, float(getattr(appearance, "Transparency", 0.0) or 0.0)
+
+
+def _model_layer(source):
+    """
+    A single body "layer" for a user model (equipment, a custom fitting):
+    the material and look of its first solid. The solid's ShapeMaterial
+    when one is assigned; otherwise only the colour it is drawn with (GUI
+    only). None when neither is known.
+    """
+    if source is None:
+        return None
+    linked = getattr(source, "LinkedObject", None) or source
+    members = [linked] + list(getattr(linked, "OutListRecursive", []) or [])
+    for member in members:
+        shape = getattr(member, "Shape", None)
+        if not (member.isDerivedFrom("Part::Feature") and shape is not None and shape.Solids):
+            continue
+        material = getattr(member, "ShapeMaterial", None)
+        if material is not None and hvac_materials.is_material_assigned(material):
+            color, transparency = _appearance(material)
+            return LayerInput("body", ("structural_shell",), str(material.Name), True, color, transparency)
+        try:
+            appearance = member.ViewObject.ShapeAppearance[0]
+            color = tuple(float(c) for c in tuple(appearance.DiffuseColor)[:3])
+            transparency = float(appearance.Transparency or 0.0)
+        except Exception:
+            return None
+        return LayerInput("body", ("structural_shell",), "", True, color, transparency)
+    return None
+
+
 def _layer_inputs(obj, coverings):
     out = []
     for layer in construction_for(obj).layers():
-        material = getattr(layer.material, "Name", "") if layer.material is not None else ""
+        assigned = layer.material is not None and hvac_materials.is_material_assigned(layer.material)
+        material = str(getattr(layer.material, "Name", "") or "") if assigned else ""
+        color, transparency = _appearance(layer.material) if assigned else (None, 0.0)
         has_shape = layer.id in coverings or mapping.covering_for_roles(layer.roles) is None
-        out.append(LayerInput(layer.id, tuple(layer.roles), material, has_shape))
+        out.append(LayerInput(layer.id, tuple(layer.roles), material, has_shape, color, transparency))
     return out
 
 
@@ -204,7 +251,9 @@ def _element(collected, obj, ports, custom=False):
         type_label="" if custom else _type_label(obj),
         has_body=body is not None,
         ports=ports,
-        layers=[] if custom else _layer_inputs(obj, coverings),
+        layers=[layer for layer in [_model_layer(_custom_source(obj))] if layer]
+        if custom
+        else _layer_inputs(obj, coverings),
     )
     collected.objects[obj.Name] = obj
     if body is not None:
@@ -240,6 +289,7 @@ def _equipment_element(collected, equipment):
         object_type=str(getattr(equipment, "ObjectType", "") or ""),
         has_body=body is not None,
         ports=ports,
+        layers=[layer for layer in [_model_layer(Equipment.model_of(equipment))] if layer],
     )
 
 

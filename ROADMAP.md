@@ -2096,6 +2096,17 @@ tried in the GUI.**
   missing ViewObject, and a sync that is run directly instead of on a Qt
   timer. Draft must be imported before the HVAC modules or freecadcmd
   crashes.
+- Materials and styles (added 20 November 2026, after the owner's first
+  export, where every element had one unnamed grey style and no
+  material): the writer now gives each element an IfcMaterial from its
+  body layers (a constituent set when they differ) and one named surface
+  style over its whole body in that material's colour; each covering gets
+  its layer's material and colour; materials carry their style in a
+  material definition representation. Equipment and custom fittings take
+  their first solid's `ShapeMaterial`, or only the colour it is drawn with
+  in the GUI. Checked on a copy of the owner's test_network_1: every
+  duct, fitting, terminal, damper, covering and the equipment has a
+  material and a style. Export IFC is no longer in the Tasks pane.
 - Open: the GUI check (the command, the property editor showing the IFC
   group, an export opened in Bonsai and imported into Revit); the
   standard property sets.

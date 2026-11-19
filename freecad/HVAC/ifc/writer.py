@@ -68,6 +68,48 @@ class _Writer:
         self.context = self._body_context()
         self.project = (ifc_file.by_type("IfcProject") or [None])[0]
         self.building = (ifc_file.by_type("IfcBuilding") or [None])[0]
+        self._styles = {}
+        self._materials = {m.Name: m for m in ifc_file.by_type("IfcMaterial")}
+
+    # -- materials and styles ------------------------------------------------
+
+    def surface_style(self, name, color, transparency=0.0):
+        """A named IfcSurfaceStyle of one colour, made once per (name, colour, transparency)."""
+        key = (name, tuple(round(c, 4) for c in color), round(transparency, 4))
+        if key not in self._styles:
+            shading = self.f.createIfcSurfaceStyleShading(
+                self.f.createIfcColourRgb(None, *[float(c) for c in color]), float(transparency)
+            )
+            self._styles[key] = self.f.createIfcSurfaceStyle(name or None, "BOTH", [shading])
+        return self._styles[key]
+
+    def material(self, name, color=None, transparency=0.0):
+        """
+        The IfcMaterial called `name`, made once. With a colour it also gets
+        a material definition representation carrying that surface style,
+        which is how Revit and Bonsai read a material's look.
+        """
+        material = self._materials.get(name)
+        if material is None:
+            material = self.f.createIfcMaterial(name)
+            self._materials[name] = material
+        if color is not None and not material.HasRepresentation and self.context is not None:
+            styled = self.f.createIfcStyledItem(None, [self.surface_style(name, color, transparency)], None)
+            representation = self.f.createIfcStyledRepresentation(self.context, "Style", "Material", [styled])
+            self.f.createIfcMaterialDefinitionRepresentation(None, None, [representation], material)
+        return material
+
+    def restyle(self, product, style):
+        """Give every geometry item of `product` this one surface style, replacing the ones it had."""
+        representation = product.Representation
+        if representation is None:
+            return
+        items = [item for rep in representation.Representations for item in rep.Items]
+        for item in items:
+            for styled in list(self.f.get_inverse(item)):
+                if styled.is_a("IfcStyledItem") and styled.Item == item:
+                    self.f.remove(styled)
+            self.f.createIfcStyledItem(item, [style], None)
 
     def _body_context(self):
         contexts = self.f.by_type("IfcGeometricRepresentationSubContext")
@@ -261,8 +303,51 @@ def enrich(path, plan, guids, coverings=None, levels=None, labels=None, salt="")
         if containers:
             _contain(w, containers[0].RelatingStructure, coverings)
 
+    # Step 8: materials and surface styles from the layer materials.
+    for body in plan.body_materials:
+        element = elements.get(body.element_id)
+        if element is not None:
+            _style_body(w, element, body)
+
     f.write(path)
     return w.warnings
+
+
+def _style_body(w, element, body):
+    """
+    The element's IFC material (one IfcMaterial, or a constituent set when
+    its body layers differ) and one surface style over its whole body, from
+    the first body layer with a colour.
+    """
+    named = [layer for layer in body.layers if layer.material]
+    distinct = []
+    for layer in named:
+        if layer.material not in [d.material for d in distinct]:
+            distinct.append(layer)
+    if len(distinct) == 1:
+        relating = w.material(distinct[0].material, distinct[0].color, distinct[0].transparency)
+    elif distinct:
+        constituents = [
+            w.f.createIfcMaterialConstituent(
+                layer.layer_id, None, w.material(layer.material, layer.color, layer.transparency), None, None
+            )
+            for layer in distinct
+        ]
+        relating = w.f.createIfcMaterialConstituentSet(element.Name, None, constituents)
+    else:
+        relating = None
+    if relating is not None:
+        w.create(
+            "IfcRelAssociatesMaterial",
+            "material|" + element.GlobalId,
+            RelatedObjects=[element],
+            RelatingMaterial=relating,
+        )
+    coloured = next((layer for layer in body.layers if layer.color is not None), None)
+    if coloured is not None:
+        w.restyle(
+            element, w.surface_style(coloured.material or coloured.layer_id, coloured.color, coloured.transparency)
+        )
 
 
 def _new_storey(w, level_id, info):
@@ -364,9 +449,12 @@ def _covering(w, element, covering, geometry):
         Representation=representation,
         PredefinedType=covering.predefined_type,
     )
+    if covering.color is not None:
+        w.restyle(
+            entity, w.surface_style(covering.material or covering.object_type, covering.color, covering.transparency)
+        )
     if covering.material:
-        material = next((m for m in w.f.by_type("IfcMaterial") if m.Name == covering.material), None)
-        material = material or w.f.createIfcMaterial(covering.material)
+        material = w.material(covering.material, covering.color, covering.transparency)
         w.create(
             "IfcRelAssociatesMaterial",
             "material|" + entity.GlobalId,

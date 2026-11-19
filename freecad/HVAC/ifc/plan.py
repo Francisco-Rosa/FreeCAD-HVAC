@@ -75,12 +75,18 @@ class PortInput:
 
 @dataclass
 class LayerInput:
-    """One construction layer: its roles and material, and whether it has a shape to export."""
+    """
+    One construction layer: its roles and material, whether it has a shape
+    to export, and the material's colour (r, g, b in 0..1, or None when the
+    material has no appearance) and transparency (0..1).
+    """
 
     layer_id: str
     roles: tuple = ()
     material: str = ""
     has_shape: bool = True
+    color: Optional[tuple] = None
+    transparency: float = 0.0
 
 
 @dataclass
@@ -210,6 +216,30 @@ class CoveringPlan:
     predefined_type: str
     object_type: str
     material: str = ""
+    color: Optional[tuple] = None
+    transparency: float = 0.0
+
+
+@dataclass
+class MaterialPlan:
+    """One body layer's material, for the element's IFC material and surface style."""
+
+    layer_id: str
+    material: str
+    color: Optional[tuple] = None
+    transparency: float = 0.0
+
+
+@dataclass
+class BodyMaterialPlan:
+    """
+    The materials of an element's body, in build order. The first one with a
+    colour styles the whole body: features such as flanges take their host
+    layer's look, which is the duct wall's.
+    """
+
+    element_id: str
+    layers: list = field(default_factory=list)  # [MaterialPlan]
 
 
 @dataclass
@@ -220,6 +250,7 @@ class IfcExportPlan:
     systems: list = field(default_factory=list)
     types: list = field(default_factory=list)
     coverings: list = field(default_factory=list)
+    body_materials: list = field(default_factory=list)
     containment: dict = field(default_factory=dict)  # level id -> [element ids]
     warnings: list = field(default_factory=list)
 
@@ -447,7 +478,7 @@ def build_plan(networks, equipment=(), levels=None):
         if element_id in equipment_level:
             plan.containment.setdefault(equipment_level[element_id], []).append(element_id)
 
-    # Step 6: type objects and coverings of every exported element.
+    # Step 6: type objects, coverings and body materials of every exported element.
     all_elements = {}
     for network in networks:
         all_elements.update(network.elements)
@@ -465,9 +496,14 @@ def build_plan(networks, equipment=(), levels=None):
                     name=element.type_label or element.type_key,
                 )
             types[type_id].element_ids.append(element_id)
+        body = BodyMaterialPlan(element_id)
         for layer in element.layers:
+            if not layer.has_shape:
+                continue
             covering = mapping.covering_for_roles(layer.roles)
-            if covering is None or not layer.has_shape:
+            if covering is None:
+                if layer.material or layer.color is not None:
+                    body.layers.append(MaterialPlan(layer.layer_id, layer.material, layer.color, layer.transparency))
                 continue
             plan.coverings.append(
                 CoveringPlan(
@@ -476,7 +512,11 @@ def build_plan(networks, equipment=(), levels=None):
                     predefined_type=covering[0],
                     object_type=covering[1],
                     material=layer.material,
+                    color=layer.color,
+                    transparency=layer.transparency,
                 )
             )
+        if body.layers:
+            plan.body_materials.append(body)
     plan.types = [types[k] for k in sorted(types)]
     return builder.finish()
