@@ -1714,6 +1714,78 @@ def populate_layer_visibility_menu(menu):
     show_all.triggered.connect(lambda: [check.setChecked(True) for check in checks])
 
 
+class CommandExportIFC:
+    """Export duct networks, with their equipment, to an IFC4 file (ROADMAP 6.8)."""
+
+    def GetResources(self):
+        return {
+            'Pixmap': hvaclib.get_icon_path("ExportIFC.svg"),
+            'MenuText': QT_TRANSLATE_NOOP('HVAC_ExportIFC', 'Export IFC'),
+            'ToolTip': QT_TRANSLATE_NOOP(
+                'HVAC_ExportIFC',
+                'Export the selected duct networks (or all of them) to an IFC4 file: ducts, fittings, terminals '
+                'and equipment with their ports, connections, systems and insulation'
+            ),
+        }
+
+    def IsActive(self):
+        return Gui.ActiveDocument is not None and bool(hvaclib.allHVACNetworks())
+
+    def Activated(self):
+        import os
+
+        from ..ifc.export import IfcExportError, export_networks
+
+        # Step 1: which networks, and where to.
+        networks = hvaclib.selectedHVACNetworks() or hvaclib.allHVACNetworks() or []
+        if not networks:
+            return
+        doc = networks[0].Document
+        folder = os.path.dirname(doc.FileName) if doc.FileName else os.path.expanduser("~")
+        default = os.path.join(folder, "{}.ifc".format(doc.Label))
+        path, _filter = QtWidgets.QFileDialog.getSaveFileName(
+            Gui.getMainWindow(), translate("HVAC_ExportIFC", "Export IFC"), default, "IFC files (*.ifc)"
+        )
+        if not path:
+            return
+        if not path.lower().endswith(".ifc"):
+            path += ".ifc"
+
+        # Step 2: export, then report what went into the file.
+        QtWidgets.QApplication.setOverrideCursor(QtCore.Qt.WaitCursor)
+        try:
+            report = export_networks(networks, path)
+        except IfcExportError as err:
+            QtWidgets.QApplication.restoreOverrideCursor()
+            QtWidgets.QMessageBox.warning(Gui.getMainWindow(), translate("HVAC_ExportIFC", "Export IFC"), str(err))
+            return
+        except Exception:
+            QtWidgets.QApplication.restoreOverrideCursor()
+            FreeCAD.Console.PrintError(traceback.format_exc())
+            raise
+        QtWidgets.QApplication.restoreOverrideCursor()
+
+        for warning in report.warnings:
+            FreeCAD.Console.PrintWarning("HVAC - ExportIFC - {}\n".format(warning))
+        text = translate(
+            "HVAC_ExportIFC",
+            "Exported {} elements, {} ports, {} connections, {} coverings and {} systems to\n{}",
+        ).format(
+            report.element_count,
+            report.port_count,
+            report.connection_count,
+            report.covering_count,
+            report.system_count,
+            report.path,
+        )
+        if report.warnings:
+            text += "\n\n" + translate("HVAC_ExportIFC", "{} warnings, listed in the Report view.").format(
+                len(report.warnings)
+            )
+        FreeCAD.Console.PrintMessage("HVAC - ExportIFC - {}\n".format(text.replace("\n", " ")))
+        QtWidgets.QMessageBox.information(Gui.getMainWindow(), translate("HVAC_ExportIFC", "Export IFC"), text)
+
+
 #=================================================
 # Register Commands
 #=================================================
@@ -1739,6 +1811,7 @@ if FreeCAD.GuiUp:
     FreeCAD.Gui.addCommand('HVAC_SizeDucts', CommandSizeDucts())
     FreeCAD.Gui.addCommand('HVAC_ResetTypesToDefaults', CommandResetTypesToNetworkDefaults())
     FreeCAD.Gui.addCommand('HVAC_RenumberNetwork', CommandRenumberNetwork())
+    FreeCAD.Gui.addCommand('HVAC_ExportIFC', CommandExportIFC())
     FreeCAD.Gui.addCommand('HVAC_SelectAllSegments', CommandSelectAllSegments())
     FreeCAD.Gui.addCommand('HVAC_SelectAllComponents', CommandSelectAllComponents())
     FreeCAD.Gui.addCommand('HVAC_CreateEquipment', CommandCreateEquipment())

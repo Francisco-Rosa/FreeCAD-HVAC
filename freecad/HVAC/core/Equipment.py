@@ -221,6 +221,13 @@ def make_equipment(part):
     HVACEquipment.setProperties(part)
     for marker in _custom_fitting.container_ports(part):
         ensure_equipment_port(marker)
+    # IFC class and type the unit exports as (ROADMAP 6.8 A3), for the user to change.
+    try:
+        from . import _ifc_properties
+
+        _ifc_properties.ensure_equipment(part)
+    except Exception as exc:
+        FreeCAD.Console.PrintWarning("HVAC - IFC properties of '{}' not added: {}\n".format(part.Label, exc))
     return part
 
 

@@ -21,6 +21,10 @@ made with an earlier version may need to be rebuilt (see [`CHANGELOG.md`](CHANGE
    to end on a port connects to it.
 6. Set the design flow at each terminal, then run **Calculate Airflow** and **Size Ducts**. Results show in the 3D
    view and in tables you can export to a spreadsheet.
+7. **Export IFC** writes the networks to an IFC4 file for other BIM tools. Set a network's `Level` to a BIM
+   building storey to place its ducts on that storey.
+
+A sample network is in [`examples/HVAC_network_sample_1.FCStd`](examples/HVAC_network_sample_1.FCStd).
 
 ## Features
 
@@ -47,6 +51,16 @@ made with an earlier version may need to be rebuilt (see [`CHANGELOG.md`](CHANGE
   the size changes only at straight-through junctions, and the sizer suggests where to add reducers.
 - Friction by Darcy-Weisbach (Altshul-Tsal or Colebrook), a CSV chart or a formula; duct roughness comes from the
   wall material.
+
+**IFC export**
+- IFC4 export of ducts, fittings, terminals, in-line devices and equipment, each with its IFC class and predefined
+  type (`IfcDuctSegment`, `IfcDuctFitting`, `IfcAirTerminal`, `IfcDamper`, `IfcAirTerminalBox`, ...).
+- Ports with flow direction and the connections between them, one distribution system per network, a type object
+  per library type, and property sets with the section, construction layers and calculated results.
+- Insulation, liner and jacket layers as separate coverings; materials and colours from the layer materials.
+- Elements keep their GUIDs from one export to the next.
+- Needs IfcOpenShell and the BIM workbench set to IFC4. The workbench writes the elements with the BIM exporter,
+  then adds the MEP data.
 
 **Libraries**
 
@@ -102,7 +116,7 @@ Layers, with insulation visible:
 - [ ] Duct leakage.
 - [ ] Bill of quantities.
 - [ ] Imperial units in the analysis.
-- [ ] BIM data.
+- [x] BIM data: IFC4 export with ports, systems and materials.
 - [ ] Custom-profile ducts and duct supports.
 - [ ] Looped networks, thermal and acoustic calculations.
 - [ ] Piping.
@@ -114,6 +128,8 @@ Layers, with insulation visible:
   shapes yet. Crosses have no SMACNA table and use a decomposed loss, reported as an approximation.
 - Static regain applies only where the sizing sections meet, not within a section.
 - A radiussed offset given a length too short for its arcs is refused, with a message saying how long it must be.
+- IFC export writes no standard `Pset_*` property sets yet, only the workbench's own `HVAC_*` sets. Insulation is
+  exported as a mesh where IfcOpenShell cannot convert its exact shape.
 
 ## For developers
 

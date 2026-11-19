@@ -34,6 +34,7 @@ only to `HVACLibraryAPI` / `HVACLossAPI`.
 - GUI check of design 6.6 (section 6): wyes (radius and mitered, the crotch plate of an uneven wye with a wall), lateral tees, double wyes, the mitered shoe and the centre radius tee.
 - GUI check of the 19 November 2026 fixes: SMACNA `branch_wye_radius`, curved and flexible SMACNA segments, and typing a value in the property editor (the network now syncs when the value is entered, not per keystroke; this relies on the property editor's own transaction, which a script cannot exercise).
 - Review of the new documentation (design 6.7, done 19 November 2026): `docs/library-guide.md`, `docs/type-def-reference.md`, `docs/library-api.md`, `docs/loss-coverage.md`. The "after the freeze" gaps below come next.
+- Design 6.8 (section 6), IFC export: implemented 20 November 2026 and checked headless (`tools/ifc_roundtrip.py`); needs a GUI check of HVAC_ExportIFC and an export opened in Bonsai / Revit.
 - Deferred by the owner: saving a custom fitting as a library type.
 
 *Done 19 November 2026 (owner: design 6.6 geometry good; SMACNA lags builtin; typing a value is slow):*
@@ -1807,3 +1808,305 @@ without the owner's instruction.
   document the current surface and leave the clean-up for later?
 - (c) If C: keep any of the unused names for external libraries?
 - (d) D as written?
+
+### 6.8 IFC export of ducts, fittings and equipment ("BIM data")
+
+Written 20 November 2026 at the owner's request. **For the owner's review;
+nothing implemented.**
+
+**Why now.** The owner chose IFC export before an MCP server for AI-driven
+modelling. IFC export is the interoperability need on real projects
+(handover to Revit, ArchiCAD, Solibri, Navisworks). It also fixes the
+vocabulary (classes, predefined types, systems, ports) that later MCP tools
+can reuse. Agreed order:
+1. IFC export (this design).
+2. Building context layer: read the building (BIM objects or IFC) for
+   levels, obstacles and ceiling voids. It reuses the ifcopenshell base.
+3. MCP server phase 1: analysis tools, network operations, routes from
+   explicit points, clash check, `export_ifc`.
+4. MCP server phase 2: a server-side router on the building context.
+
+Steps 2 to 4 get their own designs later.
+
+**Today.** No IFC support. The README lists "BIM data" as not done. The
+objects that would be exported:
+- `DuctSegment`, `DuctComponent`: `Part::FeaturePython` with a layered
+  `Shape` (casing, insulation, liner, flanges as features).
+- `DuctJunction`: logical node, no shape. Not an IFC element.
+- Equipment and custom fittings: `App::Part` with port markers
+  (`Part::LocalCoordinateSystem`), custom fittings also as `App::Link`.
+- Base sketches and wires, and the managed `Base` / `Geometry` /
+  `Topology` folders: not exported.
+
+**What the BIM workbench exporter does.** Checked in the FreeCAD 1.1.4
+flatpak source (`Mod/BIM/importers/exportIFC.py`, ifcopenshell 0.8.4):
+- It writes with ifcopenshell. Schema IFC4 or IFC2X3 (preference).
+- Class from an `IfcType` property: spaces removed, `Ifc` prefixed
+  ("Duct Fitting" becomes `IfcDuctFitting`). Any name in the schema's
+  product list is accepted; otherwise `IfcBuildingElementProxy`. The IFC4
+  list has `IfcDuctSegment`, `IfcDuctFitting`, `IfcAirTerminal`,
+  `IfcAirTerminalBox`, `IfcDamper`, `IfcDuctSilencer`, `IfcFilter`,
+  `IfcCoil`, `IfcFan`, `IfcUnitaryEquipment`. **The IFC2X3 list has only
+  the generic `IfcFlowSegment` / `IfcFlowFitting` / `IfcFlowController` /
+  `IfcFlowTerminal`.**
+- Entity attributes from properties in the group "IFC Attributes"
+  (`PredefinedType`, `ObjectType`, `Tag`).
+- Property sets from an `IfcProperties` map property
+  (`"name": "pset;;type;;value"`).
+- Stable GUIDs: `IfcData["IfcUID"]` is read, or created and written back
+  (preference "store UID"). An object without an `IfcData` property gets
+  a new GUID on every export.
+- Geometry (extrusion, BREP, mesh; `IfcData["FlagForceBrep"]`),
+  materials, project, units, owner history, and storey containment for
+  objects inside a BIM BuildingPart.
+- Extension point: `Proxy.export_ifc(obj, ifcfile)` on "special" objects.
+  It runs after the products are created, but it gets no map from
+  FreeCAD objects to IFC entities. `ArchSchedule` is its only user.
+
+**What it does not do.**
+- No ports or connections: no `IfcDistributionPort`, `IfcRelNests`,
+  `IfcRelConnectsPorts`.
+- No systems: groups become a plain `IfcGroup`. No
+  `IfcDistributionSystem`, no `IfcRelServicesBuildings`.
+- No type objects (`IfcDuctSegmentType`, ..., `IfcRelDefinesByType`).
+  The standard `Pset_*TypeCommon` sets belong on those.
+- No stable API: a 2875-line procedural module whose internals change
+  between FreeCAD versions.
+
+Without ports and systems an export is a coordination model only (visual
+clash checks). MEP tools cannot trace the network or recognise the system.
+
+**Proposal: BIM exporter for elements, own post-process for MEP.**
+
+*A. Elements through the BIM exporter.*
+1. **IFC mapping per type.** A lookup table in core, keyed by category,
+   topology and family (below). No type-def key for now (owner, (b)), so
+   the type-def format and the library API version stay unchanged. A type
+   the table does not cover exports as `IfcDuctFitting` `NOTDEFINED`
+   (segments as `IfcDuctSegment` `NOTDEFINED`). A type-def override key
+   can be added later if external libraries need it.
+2. **Properties on `DuctSegment` / `DuctComponent`**, kept current by
+   sync:
+   - `IfcType` (string, BIM spelling, for example "Duct Fitting");
+   - group "IFC Attributes": `PredefinedType`, `ObjectType` (when the
+     predefined type is `USERDEFINED`), `Tag` (the documentation number
+     from `Numbering.py`, when set);
+   - `IfcData` (dict): holds `IfcUID`, so GUIDs survive re-export;
+   - `IfcProperties` (dict): property sets (item 4).
+   These are additive object properties: they change no library contract.
+3. **Equipment and custom fittings.** The same properties, with the class
+   from a user property on the equipment (`IfcUnitaryEquipment`
+   `AIRHANDLER` by default, `IfcFan`, `IfcFilter`, `IfcCoil`, or
+   `IfcBuildingElementProxy`). Their port markers become IFC ports in B.
+4. **Property sets.**
+   - Standard occurrence sets, where values exist:
+     `Pset_DuctSegmentOccurrence`, `Pset_DuctFittingOccurrence`,
+     `Pset_AirTerminalOccurrence` (flow rate). The exact property names
+     get checked against the IFC4 property set definitions during
+     implementation.
+   - `HVAC_Section`: profile, width, height, diameter.
+   - `HVAC_Construction`: one entry per layer (role, material,
+     thickness), from the construction layers.
+   - `HVAC_Results`: flow, velocity, friction rate, pressure loss,
+     static pressure, loss status. Refreshed after Calculate Airflow and
+     Apply Sizing, not only on sync.
+   - `HVAC_Source`: library id, type id, edge key or node id. Lets a
+     re-import or a later round trip find the FreeCAD object.
+5. **Export command `HVAC_ExportIFC`.** It builds the object list itself
+   (segments and components of the chosen networks, equipment, custom
+   fittings; no junctions, no base geometry, no managed folders), runs the
+   BIM exporter on that list, then runs B on the file. Exporting from the
+   BIM menu still gives correct elements and property sets, but no ports
+   or systems.
+6. **Geometry: covering layers as separate elements** (owner, (d)).
+   - The element's body is its layers with the role `flow_surface` or
+     `structural_shell`, plus its features (flanges, frames). Core picks
+     layers by role only, never by layer id.
+   - Every other layer becomes its own `IfcCovering`, written by B:
+     `thermal_insulation`, `acoustic_liner`, `acoustic_absorber` give
+     `INSULATION` (ObjectType "Thermal insulation", "Acoustic liner",
+     "Acoustic absorber"); `vapor_barrier` gives `MEMBRANE`;
+     `outer_jacket` gives `WRAPPING`; `fire_protection` gives
+     `USERDEFINED` (ObjectType "Fire protection"). A layer with several
+     roles takes the first in that order.
+   - `obj.Shape` is the compound of the visible layers and features
+     (`_geometry_apply.py`), so it cannot be handed to the exporter as it
+     is: the body would include insulation, and a hidden layer would be
+     missing. `HVAC_ExportIFC` sets each exported object's `Shape` to its
+     body (from the `Layer_<id>_Shape` properties, ignoring layer
+     visibility) for the duration of the export, without a recompute, and
+     restores it afterwards, also on failure.
+   - Each covering keeps its GUID in the element's `IfcData` under
+     `IfcUID_<layer id>`, so coverings are stable across exports too.
+7. **Storey.** Networks have no level today. A new network property
+   `Level` (link to a BIM BuildingPart of type "Building Storey"). B puts
+   every element of the network in that storey
+   (`IfcRelContainedInSpatialStructure`) when the exporter did not.
+   Whether a network placed inside a BuildingPart is enough on its own
+   must be checked: the exporter skips plain document groups, and the
+   managed folders are groups.
+
+*B. MEP post-process (own code, ifcopenshell).*
+1. **Plan (pure).** `freecad/HVAC/ifc/plan.py` builds a plain-data
+   `IfcExportPlan` from the network topology, with no FreeCAD or
+   ifcopenshell import. It holds, per element (by GUID): its ports
+   (edge key, position, axis, `FlowDirection` `SOURCE` / `SINK` from the
+   drawn direction and the solved flow, `PredefinedType` `DUCT`); the
+   port pairs to connect (segment end to component port, and component to
+   component along an inline chain); one system per network; one type
+   object per library type (with the type-level property sets).
+   Built through `core/_analysis_adapter.py`-style reading, so the
+   layering holds.
+2. **Writer.** `freecad/HVAC/ifc/writer.py` opens the exported file,
+   finds each element by GUID (`by_guid`), and adds:
+   - `IfcDistributionPort` per port, nested with `IfcRelNests`;
+   - `IfcRelConnectsPorts` per connected pair;
+   - `IfcDistributionSystem` per network, members through
+     `IfcRelAssignsToGroup`, linked to the building with
+     `IfcRelServicesBuildings`;
+   - type objects with `IfcRelDefinesByType`;
+   - `IfcCovering` per covering layer (A6): BREP representation from the
+     layer's shape (`ifcopenshell.geom.serialise`, as the BIM exporter
+     does), the layer's material, attached with
+     `IfcRelCoversBldgElements`, in the element's storey and in the
+     network's system;
+   - storey containment (A7) where missing.
+   Then saves the file.
+3. **System mapping.** IFC4 `IfcDistributionSystemEnum` has no supply
+   air or return air values (checked in ifcopenshell 0.8.4). Default:
+   `Supply` gives `VENTILATION`, `Return` gives `VENTILATION`, `Exhaust`
+   gives `EXHAUST`, `OutdoorAir` gives `VENTILATION`. The system's
+   `Name` and `LongName` carry the real function ("Supply air"). A network
+   property `IfcSystemType` lets the user pick `AIRCONDITIONING` instead.
+   The same value goes on each port's `SystemType`.
+4. **Why a post-process and not the `export_ifc` hook:** the hook runs
+   inside exporter internals, gets no object map, and only fires when the
+   network object is in the export selection. A post-process depends only
+   on the GUIDs, can be tested on a small file, and survives exporter
+   changes.
+
+*Default mapping (IFC4).*
+
+| HVAC type | IFC class | PredefinedType |
+|---|---|---|
+| straight and curved segments | `IfcDuctSegment` | `RIGIDSEGMENT` |
+| `circular_flex` | `IfcDuctSegment` | `FLEXIBLESEGMENT` |
+| elbows | `IfcDuctFitting` | `BEND` |
+| offsets | `IfcDuctFitting` | `USERDEFINED`, ObjectType "Offset" |
+| transitions | `IfcDuctFitting` | `TRANSITION` |
+| tees, taps, laterals, wyes, crosses, multiports, plenums | `IfcDuctFitting` | `JUNCTION` |
+| obstruction | `IfcDuctFitting` | `OBSTRUCTION` |
+| entries, intake hoods | `IfcDuctFitting` | `ENTRY` |
+| exits, exhaust hoods | `IfcDuctFitting` | `EXIT` |
+| flex connector | `IfcDuctFitting` | `CONNECTOR` |
+| end cap, access door | `IfcDuctFitting` | `USERDEFINED` (ObjectType from the label) |
+| diffusers / grille / register | `IfcAirTerminal` | `DIFFUSER` / `GRILLE` / `REGISTER` |
+| VAV box | `IfcAirTerminalBox` | `VARIABLEFLOWPRESSUREDEPENDANT` |
+| damper | `IfcDamper` | `BALANCINGDAMPER` |
+| fire damper | `IfcDamper` | `FIREDAMPER` |
+| silencer | `IfcDuctSilencer` | `ROUND` / `RECTANGULAR` / `FLATOVAL` by profile |
+| filter | `IfcFilter` | `AIRPARTICLEFILTER` |
+| coil | `IfcCoil` | `NOTDEFINED` (user property) |
+| markers and generic placeholders | `IfcDuctFitting` | `NOTDEFINED` |
+
+A component with no solid (a marker, a plain straight node with nothing
+built) is left out, and its ports connect straight through to the next
+element.
+
+**Schema.** IFC4 only. IFC2X3 has none of the duct classes as
+occurrences, so an IFC2X3 export would be all generic flow elements; the
+command refuses it with a message. IFC4X3 can follow once importers
+support it widely.
+
+**Tests** (scope to be confirmed by the owner, `AGENTS.md` section 1):
+`plan.py` is data-structure generation from the network, so it gets unit
+tests (ports, pairs, directions, systems, mapping, overrides). The writer
+gets one headless round trip: export a small network in FreeCAD, reopen
+the file with ifcopenshell, and check classes, GUID stability across two
+exports, port count, connections and system membership.
+
+**Validation by hand.** Open the file in Bonsai (BlenderBIM), import it
+into Revit, and run an IFC validator. Check that the system and its
+connectivity are recognised, not only that the geometry shows.
+
+**Risks.**
+- Large or complex fittings may export as heavy BREP or mesh. Watch file
+  size and import time in Revit.
+- Exporter behaviour may change in later FreeCAD versions. A only uses the
+  documented property conventions; B only uses GUIDs.
+- ifcopenshell ships with the FreeCAD 1.1 flatpak. Other builds may lack
+  it: the command must say so, not fail.
+
+**Owner answers (20 November 2026).**
+- (a) Approved: BIM exporter for elements (A), own post-process for
+  ports, systems, type objects and coverings (B).
+- (b) A core lookup table only, for now. No type-def key.
+- (c) Approved: `VENTILATION` / `EXHAUST` defaults with an
+  `IfcSystemType` override (B3).
+- (d) Covering layers as separate `IfcCovering` elements (A6, B2).
+- (e) Approved: a network `Level` property (A7).
+- (f) Approved: unit tests for `plan.py` (the covering plan included),
+  one headless round trip for the writer.
+
+**Status (20 November 2026).** Implemented, checked headless; **not yet
+tried in the GUI.**
+- Code: `freecad/HVAC/ifc/` (`mapping.py` and `plan.py` pure; `collect.py`,
+  `writer.py`, `export.py`), `core/_ifc_properties.py` (the properties of
+  A2/A3, refreshed at the end of every sync and after Calculate Airflow),
+  network properties `Level` and `IfcSystemType`, command `HVAC_ExportIFC`
+  (menu and toolbar, after Size Ducts; exports the selected networks, or
+  all of them).
+- Tests: `tests/test_ifc_mapping.py`, `tests/test_ifc_plan.py` (61 tests).
+  Round trip: `tools/ifc_roundtrip.py` builds an insulated SMACNA supply
+  network in freecadcmd (source, elbow, tee, damper on the branch, two round
+  diffusers, a BIM level), calculates it, exports it twice and reopens the
+  files: 9 elements in the right classes, no proxies, the same GUIDs in both
+  exports, 17 ports, 8 connections (connected ports at the same point, axes
+  opposite), one system holding all 9, 5 type objects, 4 insulation
+  coverings, everything in "Level 2". ifcopenshell's schema validation
+  (without the EXPRESS rules, which need pytest) reports nothing.
+- Departures from the text above:
+  - A6: no `Shape` swap on the real objects. The export gives each element
+    a temporary Part::Feature stand-in holding the body and the IFC
+    properties, and deletes it afterwards; only the GUID is copied back.
+    This also covers equipment and custom fittings, whose shapes live in an
+    App::Part or App::Link. The exporter names elements after the
+    stand-ins' labels, which FreeCAD makes unique ("Duct001"), so the
+    writer puts the real labels back.
+  - A6: a layer is a covering when it has a covering role and not
+    `structural_shell`. The SMACNA liner (`flow_surface` +
+    `acoustic_absorber`) is therefore a covering, not body.
+  - A6 and B: covering, port, system and type GUIDs are derived from a
+    stable seed (the element's GUID plus the layer id or port key; the
+    document's Uid plus the network or type), not stored in `IfcData`.
+  - A6: ifcopenshell cannot convert the swept insulation solids to an
+    advanced BREP (it returns nothing), so a covering falls back to a
+    triangulated face set (1 mm deviation). Element bodies are written by
+    the BIM exporter as before.
+  - A4: no standard occurrence sets yet; only the four `HVAC_*` sets.
+    Results are left out until the network has been calculated.
+  - B: type objects carry no property sets yet.
+  - A7: when the Level's storey is not in the file (the usual case: the
+    building is not exported with the ducts), a storey with the Level's
+    name and elevation is made, with the Level's own GUID when it has one
+    (`IfcData["IfcUID"]` after an architectural export), so the two models
+    line up in a federated view.
+- Building networks in freecadcmd needs three work-arounds, all in the
+  round-trip script: an empty `MatGui` module, view providers that skip a
+  missing ViewObject, and a sync that is run directly instead of on a Qt
+  timer. Draft must be imported before the HVAC modules or freecadcmd
+  crashes.
+- Materials and styles (added 20 November 2026, after the owner's first
+  export, where every element had one unnamed grey style and no
+  material): the writer now gives each element an IfcMaterial from its
+  body layers (a constituent set when they differ) and one named surface
+  style over its whole body in that material's colour; each covering gets
+  its layer's material and colour; materials carry their style in a
+  material definition representation. Equipment and custom fittings take
+  their first solid's `ShapeMaterial`, or only the colour it is drawn with
+  in the GUI. Checked on a copy of the owner's test_network_1: every
+  duct, fitting, terminal, damper, covering and the equipment has a
+  material and a style. Export IFC is no longer in the Tasks pane.
+- Open: the GUI check (the command, the property editor showing the IFC
+  group, an export opened in Bonsai and imported into Revit); the
+  standard property sets.

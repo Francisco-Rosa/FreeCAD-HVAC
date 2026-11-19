@@ -155,6 +155,14 @@ class AirflowSolver:
             Equipment.update_from_airflow(self.net_obj, result)
         except Exception as e:
             result.warnings.append("Could not update the connected equipment: {}".format(e))
+
+        # The IFC property sets carry the new results (ROADMAP 6.8 A4).
+        try:
+            from . import _ifc_properties
+
+            _ifc_properties.refresh_network(self.net_obj)
+        except Exception as e:
+            result.warnings.append("Could not update the IFC properties: {}".format(e))
         return result
 
     # ------------------------------------------------------------------
