@@ -22,7 +22,9 @@
         "enum": [
           "Supply",
           "Return",
-          "Exhaust"
+          "Exhaust",
+          "OutdoorAir",
+          "Discharge"
         ]
       }
     }

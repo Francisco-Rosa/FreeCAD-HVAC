@@ -96,6 +96,37 @@ def test_network_warnings_name_each_wrong_terminal():
     assert len(warnings) == 1 and "Diffuser 2" in warnings[0]
 
 
+_AIR_TERMINALS = {
+    "end_diffuser_square",
+    "end_diffuser_round",
+    "end_diffuser_slot",
+    "end_grille_generic",
+    "end_register_generic",
+}
+
+
+@pytest.mark.parametrize("library_id", ["builtin_basic", "smacna"])
+def test_air_terminals_are_offered_for_every_terminal_but_the_source(library_id):
+    lib = _load_registry().get_library(library_id)
+    ports = [{"profile": "Circular", "section_params": {"Diameter": 200.0}}]
+    flow_classes = {"Supply": "exit", "Discharge": "exit", "Return": "entry", "Exhaust": "entry", "OutdoorAir": "entry"}
+
+    def ids(function, flow_class):
+        classification = {"flow_class": flow_class, "qualifiers": {"terminal_function": function}, "derived_values": {}}
+        types = lib.list_types(
+            category="junction",
+            family="end.terminal",
+            connected_ports=ports,
+            classification=classification,
+            include_placeholders=False,
+        )
+        return {t.id for t in types}
+
+    for function, flow_class in flow_classes.items():
+        assert _AIR_TERMINALS <= ids(function, flow_class), function
+    assert not (_AIR_TERMINALS & ids("Source", "entry"))
+
+
 def test_type_list_follows_the_terminal_function():
     lib = _load_registry().get_library("builtin_basic")
 
@@ -112,7 +143,8 @@ def test_type_list_follows_the_terminal_function():
         return {t.id for t in types}
 
     supply, outdoor = ids("Supply"), ids("OutdoorAir")
-    assert "end_diffuser_round" in supply and "end_diffuser_round" not in outdoor
+    assert "end_diffuser_round" in supply and "end_diffuser_round" in outdoor
+    assert "end_diffuser_round" not in ids("Source")
     assert "end_hood_intake" in outdoor and "end_hood_intake" not in supply
     assert "end_entry_plain" in supply and "end_entry_plain" in outdoor  # unconstrained
 
