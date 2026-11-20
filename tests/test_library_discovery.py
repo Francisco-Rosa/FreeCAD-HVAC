@@ -17,7 +17,7 @@ def _load_registry():
 def test_all_shipped_libraries_parse_without_error():
     reg = _load_registry()
     lib_ids = set(reg._libraries.keys())
-    assert lib_ids == {"builtin_basic", "smacna", "samples"}
+    assert lib_ids == {"builtin_basic", "smacna", "samples", "fcstd_ducts"}
 
 
 def test_smacna_segments_use_the_shared_segment_generator():

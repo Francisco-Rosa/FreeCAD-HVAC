@@ -19,6 +19,13 @@ for in `library.json` (`"requires_api"`) and is refused by any other.
 
 ## Unreleased
 
+- New library `fcstd_ducts`: straight and curved ducts, a flexible duct (straight, arc or spline path, with insulation
+  and outer jacket), radius elbows, duct-to-duct joints, offsets, and concentric, eccentric and offset transitions
+  (round, rectangular, flat oval, and transitions between any two of them) built from the parametric duct models of
+  the FreeCAD-library repository (HVAC/Ducts, Francisco Rosa, CC-BY 3.0) through the FCStd-template backend. Each type
+  has a wall, insulation and the shared flange feature (off by default); other junctions get markers. The templates
+  are rebuilt from the original models by `tools/build_fcstd_duct_templates.py`.
+
 - **IFC export** (ROADMAP design 6.8): Export IFC (`HVAC_ExportIFC`) writes the selected duct networks, or all of
   them, with their equipment, to an IFC4 file. Ducts, fittings, terminals, dampers, VAV boxes, silencers, filters,
   coils and equipment get their IFC class and predefined type from a lookup table in core. The file also holds their

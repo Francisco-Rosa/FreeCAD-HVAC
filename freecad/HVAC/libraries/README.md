@@ -2,13 +2,16 @@
 
 An HVAC library is a directory with a `library.json` manifest and its
 type-defs; every directory under `freecad/HVAC/libraries/` (or another
-configured search path) that has one is loaded. Three ship here:
+configured search path) that has one is loaded. Four ship here:
 
 - **`builtin_basic`** -- generic types, always available.
 - **`smacna`** -- SMACNA sheet-metal duct and fitting types, for day-to-day
   modeling.
 - **`samples`** -- one minimal example of each geometry backend (not for
   modeling).
+- **`fcstd_ducts`** -- ducts, flexible ducts, radius elbows and transitions built from the
+  parametric FreeCAD-library duct models (FCStd templates); see its
+  `README.md`.
 
 Documentation:
 
