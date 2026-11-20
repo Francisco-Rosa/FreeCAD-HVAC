@@ -64,11 +64,14 @@ A sample network is in [`examples/HVAC_network_sample_1.FCStd`](examples/HVAC_ne
 
 **Libraries**
 
-Ducts and fittings come from libraries of type definitions, not from code in the workbench. Three libraries ship:
+Ducts and fittings come from libraries of type definitions, not from code in the workbench. Four libraries ship:
 
 - `smacna`: sheet-metal types with walls, insulation and flanges, for day-to-day modelling.
 - `builtin_basic`: the same set of types in a simpler build.
 - `samples`: examples of the other ways a library can make geometry (PartScript, FCStd templates, BREP/STEP files).
+- `fcstd_ducts`: ducts, flexible ducts, radius elbows and transitions (round, rectangular, flat oval and mixed) built from the
+  parametric duct models of the [FreeCAD-library](https://github.com/Francisco-Rosa/FreeCAD-library/tree/master/HVAC/Ducts)
+  (CC-BY 3.0); other junctions get markers.
 
 New types, profiles and parameters are added as library data. See
 [Writing an HVAC library](docs/library-guide.md), the [type-def reference](docs/type-def-reference.md) and the

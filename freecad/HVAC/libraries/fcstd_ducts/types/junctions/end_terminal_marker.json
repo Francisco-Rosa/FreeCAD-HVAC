@@ -1,0 +1,34 @@
+{
+  "id": "end_terminal_marker",
+  "label": "Terminal - Marker",
+  "category": "junction",
+  "topology": "end",
+  "family": ["end.terminal"],
+  "profiles": ["Generic"],
+  "selection": {
+    "kind": "placeholder",
+    "priority": 0
+  },
+  "constraints": {
+    "degree": 1
+  },
+  "properties": [
+    {
+      "name": "MarkerDiameter",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Marker diameter",
+      "default": 200.0
+    }
+  ],
+  "construction": {
+    "layers": [
+      {"id": "shape", "roles": ["flow_surface", "structural_shell"], "default_material_role": "flow_surface"}
+    ]
+  },
+  "geometry": {
+    "backend": "generator",
+    "module": "shared:markers",
+    "function": "build_terminal_marker"
+  }
+}

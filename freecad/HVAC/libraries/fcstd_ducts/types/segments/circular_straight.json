@@ -1,0 +1,119 @@
+{
+  "id": "circular_straight",
+  "label": "Circular Straight (FCStd)",
+  "category": "segment",
+  "family": [
+    "straight_segment"
+  ],
+  "profiles": [
+    "Circular"
+  ],
+  "selection": {
+    "kind": "model",
+    "priority": 50
+  },
+  "properties": [
+    {
+      "name": "Diameter",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Clear-air duct diameter",
+      "default": 100.0,
+      "validation": {
+        "exclusiveMinimum": 0.0
+      }
+    },
+    {
+      "name": "Thickness",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Sheet metal thickness",
+      "default": 0.8
+    },
+    {
+      "name": "InsulationThickness",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Insulation thickness wrapped around the outside of the duct wall; 0 disables insulation",
+      "default": 0.0
+    },
+    {
+      "name": "FlangeHeight",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Flange height",
+      "default": 25.0
+    },
+    {
+      "name": "FlangeThickness",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Flange thickness",
+      "default": 1.0
+    },
+    {
+      "name": "ShowFlange1",
+      "prop_type": "App::PropertyBool",
+      "group": "Options",
+      "description": "Include the flange at port 1 (off by default: the flange is drawn by the shared flange feature, not by the model)",
+      "default": false
+    },
+    {
+      "name": "ShowFlange2",
+      "prop_type": "App::PropertyBool",
+      "group": "Options",
+      "description": "Include the flange at port 2 (off by default: the flange is drawn by the shared flange feature, not by the model)",
+      "default": false
+    },
+    {
+      "name": "FlangeVisible",
+      "prop_type": "App::PropertyBool",
+      "group": "Options",
+      "description": "Show the flange feature in the 3D view; it is still generated either way",
+      "default": true
+    }
+  ],
+  "construction": {
+    "layers": [
+      {
+        "id": "casing",
+        "roles": [
+          "flow_surface",
+          "structural_shell"
+        ],
+        "default_material_role": "structural_shell",
+        "thickness_property": "Thickness"
+      },
+      {
+        "id": "insulation",
+        "roles": [
+          "thermal_insulation"
+        ],
+        "default_material_role": "thermal_insulation",
+        "thickness_property": "InsulationThickness"
+      }
+    ],
+    "features": [
+      {
+        "id": "transverse_flange",
+        "role": "transverse_joint",
+        "host_layer": "casing",
+        "module": "shared:features",
+        "generator": "transverse_flange",
+        "visible_parameter": "FlangeVisible",
+        "parameters": [
+          "Diameter",
+          "FlangeHeight",
+          "FlangeThickness",
+          "ShowFlange1",
+          "ShowFlange2"
+        ]
+      }
+    ]
+  },
+  "geometry": {
+    "backend": "generator",
+    "module": "ducts",
+    "function": "build_circular_duct"
+  }
+}

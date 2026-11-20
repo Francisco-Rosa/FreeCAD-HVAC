@@ -1,0 +1,91 @@
+{
+  "id": "circular_flex",
+  "label": "Circular Flexible Duct (FCStd)",
+  "category": "segment",
+  "family": [
+    "straight_segment.flex",
+    "curved_segment.flex"
+  ],
+  "profiles": [
+    "Circular"
+  ],
+  "selection": {
+    "kind": "model",
+    "priority": 50
+  },
+  "properties": [
+    {
+      "name": "Diameter",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Clear-air duct diameter",
+      "default": 150.0,
+      "validation": {
+        "exclusiveMinimum": 0.0
+      }
+    },
+    {
+      "name": "Thickness",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Thickness of the inner core, and of the outer jacket over insulation",
+      "default": 1.0
+    },
+    {
+      "name": "InsulationThickness",
+      "prop_type": "App::PropertyLength",
+      "group": "Dimensions",
+      "description": "Insulation thickness between the inner core and the outer jacket; 0 gives an uninsulated duct with no jacket",
+      "default": 25.0
+    },
+    {
+      "name": "CompressionPercent",
+      "prop_type": "App::PropertyFloat",
+      "group": "Friction",
+      "description": "How much shorter than fully extended the duct is installed, in percent of its extended length (0 to 30). Friction is multiplied by the SMACNA Fig. 14-4 correction for it",
+      "default": 0.0,
+      "validation": {
+        "minimum": 0.0,
+        "maximum": 30.0
+      }
+    }
+  ],
+  "construction": {
+    "layers": [
+      {
+        "id": "casing",
+        "roles": [
+          "flow_surface",
+          "structural_shell"
+        ],
+        "default_material_role": "structural_shell",
+        "thickness_property": "Thickness"
+      },
+      {
+        "id": "insulation",
+        "roles": [
+          "thermal_insulation"
+        ],
+        "default_material_role": "thermal_insulation",
+        "thickness_property": "InsulationThickness"
+      },
+      {
+        "id": "jacket",
+        "roles": [
+          "outer_jacket"
+        ],
+        "default_material_role": "outer_jacket",
+        "thickness_property": "Thickness"
+      }
+    ]
+  },
+  "geometry": {
+    "backend": "generator",
+    "module": "ducts",
+    "function": "build_flex_duct"
+  },
+  "friction": {
+    "module": "shared:friction",
+    "function": "friction_flex_compressed"
+  }
+}
