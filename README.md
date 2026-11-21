@@ -116,7 +116,7 @@ in the workbench selector.
 **With the Addon Manager (custom repository)**
 
 1. In FreeCAD, open **Edit → Preferences → Addon Manager** (on macOS, **FreeCAD → Settings**).
-2. Under **Custom repositories**, click the **+** button and add `https://github.com/manuvarkey/FreeCAD-HVAC` with
+2. Under **Custom repositories**, click the **+** button and add `https://github.com/Francisco-Rosa/FreeCAD-HVAC` with
    branch `main`. Click **OK**.
 3. Open **Tools → Addon manager**, find **HVAC** in the list and click **Install**.
 
