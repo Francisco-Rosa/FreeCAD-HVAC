@@ -7,6 +7,7 @@ the ducts.
 Requires FreeCAD 1.0 or later (developed and tested on FreeCAD 1.1). The software is alpha: documents and libraries
 made with an earlier version may need to be rebuilt (see [`CHANGELOG.md`](CHANGELOG.md)).
 
+
 ## Workflow
 
 1. **Create Network** and set its system type (Supply, Return, Exhaust or Outdoor air). One network is one system.
@@ -106,6 +107,40 @@ with warnings and result tables in the panel:
 Layers, with insulation visible:
 
 ![Ducts with their insulation layer visible](screenshots/screenshot6.png)
+
+## Installation
+
+The workbench is a standard FreeCAD addon. Install it in one of these ways, then restart FreeCAD and pick **HVAC**
+in the workbench selector.
+
+**With the Addon Manager (custom repository)**
+
+1. In FreeCAD, open **Edit → Preferences → Addon Manager** (on macOS, **FreeCAD → Settings**).
+2. Under **Custom repositories**, click the **+** button and add `https://github.com/manuvarkey/FreeCAD-HVAC` with
+   branch `main`. Click **OK**.
+3. Open **Tools → Addon manager**, find **HVAC** in the list and click **Install**.
+
+**Manually**
+
+1. Find your FreeCAD `Mod` folder. To print it, run `print(FreeCAD.getUserAppDataDir() + "Mod")` in FreeCAD's
+   Python console. Usual locations:
+   - Linux: `~/.local/share/FreeCAD/Mod`
+   - macOS: `~/Library/Application Support/FreeCAD/Mod`
+   - Windows: `%APPDATA%\FreeCAD\Mod`
+2. Clone the repository into that folder:
+
+   ```
+   cd <your Mod folder>
+   git clone https://github.com/manuvarkey/FreeCAD-HVAC.git HVAC
+   ```
+
+   Or download the repository as a ZIP file and unpack it to `Mod/HVAC`. The folder must contain `package.xml`
+   directly.
+3. Restart FreeCAD.
+
+To update a manual install, run `git pull` in the `HVAC` folder.
+
+IFC export is optional. It needs IfcOpenShell and the BIM workbench (see [Features](#features)).
 
 ## Design goals
 
