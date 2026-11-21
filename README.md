@@ -131,7 +131,7 @@ in the workbench selector.
 
    ```
    cd <your Mod folder>
-   git clone https://github.com/manuvarkey/FreeCAD-HVAC.git HVAC
+   git clone https://github.com/Francisco-Rosa/FreeCAD-HVAC.git HVAC
    ```
 
    Or download the repository as a ZIP file and unpack it to `Mod/HVAC`. The folder must contain `package.xml`
