@@ -36,6 +36,7 @@ import math
 import FreeCAD
 import FreeCADGui as Gui
 from pivy import coin
+from PySide import QtGui
 
 from ..utils import hvaclib
 from ..ui import TaskPanel
@@ -141,13 +142,42 @@ class DuctNetworkViewProvider:
         return True
 
     def doubleClicked(self, vobj):
+        self._toggleActive(vobj.Object)
+        return True
+
+    def setupContextMenu(self, vobj, menu):
+        obj = vobj.Object
+        view = Gui.getDocument(obj.Document.Name).ActiveView
+        if view is None:
+            return
+
+        action = QtGui.QAction(FreeCAD.Qt.translate("HVAC_DuctNetwork", "Active"), menu)
+        action.setCheckable(True)
+        action.setChecked(view.getActiveObject(hvaclib.DUCT_NETWORK_CONTEXT_KEY) == obj)
+        action.triggered.connect(lambda checked: self._toggleActive(obj))
+        actions = menu.actions()
+        if actions:
+            menu.insertAction(actions[0], action)
+        else:
+            menu.addAction(action)
+
+    def _toggleActive(self, obj):
         from ..core.Network import activate_duct_network
 
-        obj = vobj.Object
-        # Make it the active network
+        view = Gui.getDocument(obj.Document.Name).ActiveView
+        if view is None:
+            return
+
+        if view.getActiveObject(hvaclib.DUCT_NETWORK_CONTEXT_KEY) == obj:
+            view.setActiveObject(hvaclib.DUCT_NETWORK_CONTEXT_KEY, None)
+            hvaclib.refreshState()
+            return
+
+        # The tree menu can target a network in a different document.
+        if FreeCAD.ActiveDocument != obj.Document:
+            FreeCAD.setActiveDocument(obj.Document.Name)
         activate_duct_network(obj, set_edit=False)
         obj.Proxy.selectAllGeometry()
-        return True
 
     def claimChildren(self):
         obj = self.Object
